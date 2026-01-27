@@ -1,0 +1,23 @@
+{
+  "name": "tuning-movie-backend",
+  "version": "1.0.0",
+  "description": "Movie ticket booking system backend",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": ["fastify", "typescript", "movie", "booking"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fastify": "^4.26.0",
+    "@fastify/cors": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}
