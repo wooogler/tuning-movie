@@ -1,0 +1,37 @@
+{
+  "name": "tuning-movie-backend",
+  "version": "1.0.0",
+  "description": "Movie ticket booking system backend",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "keywords": [
+    "fastify",
+    "typescript",
+    "movie",
+    "booking"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "better-sqlite3": "^12.6.2",
+    "drizzle-orm": "^0.45.1",
+    "fastify": "^4.26.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20.11.16",
+    "drizzle-kit": "^0.31.8",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}
