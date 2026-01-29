@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
+import { convertDateStage } from '../converter/dateStage';
+import { SpecRenderer } from '../renderer';
+import type { UISpec } from '../converter/types';
 
 export function DateStagePage() {
   const navigate = useNavigate();
-  const { movie, theater, setDate, date: selectedDate } = useBookingStore();
-  const [dates, setDates] = useState<string[]>([]);
+  const { movie, theater, setDate } = useBookingStore();
+  const [spec, setSpec] = useState<UISpec | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,23 +22,19 @@ export function DateStagePage() {
 
     api
       .getDates(movie.id, theater.id)
-      .then((data) => setDates(data.dates))
+      .then((data) => setSpec(convertDateStage(data.dates)))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [movie, theater, navigate]);
 
-  const handleSelect = (date: string) => {
-    setDate(date);
-    navigate('/time');
-  };
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+  const handleAction = (actionName: string, data?: unknown) => {
+    if (actionName === 'selectDate') {
+      setDate(data as string);
+      navigate('/time');
+    }
+    if (actionName === 'back') {
+      navigate('/theater');
+    }
   };
 
   if (loading) {
@@ -49,34 +48,16 @@ export function DateStagePage() {
   if (error) {
     return (
       <Layout title="Select Date" step={3}>
-        <p className="text-center text-[#e50914]">Error: {error}</p>
+        <p className="text-center text-primary">Error: {error}</p>
       </Layout>
     );
   }
 
+  if (!spec) return null;
+
   return (
     <Layout title="Select Date" step={3}>
-      <div className="flex flex-wrap justify-center gap-3">
-        {dates.map((date) => (
-          <div
-            key={date}
-            className={`px-6 py-4 rounded-lg cursor-pointer transition-all
-              ${selectedDate === date ? 'bg-[#e50914]' : 'bg-[#1a1a1a] hover:bg-[#2a2a2a]'}
-            `}
-            onClick={() => handleSelect(date)}
-          >
-            <span className="text-sm font-medium">{formatDate(date)}</span>
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-center mt-6">
-        <button
-          className="px-6 py-3 bg-[#333] text-white rounded-lg hover:bg-[#444] transition-colors"
-          onClick={() => navigate('/theater')}
-        >
-          Back
-        </button>
-      </div>
+      <SpecRenderer spec={spec} onAction={handleAction} />
     </Layout>
   );
 }

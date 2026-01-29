@@ -23,7 +23,7 @@ async function seed() {
     {
       id: 'm1',
       title: 'Dune: Part Two',
-      posterUrl: 'https://example.com/dune2.jpg',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/6izwz7rsy95ARzTR3poZ8H6c5pp.jpg',
       genre: JSON.stringify(['Sci-Fi', 'Action']),
       duration: 166,
       rating: 'PG-13',
@@ -32,7 +32,7 @@ async function seed() {
     {
       id: 'm2',
       title: 'Oppenheimer',
-      posterUrl: 'https://example.com/oppenheimer.jpg',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg',
       genre: JSON.stringify(['Drama', 'History']),
       duration: 180,
       rating: 'R',
@@ -41,7 +41,7 @@ async function seed() {
     {
       id: 'm3',
       title: 'The Holdovers',
-      posterUrl: 'https://example.com/holdovers.jpg',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/VHSzNBTwxV8vh7wylo7O9CLdac.jpg',
       genre: JSON.stringify(['Comedy', 'Drama']),
       duration: 134,
       rating: 'R',

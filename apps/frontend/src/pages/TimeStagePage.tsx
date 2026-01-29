@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
+import { convertTimeStage } from '../converter/timeStage';
+import { SpecRenderer } from '../renderer';
+import type { UISpec } from '../converter/types';
 import type { Showing } from '../types';
 
 export function TimeStagePage() {
   const navigate = useNavigate();
-  const { movie, theater, date, setShowing, showing: selectedShowing } = useBookingStore();
-  const [showings, setShowings] = useState<Showing[]>([]);
+  const { movie, theater, date, setShowing } = useBookingStore();
+  const [spec, setSpec] = useState<UISpec | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,14 +23,19 @@ export function TimeStagePage() {
 
     api
       .getTimes(movie.id, theater.id, date)
-      .then((data) => setShowings(data.showings))
+      .then((data) => setSpec(convertTimeStage(data.showings)))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [movie, theater, date, navigate]);
 
-  const handleSelect = (showing: Showing) => {
-    setShowing(showing);
-    navigate('/seats');
+  const handleAction = (actionName: string, data?: unknown) => {
+    if (actionName === 'selectTime') {
+      setShowing(data as Showing);
+      navigate('/seats');
+    }
+    if (actionName === 'back') {
+      navigate('/date');
+    }
   };
 
   if (loading) {
@@ -41,44 +49,16 @@ export function TimeStagePage() {
   if (error) {
     return (
       <Layout title="Select Time" step={4}>
-        <p className="text-center text-[#e50914]">Error: {error}</p>
+        <p className="text-center text-primary">Error: {error}</p>
       </Layout>
     );
   }
 
+  if (!spec) return null;
+
   return (
     <Layout title="Select Time" step={4}>
-      <div className="flex flex-wrap justify-center gap-4">
-        {showings.map((showing) => (
-          <div
-            key={showing.id}
-            className={`px-6 py-4 rounded-lg cursor-pointer transition-all text-center min-w-[140px]
-              ${selectedShowing?.id === showing.id ? 'bg-[#e50914]' : 'bg-[#1a1a1a] hover:bg-[#2a2a2a]'}
-            `}
-            onClick={() => handleSelect(showing)}
-          >
-            <span className="block text-xl font-bold mb-1">{showing.time}</span>
-            <span
-              className={`block text-sm ${selectedShowing?.id === showing.id ? 'text-white/80' : 'text-gray-400'}`}
-            >
-              Screen {showing.screenNumber}
-            </span>
-            <span
-              className={`block text-sm ${selectedShowing?.id === showing.id ? 'text-white/80' : 'text-gray-500'}`}
-            >
-              {showing.availableSeats}/{showing.totalSeats} available
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-center mt-6">
-        <button
-          className="px-6 py-3 bg-[#333] text-white rounded-lg hover:bg-[#444] transition-colors"
-          onClick={() => navigate('/date')}
-        >
-          Back
-        </button>
-      </div>
+      <SpecRenderer spec={spec} onAction={handleAction} />
     </Layout>
   );
 }
