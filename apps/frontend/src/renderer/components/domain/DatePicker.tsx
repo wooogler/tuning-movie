@@ -2,6 +2,7 @@ interface DatePickerProps {
   data?: string;
   onAction?: (actionName: string, data?: unknown) => void;
   action?: { type: string; event: string };
+  selectedDate?: string;
 }
 
 function formatDate(dateStr: string): { day: string; weekday: string } {
@@ -11,9 +12,10 @@ function formatDate(dateStr: string): { day: string; weekday: string } {
   return { day, weekday };
 }
 
-export function DatePicker({ data, onAction, action }: DatePickerProps) {
+export function DatePicker({ data, onAction, action, selectedDate }: DatePickerProps) {
   if (!data) return null;
 
+  const isSelected = selectedDate === data;
   const { day, weekday } = formatDate(data);
 
   const handleClick = () => {
@@ -24,7 +26,11 @@ export function DatePicker({ data, onAction, action }: DatePickerProps) {
 
   return (
     <button
-      className="flex flex-col items-center justify-center w-20 h-20 bg-dark-light rounded-xl hover:bg-primary transition-colors"
+      className={`flex flex-col items-center justify-center w-20 h-20 rounded-xl transition-all ${
+        isSelected
+          ? 'bg-primary scale-110'
+          : 'bg-dark-light hover:bg-primary hover:scale-110'
+      }`}
       onClick={handleClick}
     >
       <span className="text-2xl font-bold">{day}</span>

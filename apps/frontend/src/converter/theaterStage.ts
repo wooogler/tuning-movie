@@ -1,7 +1,10 @@
 import type { Theater } from '../types';
 import type { UISpec } from './types';
 
-export function convertTheaterStage(theaters: Theater[]): UISpec {
+export function convertTheaterStage(
+  theaters: Theater[],
+  selectedTheaterId?: string,
+): UISpec {
   return {
     surface: 'theater_select',
     components: [
@@ -22,7 +25,8 @@ export function convertTheaterStage(theaters: Theater[]): UISpec {
         type: 'TheaterCard',
         data: { path: '/_item' },
         props: {
-          action: { type: 'navigate', event: 'selectTheater' },
+          action: { type: 'setState', event: 'selectTheater' },
+          selectedId: selectedTheaterId,
         },
       },
       {
@@ -30,14 +34,22 @@ export function convertTheaterStage(theaters: Theater[]): UISpec {
         type: 'ActionBar',
         props: {
           back: { to: '/', label: 'Back' },
+          next: {
+            to: '/date',
+            label: 'Continue',
+            disabled: !selectedTheaterId,
+          },
         },
       },
     ],
     dataModel: { theaters },
+    state: {
+      selectedTheaterId,
+    },
     actions: {
       selectTheater: {
-        type: 'navigate',
-        payload: { to: '/date', store: 'theater' },
+        type: 'setState',
+        payload: { target: 'selectedTheaterId' },
       },
     },
   };

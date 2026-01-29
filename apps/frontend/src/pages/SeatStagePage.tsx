@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
+import { useDevTools } from '../components/DevToolsContext';
 import { convertSeatStage } from '../converter/seatStage';
 import { SpecRenderer } from '../renderer';
 import type { UISpec } from '../converter/types';
@@ -11,6 +12,7 @@ import type { Seat } from '../types';
 export function SeatStagePage() {
   const navigate = useNavigate();
   const { showing, selectedSeats, toggleSeat } = useBookingStore();
+  const { setBackendData, setUiSpec } = useDevTools();
   const [seats, setSeats] = useState<Seat[]>([]);
   const [spec, setSpec] = useState<UISpec | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,9 +38,12 @@ export function SeatStagePage() {
   // Rebuild spec when seats or selection changes
   useEffect(() => {
     if (seats.length > 0) {
-      setSpec(convertSeatStage(seats, selectedSeatIds));
+      const newSpec = convertSeatStage(seats, selectedSeatIds);
+      setSpec(newSpec);
+      setBackendData({ seats });
+      setUiSpec(newSpec);
     }
-  }, [seats, selectedSeatIds]);
+  }, [seats, selectedSeatIds, setBackendData, setUiSpec]);
 
   const handleAction = useCallback(
     (actionName: string, data?: unknown) => {

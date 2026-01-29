@@ -1,6 +1,6 @@
 import type { UISpec } from './types';
 
-export function convertDateStage(dates: string[]): UISpec {
+export function convertDateStage(dates: string[], selectedDate?: string): UISpec {
   return {
     surface: 'date_select',
     components: [
@@ -21,7 +21,8 @@ export function convertDateStage(dates: string[]): UISpec {
         type: 'DatePicker',
         data: { path: '/_item' },
         props: {
-          action: { type: 'navigate', event: 'selectDate' },
+          action: { type: 'setState', event: 'selectDate' },
+          selectedDate,
         },
       },
       {
@@ -29,14 +30,22 @@ export function convertDateStage(dates: string[]): UISpec {
         type: 'ActionBar',
         props: {
           back: { to: '/theater', label: 'Back' },
+          next: {
+            to: '/time',
+            label: 'Continue',
+            disabled: !selectedDate,
+          },
         },
       },
     ],
     dataModel: { dates },
+    state: {
+      selectedDate,
+    },
     actions: {
       selectDate: {
-        type: 'navigate',
-        payload: { to: '/time', store: 'date' },
+        type: 'setState',
+        payload: { target: 'selectedDate' },
       },
     },
   };

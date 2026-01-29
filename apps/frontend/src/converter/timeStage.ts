@@ -1,7 +1,10 @@
 import type { Showing } from '../types';
 import type { UISpec } from './types';
 
-export function convertTimeStage(showings: Showing[]): UISpec {
+export function convertTimeStage(
+  showings: Showing[],
+  selectedShowingId?: string,
+): UISpec {
   return {
     surface: 'time_select',
     components: [
@@ -22,7 +25,8 @@ export function convertTimeStage(showings: Showing[]): UISpec {
         type: 'TimePicker',
         data: { path: '/_item' },
         props: {
-          action: { type: 'navigate', event: 'selectTime' },
+          action: { type: 'setState', event: 'selectTime' },
+          selectedId: selectedShowingId,
         },
       },
       {
@@ -30,14 +34,22 @@ export function convertTimeStage(showings: Showing[]): UISpec {
         type: 'ActionBar',
         props: {
           back: { to: '/date', label: 'Back' },
+          next: {
+            to: '/seats',
+            label: 'Continue',
+            disabled: !selectedShowingId,
+          },
         },
       },
     ],
     dataModel: { showings },
+    state: {
+      selectedShowingId,
+    },
     actions: {
       selectTime: {
-        type: 'navigate',
-        payload: { to: '/seats', store: 'showing' },
+        type: 'setState',
+        payload: { target: 'selectedShowingId' },
       },
     },
   };
