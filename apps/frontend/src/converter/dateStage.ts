@@ -19,7 +19,7 @@ export function convertDateStage(dates: string[]): UISpec {
       {
         id: 'date_picker_tpl',
         type: 'DatePicker',
-        data: { path: '.' },
+        data: { path: '/_item' },
         props: {
           action: { type: 'navigate', event: 'selectDate' },
         },

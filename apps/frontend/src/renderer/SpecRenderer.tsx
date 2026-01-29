@@ -41,13 +41,36 @@ export function SpecRenderer({ spec, onAction }: SpecRendererProps) {
         spec.dataModel,
       ) as unknown[];
       if (Array.isArray(items)) {
-        renderedChildren = items.map((item, i) =>
-          renderComponent(iteratorBinding.template, {
+        renderedChildren = items.map((item, i) => {
+          const itemKey = `${iteratorBinding.template}-${i}`;
+          const childComp = componentMap.get(iteratorBinding.template);
+          if (!childComp) return null;
+
+          const contextData = {
             ...spec.dataModel,
             _item: item,
             _index: i,
-          }),
-        );
+          };
+
+          const resolvedData = childComp.data
+            ? resolveData(childComp.data, contextData)
+            : undefined;
+
+          const ReactComponent = getComponent(childComp.type);
+          if (!ReactComponent) {
+            console.warn(`Unknown component type: ${childComp.type}`);
+            return null;
+          }
+
+          return (
+            <ReactComponent
+              key={itemKey}
+              data={resolvedData}
+              onAction={onAction}
+              {...childComp.props}
+            />
+          );
+        });
       }
     }
 

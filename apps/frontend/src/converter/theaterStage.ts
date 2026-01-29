@@ -20,7 +20,7 @@ export function convertTheaterStage(theaters: Theater[]): UISpec {
       {
         id: 'theater_card_tpl',
         type: 'TheaterCard',
-        data: { path: '.' },
+        data: { path: '/_item' },
         props: {
           action: { type: 'navigate', event: 'selectTheater' },
         },

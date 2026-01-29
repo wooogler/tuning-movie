@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { api } from '../api/client';
@@ -16,7 +16,7 @@ export function SeatStagePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedSeatIds = selectedSeats.map((s) => s.id);
+  const selectedSeatIds = useMemo(() => selectedSeats.map((s) => s.id), [selectedSeats]);
 
   useEffect(() => {
     if (!showing) {

@@ -14,7 +14,7 @@ export function convertMovieStage(movies: Movie[]): UISpec {
       {
         id: 'movie_card_tpl',
         type: 'MovieCard',
-        data: { path: '.' },
+        data: { path: '/_item' },
         props: {
           action: { type: 'navigate', event: 'selectMovie' },
         },

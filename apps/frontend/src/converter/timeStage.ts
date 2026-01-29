@@ -20,7 +20,7 @@ export function convertTimeStage(showings: Showing[]): UISpec {
       {
         id: 'time_picker_tpl',
         type: 'TimePicker',
-        data: { path: '.' },
+        data: { path: '/_item' },
         props: {
           action: { type: 'navigate', event: 'selectTime' },
         },
