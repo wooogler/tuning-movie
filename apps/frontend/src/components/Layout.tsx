@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { useBookingStore } from '../store/bookingStore';
 
 interface LayoutProps {
   children: ReactNode;
@@ -10,8 +9,6 @@ interface LayoutProps {
 const steps = ['Movie', 'Theater', 'Date', 'Time', 'Seats', 'Tickets', 'Confirm'];
 
 export function Layout({ children, title, step }: LayoutProps) {
-  const { movie, theater, date, showing, selectedSeats } = useBookingStore();
-
   return (
     <div className="min-h-screen bg-dark text-white">
       <div className="max-w-6xl mx-auto px-4 py-6">
@@ -43,38 +40,6 @@ export function Layout({ children, title, step }: LayoutProps) {
           <h2 className="text-2xl font-semibold text-center mb-6">{title}</h2>
           {children}
         </main>
-
-        {(movie || theater || date || showing || selectedSeats.length > 0) && (
-          <aside className="fixed right-5 top-1/2 -translate-y-1/2 bg-dark-light p-5 rounded-xl w-60 shadow-xl hidden lg:block">
-            <h3 className="text-primary font-semibold mb-4">Booking Summary</h3>
-            {movie && (
-              <p className="text-sm text-gray-300 mb-2">
-                <strong className="text-white">Movie:</strong> {movie.title}
-              </p>
-            )}
-            {theater && (
-              <p className="text-sm text-gray-300 mb-2">
-                <strong className="text-white">Theater:</strong> {theater.name}
-              </p>
-            )}
-            {date && (
-              <p className="text-sm text-gray-300 mb-2">
-                <strong className="text-white">Date:</strong> {date}
-              </p>
-            )}
-            {showing && (
-              <p className="text-sm text-gray-300 mb-2">
-                <strong className="text-white">Time:</strong> {showing.time}
-              </p>
-            )}
-            {selectedSeats.length > 0 && (
-              <p className="text-sm text-gray-300">
-                <strong className="text-white">Seats:</strong>{' '}
-                {selectedSeats.map((s) => `${s.row}${s.number}`).join(', ')}
-              </p>
-            )}
-          </aside>
-        )}
       </div>
     </div>
   );
