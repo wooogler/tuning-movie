@@ -1,24 +1,21 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
 import { useDevTools } from '../components/DevToolsContext';
-import { convertSeatStage } from '../converter/seatStage';
-import { SpecRenderer } from '../renderer';
-import type { UISpec } from '../converter/types';
+import { generateSeatSpec, toggleItem, type UISpec, type SeatItem } from '../spec';
+import { StageRenderer } from '../renderer';
 import type { Seat } from '../types';
 
 export function SeatStagePage() {
   const navigate = useNavigate();
-  const { showing, selectedSeats, toggleSeat } = useBookingStore();
+  const { movie, theater, date, showing, setSelectedSeats } = useBookingStore();
   const { setBackendData, setUiSpec } = useDevTools();
   const [seats, setSeats] = useState<Seat[]>([]);
-  const [spec, setSpec] = useState<UISpec | null>(null);
+  const [spec, setSpec] = useState<UISpec<SeatItem> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const selectedSeatIds = useMemo(() => selectedSeats.map((s) => s.id), [selectedSeats]);
 
   useEffect(() => {
     if (!showing) {
@@ -30,35 +27,52 @@ export function SeatStagePage() {
       .getSeats(showing.id)
       .then((data) => {
         setSeats(data.seats);
+        setBackendData({ seats: data.seats });
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [showing, navigate]);
+  }, [showing, navigate, setBackendData]);
 
-  // Rebuild spec when seats or selection changes
+  // Rebuild spec when seats change
   useEffect(() => {
-    if (seats.length > 0) {
-      const newSpec = convertSeatStage(seats, selectedSeatIds);
+    if (seats.length > 0 && movie && theater && date && showing) {
+      const newSpec = generateSeatSpec(
+        seats,
+        movie.id,
+        theater.id,
+        date,
+        showing.id
+      );
       setSpec(newSpec);
-      setBackendData({ seats });
       setUiSpec(newSpec);
     }
-  }, [seats, selectedSeatIds, setBackendData, setUiSpec]);
+  }, [seats, movie, theater, date, showing, setUiSpec]);
 
-  const handleAction = useCallback(
-    (actionName: string, data?: unknown) => {
-      if (actionName === 'toggleSeat') {
-        toggleSeat(data as Seat);
-      }
-      if (actionName === 'back') {
-        navigate('/time');
-      }
-      if (actionName === 'next') {
-        navigate('/tickets');
+  const handleToggle = useCallback(
+    (id: string) => {
+      if (spec) {
+        const newSpec = toggleItem(spec, id);
+        setSpec(newSpec);
+        setUiSpec(newSpec);
       }
     },
-    [toggleSeat, navigate],
+    [spec, setUiSpec]
   );
+
+  const handleBack = () => {
+    navigate('/time');
+  };
+
+  const handleNext = () => {
+    if (spec?.state.selectedIds && spec.state.selectedIds.length > 0) {
+      // Convert selected IDs to Seat objects for the store
+      const selectedSeatObjects = seats.filter((s) =>
+        spec.state.selectedIds?.includes(s.id)
+      );
+      setSelectedSeats(selectedSeatObjects);
+      navigate('/tickets');
+    }
+  };
 
   if (loading) {
     return (
@@ -80,7 +94,13 @@ export function SeatStagePage() {
 
   return (
     <Layout title="Select Seats" step={5}>
-      <SpecRenderer spec={spec} onAction={handleAction} />
+      <StageRenderer
+        spec={spec}
+        onSelect={handleToggle}
+        onToggle={handleToggle}
+        onNext={handleNext}
+        onBack={handleBack}
+      />
     </Layout>
   );
 }

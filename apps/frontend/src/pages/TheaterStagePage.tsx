@@ -4,18 +4,16 @@ import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
 import { useDevTools } from '../components/DevToolsContext';
-import { convertTheaterStage } from '../converter/theaterStage';
-import { SpecRenderer } from '../renderer';
-import type { UISpec } from '../converter/types';
+import { generateTheaterSpec, selectItem, type UISpec, type TheaterItem } from '../spec';
+import { StageRenderer } from '../renderer';
 import type { Theater } from '../types';
 
 export function TheaterStagePage() {
   const navigate = useNavigate();
   const { movie, setTheater } = useBookingStore();
   const { setBackendData, setUiSpec } = useDevTools();
-  const [spec, setSpec] = useState<UISpec | null>(null);
+  const [spec, setSpec] = useState<UISpec<TheaterItem> | null>(null);
   const [theaters, setTheaters] = useState<Theater[]>([]);
-  const [selectedTheaterId, setSelectedTheaterId] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,28 +33,32 @@ export function TheaterStagePage() {
       .finally(() => setLoading(false));
   }, [movie, navigate, setBackendData]);
 
-  // Rebuild spec when theaters or selection changes
+  // Rebuild spec when theaters change
   useEffect(() => {
-    if (theaters.length > 0) {
-      const newSpec = convertTheaterStage(theaters, selectedTheaterId);
+    if (theaters.length > 0 && movie) {
+      const newSpec = generateTheaterSpec(theaters, movie.id);
       setSpec(newSpec);
       setUiSpec(newSpec);
     }
-  }, [theaters, selectedTheaterId, setUiSpec]);
+  }, [theaters, movie, setUiSpec]);
 
-  const handleAction = (actionName: string, data?: unknown) => {
-    if (actionName === 'selectTheater') {
-      setSelectedTheaterId(data as string);
+  const handleSelect = (id: string) => {
+    if (spec) {
+      const newSpec = selectItem(spec, id);
+      setSpec(newSpec);
+      setUiSpec(newSpec);
     }
-    if (actionName === 'back') {
-      navigate('/');
-    }
-    if (actionName === 'next') {
-      const selectedTheater = theaters.find((t) => t.id === selectedTheaterId);
-      if (selectedTheater) {
-        setTheater(selectedTheater);
-        navigate('/date');
-      }
+  };
+
+  const handleBack = () => {
+    navigate('/');
+  };
+
+  const handleNext = () => {
+    const selectedTheater = theaters.find((t) => t.id === spec?.state.selectedId);
+    if (selectedTheater) {
+      setTheater(selectedTheater);
+      navigate('/date');
     }
   };
 
@@ -80,7 +82,12 @@ export function TheaterStagePage() {
 
   return (
     <Layout title="Select Theater" step={2}>
-      <SpecRenderer spec={spec} onAction={handleAction} />
+      <StageRenderer
+        spec={spec}
+        onSelect={handleSelect}
+        onNext={handleNext}
+        onBack={handleBack}
+      />
     </Layout>
   );
 }

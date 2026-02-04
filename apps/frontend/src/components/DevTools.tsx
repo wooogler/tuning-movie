@@ -1,14 +1,17 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useBookingStore } from '../store/bookingStore';
 import { useDevTools } from './DevToolsContext';
+import { agentTools } from '../agent/tools';
+import type { ToolDefinition } from '../agent/tools';
 
 type Tab = 'booking' | 'backend' | 'spec';
 
 export function DevTools() {
   const bookingStore = useBookingStore();
-  const { backendData, uiSpec } = useDevTools();
+  const { backendData, uiSpec, onToolApply } = useDevTools();
   const [isOpen, setIsOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('booking');
+  const [activeTab, setActiveTab] = useState<Tab>('spec');
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!isOpen) {
@@ -51,26 +54,26 @@ export function DevTools() {
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-dark-border">
+      <div className="flex bg-dark-border overflow-x-auto">
         <TabButton
           active={activeTab === 'booking'}
           onClick={() => setActiveTab('booking')}
         >
-          Booking State
+          Booking
         </TabButton>
         <TabButton
           active={activeTab === 'backend'}
           onClick={() => setActiveTab('backend')}
         >
-          Backend Data
+          Backend
         </TabButton>
         <TabButton active={activeTab === 'spec'} onClick={() => setActiveTab('spec')}>
           UI Spec
         </TabButton>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      {/* Tab Content */}
+      <div className="flex-1 overflow-auto p-4 min-h-0">
         {activeTab === 'booking' && (
           <JsonViewer
             data={{
@@ -92,6 +95,20 @@ export function DevTools() {
           <JsonViewer data={uiSpec || { message: 'No UI spec' }} />
         )}
       </div>
+
+      {/* Agent Tools - Always visible at bottom */}
+      <div className="border-t border-dark-border bg-dark">
+        <div className="p-3 border-b border-dark-border">
+          <h3 className="text-white font-semibold text-sm">Agent Tools</h3>
+        </div>
+        <div className="p-4 max-h-80 overflow-auto">
+          <AgentToolsPanel
+            tools={agentTools}
+            onApply={onToolApply}
+            hasSpec={!!uiSpec}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -103,12 +120,12 @@ function TabButton({
 }: {
   active: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium transition-colors ${
+      className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
         active
           ? 'bg-dark-lighter text-white border-b-2 border-primary'
           : 'text-gray-400 hover:text-white hover:bg-dark-lighter/50'
@@ -182,6 +199,188 @@ function JsonViewer({ data }: { data: unknown }) {
         className="w-full h-[calc(100vh-200px)] bg-dark p-4 rounded-lg text-xs text-gray-300 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary"
         spellCheck={false}
       />
+    </div>
+  );
+}
+
+// Agent Tools Panel
+interface AgentToolsPanelProps {
+  tools: ToolDefinition[];
+  onApply: ((toolName: string, params: Record<string, unknown>) => void) | null;
+  hasSpec: boolean;
+}
+
+function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
+  const [selectedTool, setSelectedTool] = useState<string>(tools[0]?.name || '');
+  const [params, setParams] = useState<Record<string, string>>({});
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
+  const currentTool = tools.find((t) => t.name === selectedTool);
+
+  const handleToolChange = (toolName: string) => {
+    setSelectedTool(toolName);
+    setParams({});
+    setLastResult(null);
+  };
+
+  const handleParamChange = (paramName: string, value: string) => {
+    setParams((prev) => ({ ...prev, [paramName]: value }));
+  };
+
+  const handleApply = () => {
+    if (!currentTool || !onApply) return;
+
+    // Convert params to proper types
+    const typedParams: Record<string, unknown> = {};
+    for (const [key, paramDef] of Object.entries(currentTool.parameters)) {
+      const value = params[key];
+      if (value === undefined || value === '') {
+        if (!paramDef.optional) {
+          setLastResult(`Error: Missing required parameter "${key}"`);
+          return;
+        }
+        continue;
+      }
+
+      // Type conversion
+      if (paramDef.type === 'array') {
+        try {
+          typedParams[key] = JSON.parse(value);
+        } catch {
+          setLastResult(`Error: Invalid JSON for "${key}"`);
+          return;
+        }
+      } else if (paramDef.type === 'object') {
+        try {
+          typedParams[key] = JSON.parse(value);
+        } catch {
+          setLastResult(`Error: Invalid JSON for "${key}"`);
+          return;
+        }
+      } else if (paramDef.type === 'number') {
+        typedParams[key] = Number(value);
+      } else {
+        typedParams[key] = value;
+      }
+    }
+
+    try {
+      onApply(selectedTool, typedParams);
+      setLastResult(`✓ Applied ${selectedTool}`);
+    } catch (e) {
+      setLastResult(`Error: ${(e as Error).message}`);
+    }
+  };
+
+  if (!hasSpec) {
+    return (
+      <div className="text-gray-500 text-center py-4 text-sm">
+        No UI Spec available
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Tool Selector */}
+      <div>
+        <select
+          value={selectedTool}
+          onChange={(e) => handleToolChange(e.target.value)}
+          className="w-full bg-dark border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          <optgroup label="Modification Tools">
+            {tools
+              .filter((t) => ['filter', 'sort', 'highlight', 'augment', 'clearModification'].includes(t.name))
+              .map((tool) => (
+                <option key={tool.name} value={tool.name}>
+                  {tool.name}
+                </option>
+              ))}
+          </optgroup>
+          <optgroup label="Interaction Tools">
+            {tools
+              .filter((t) => ['select', 'next', 'prev'].includes(t.name))
+              .map((tool) => (
+                <option key={tool.name} value={tool.name}>
+                  {tool.name}
+                </option>
+              ))}
+          </optgroup>
+        </select>
+      </div>
+
+      {/* Parameters */}
+      {currentTool && Object.keys(currentTool.parameters).length > 0 && (
+        <div className="space-y-2">
+          {Object.entries(currentTool.parameters).map(([paramName, paramDef]) => (
+            <div key={paramName}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-white text-xs">{paramName}</span>
+                {paramDef.optional && (
+                  <span className="text-gray-500 text-xs">(opt)</span>
+                )}
+              </div>
+              {paramDef.enum ? (
+                <select
+                  value={params[paramName] || ''}
+                  onChange={(e) => handleParamChange(paramName, e.target.value)}
+                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">Select...</option>
+                  {paramDef.enum.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              ) : paramDef.type === 'array' || paramDef.type === 'object' ? (
+                <textarea
+                  value={params[paramName] || ''}
+                  onChange={(e) => handleParamChange(paramName, e.target.value)}
+                  placeholder={
+                    paramDef.type === 'array'
+                      ? '["id1", "id2"]'
+                      : '{ "badge": "추천" }'
+                  }
+                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary h-14 resize-none"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={params[paramName] || ''}
+                  onChange={(e) => handleParamChange(paramName, e.target.value)}
+                  placeholder={paramDef.description}
+                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Apply Button & Result */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleApply}
+          disabled={!onApply}
+          className="px-4 py-1.5 bg-primary text-white text-sm rounded hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Apply
+        </button>
+        {lastResult && (
+          <span
+            className={`text-xs ${
+              lastResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'
+            }`}
+          >
+            {lastResult}
+          </span>
+        )}
+        {!onApply && (
+          <span className="text-yellow-500 text-xs">Not connected</span>
+        )}
+      </div>
     </div>
   );
 }

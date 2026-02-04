@@ -1,23 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
 import { useDevTools } from '../components/DevToolsContext';
-import { convertMovieStage } from '../converter/movieStage';
-import { SpecRenderer } from '../renderer';
-import type { UISpec } from '../converter/types';
+import { useToolHandler } from '../hooks';
+import { generateMovieSpec, selectItem, type UISpec, type MovieItem } from '../spec';
+import { StageRenderer } from '../renderer';
 import type { Movie } from '../types';
 
 export function MovieStagePage() {
   const navigate = useNavigate();
   const { setMovie } = useBookingStore();
   const { setBackendData, setUiSpec } = useDevTools();
-  const [spec, setSpec] = useState<UISpec | null>(null);
+  const [spec, setSpec] = useState<UISpec<MovieItem> | null>(null);
   const [movies, setMovies] = useState<Movie[]>([]);
-  const [selectedMovieId, setSelectedMovieId] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const handleNext = useCallback(() => {
+    const selectedMovie = movies.find((m) => m.id === spec?.state.selectedId);
+    if (selectedMovie) {
+      setMovie(selectedMovie);
+      navigate('/theater');
+    }
+  }, [movies, spec?.state.selectedId, setMovie, navigate]);
+
+  // Tool handler
+  useToolHandler({
+    spec,
+    setSpec,
+    onNext: handleNext,
+    // No onBack for first stage
+  });
 
   useEffect(() => {
     api
@@ -30,25 +45,20 @@ export function MovieStagePage() {
       .finally(() => setLoading(false));
   }, [setBackendData]);
 
-  // Rebuild spec when movies or selection changes
+  // Rebuild spec when movies change
   useEffect(() => {
     if (movies.length > 0) {
-      const newSpec = convertMovieStage(movies, selectedMovieId);
+      const newSpec = generateMovieSpec(movies);
       setSpec(newSpec);
       setUiSpec(newSpec);
     }
-  }, [movies, selectedMovieId, setUiSpec]);
+  }, [movies, setUiSpec]);
 
-  const handleAction = (actionName: string, data?: unknown) => {
-    if (actionName === 'selectMovie') {
-      setSelectedMovieId(data as string);
-    }
-    if (actionName === 'next') {
-      const selectedMovie = movies.find((m) => m.id === selectedMovieId);
-      if (selectedMovie) {
-        setMovie(selectedMovie);
-        navigate('/theater');
-      }
+  const handleSelect = (id: string) => {
+    if (spec) {
+      const newSpec = selectItem(spec, id);
+      setSpec(newSpec);
+      setUiSpec(newSpec);
     }
   };
 
@@ -72,7 +82,11 @@ export function MovieStagePage() {
 
   return (
     <Layout title="Select Movie" step={1}>
-      <SpecRenderer spec={spec} onAction={handleAction} />
+      <StageRenderer
+        spec={spec}
+        onSelect={handleSelect}
+        onNext={handleNext}
+      />
     </Layout>
   );
 }

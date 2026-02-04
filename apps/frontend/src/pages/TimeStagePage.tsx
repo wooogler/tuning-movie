@@ -4,18 +4,16 @@ import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
 import { useDevTools } from '../components/DevToolsContext';
-import { convertTimeStage } from '../converter/timeStage';
-import { SpecRenderer } from '../renderer';
-import type { UISpec } from '../converter/types';
+import { generateTimeSpec, selectItem, type UISpec, type TimeItem } from '../spec';
+import { StageRenderer } from '../renderer';
 import type { Showing } from '../types';
 
 export function TimeStagePage() {
   const navigate = useNavigate();
   const { movie, theater, date, setShowing } = useBookingStore();
   const { setBackendData, setUiSpec } = useDevTools();
-  const [spec, setSpec] = useState<UISpec | null>(null);
+  const [spec, setSpec] = useState<UISpec<TimeItem> | null>(null);
   const [showings, setShowings] = useState<Showing[]>([]);
-  const [selectedShowingId, setSelectedShowingId] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,28 +33,32 @@ export function TimeStagePage() {
       .finally(() => setLoading(false));
   }, [movie, theater, date, navigate, setBackendData]);
 
-  // Rebuild spec when showings or selection changes
+  // Rebuild spec when showings change
   useEffect(() => {
-    if (showings.length > 0) {
-      const newSpec = convertTimeStage(showings, selectedShowingId);
+    if (showings.length > 0 && movie && theater && date) {
+      const newSpec = generateTimeSpec(showings, movie.id, theater.id, date);
       setSpec(newSpec);
       setUiSpec(newSpec);
     }
-  }, [showings, selectedShowingId, setUiSpec]);
+  }, [showings, movie, theater, date, setUiSpec]);
 
-  const handleAction = (actionName: string, data?: unknown) => {
-    if (actionName === 'selectTime') {
-      setSelectedShowingId(data as string);
+  const handleSelect = (id: string) => {
+    if (spec) {
+      const newSpec = selectItem(spec, id);
+      setSpec(newSpec);
+      setUiSpec(newSpec);
     }
-    if (actionName === 'back') {
-      navigate('/date');
-    }
-    if (actionName === 'next') {
-      const selectedShowing = showings.find((s) => s.id === selectedShowingId);
-      if (selectedShowing) {
-        setShowing(selectedShowing);
-        navigate('/seats');
-      }
+  };
+
+  const handleBack = () => {
+    navigate('/date');
+  };
+
+  const handleNext = () => {
+    const selectedShowing = showings.find((s) => s.id === spec?.state.selectedId);
+    if (selectedShowing) {
+      setShowing(selectedShowing);
+      navigate('/seats');
     }
   };
 
@@ -80,7 +82,12 @@ export function TimeStagePage() {
 
   return (
     <Layout title="Select Time" step={4}>
-      <SpecRenderer spec={spec} onAction={handleAction} />
+      <StageRenderer
+        spec={spec}
+        onSelect={handleSelect}
+        onNext={handleNext}
+        onBack={handleBack}
+      />
     </Layout>
   );
 }

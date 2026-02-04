@@ -3,16 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
-import { convertTicketStage } from '../converter/ticketStage';
-import { SpecRenderer } from '../renderer';
-import type { UISpec } from '../converter/types';
+import { useDevTools } from '../components/DevToolsContext';
+import { generateTicketSpec, setQuantity, type UISpec, type TicketItem } from '../spec';
+import { StageRenderer } from '../renderer';
 import type { TicketType } from '../types';
 
 export function TicketStagePage() {
   const navigate = useNavigate();
   const { selectedSeats, tickets, setTickets } = useBookingStore();
+  const { setBackendData, setUiSpec } = useDevTools();
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
-  const [spec, setSpec] = useState<UISpec | null>(null);
+  const [spec, setSpec] = useState<UISpec<TicketItem> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,52 +27,60 @@ export function TicketStagePage() {
       .getTicketTypes()
       .then((data) => {
         setTicketTypes(data.ticketTypes);
+        setBackendData({ ticketTypes: data.ticketTypes });
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [selectedSeats, navigate]);
+  }, [selectedSeats, navigate, setBackendData]);
 
-  // Rebuild spec when ticketTypes or tickets change
+  // Rebuild spec when ticketTypes change
   useEffect(() => {
     if (ticketTypes.length > 0) {
-      setSpec(convertTicketStage(ticketTypes, selectedSeats.length, tickets));
-    }
-  }, [ticketTypes, selectedSeats.length, tickets]);
+      // Convert store tickets to quantities
+      const quantities: Record<string, number> = {};
+      ticketTypes.forEach((t) => {
+        const existing = tickets.find((ticket) => ticket.ticketType.id === t.id);
+        quantities[t.id] = existing?.quantity ?? 0;
+      });
 
-  const handleAction = useCallback(
-    (actionName: string, data?: unknown) => {
-      if (actionName === 'incrementTicket' || actionName === 'decrementTicket') {
-        const { ticketType, delta } = data as {
-          ticketType: TicketType;
-          delta: number;
-        };
-        const existing = tickets.find((t) => t.ticketType.id === ticketType.id);
-        if (existing) {
-          const newQuantity = existing.quantity + delta;
-          if (newQuantity <= 0) {
-            setTickets(tickets.filter((t) => t.ticketType.id !== ticketType.id));
-          } else {
-            setTickets(
-              tickets.map((t) =>
-                t.ticketType.id === ticketType.id
-                  ? { ...t, quantity: newQuantity }
-                  : t,
-              ),
-            );
+      const newSpec = generateTicketSpec(
+        ticketTypes,
+        selectedSeats.map((s) => s.id),
+        quantities
+      );
+      setSpec(newSpec);
+      setUiSpec(newSpec);
+    }
+  }, [ticketTypes, selectedSeats, tickets, setUiSpec]);
+
+  const handleQuantityChange = useCallback(
+    (typeId: string, quantity: number) => {
+      if (spec) {
+        const newSpec = setQuantity(spec, typeId, quantity);
+        setSpec(newSpec);
+        setUiSpec(newSpec);
+
+        // Update store
+        const ticketType = ticketTypes.find((t) => t.id === typeId);
+        if (ticketType) {
+          const newTickets = tickets.filter((t) => t.ticketType.id !== typeId);
+          if (quantity > 0) {
+            newTickets.push({ ticketType, quantity });
           }
-        } else if (delta > 0) {
-          setTickets([...tickets, { ticketType, quantity: 1 }]);
+          setTickets(newTickets);
         }
       }
-      if (actionName === 'back') {
-        navigate('/seats');
-      }
-      if (actionName === 'next') {
-        navigate('/confirm');
-      }
     },
-    [tickets, setTickets, navigate],
+    [spec, ticketTypes, tickets, setTickets, setUiSpec]
   );
+
+  const handleBack = () => {
+    navigate('/seats');
+  };
+
+  const handleNext = () => {
+    navigate('/confirm');
+  };
 
   if (loading) {
     return (
@@ -93,7 +102,13 @@ export function TicketStagePage() {
 
   return (
     <Layout title="Select Tickets" step={6}>
-      <SpecRenderer spec={spec} onAction={handleAction} />
+      <StageRenderer
+        spec={spec}
+        onSelect={() => {}}
+        onQuantityChange={handleQuantityChange}
+        onNext={handleNext}
+        onBack={handleBack}
+      />
     </Layout>
   );
 }

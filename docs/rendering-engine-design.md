@@ -4,498 +4,622 @@ A2UI에서 영감을 받은, React 기반 선언적 UI 렌더링 엔진 설계 �
 
 ## 1. 아키텍처 개요
 
-현재 프론트엔드는 **Backend API → React JSX** 직접 렌더링 방식이다.
-이를 중간 표현(IR: Intermediate Representation)을 거치는 3-레이어 구조로 변경한다.
+### 1.1 설계 철학
+
+본 시스템은 **LLM Agent가 GUI를 조작**할 수 있도록 설계되었다.
+
+- **A2UI 원본**: LLM이 UI 전체를 자유롭게 설계 (Column, Grid 등 layout 조합)
+- **우리 시스템**: UI 구조는 Stage별로 고정, Agent는 **modification 및 interaction** 수행
+
+### 1.2 Agent 역할
+
+| 기능 | 설명 | 구현 |
+|------|------|------|
+| **Perception** | UI Spec 읽기 (items, state, modification) | Python Agent |
+| **Modification** | filter, sort, highlight, augment | Tool Call → JS 함수 |
+| **Interaction** | select, click, navigate | Tool Call → Python |
+| **Response** | 자연어 응답 생성 | Python Agent |
+
+### 1.3 아키텍처
 
 ```
-┌──────────┐      ┌──────────────┐      ┌──────────────┐      ┌────────────┐
-│ Backend  │ ───> │  Converter   │ ───> │   UI Spec    │ ───> │  Renderer  │
-│   API    │ JSON │ (API → Spec) │      │ (IR: JSON)   │      │ (Spec →    │
-│          │      │              │      │              │      │  React)    │
-└──────────┘      └──────────────┘      └──────────────┘      └────────────┘
-  기존 유지          새로 추가             중간 표현값           새로 추가
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LLM Agent (Python)                                 │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  Perception: UI Spec 읽기 (stage, items, state, modification)       │    │
+│  │  Decision:   Tool Call 결정                                         │    │
+│  │  Response:   자연어 응답 생성                                        │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    Tool Calls:
+                    ├── Modification: filter, sort, highlight, augment
+                    └── Interaction:  select, click, navigate (Python)
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      Modifier Functions (Frontend JS)                        │
+│  applyFilter() │ applySort() │ applyHighlight() │ applyAugment()            │
+│                                                                              │
+│  * Deterministic (결정적)                                                    │
+│  * Pure functions: (UISpec, Params) → UISpec                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                              업데이트된 UISpec
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Stage Renderer                                     │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │  MovieStage │ TheaterStage │ DateStage │ TimeStage │ SeatStage │ ... │   │
+│  │                                                                       │   │
+│  │  * 고정 레이아웃                                                       │   │
+│  │  * items + modification → visible items 계산                          │   │
+│  │  * highlight, augment 상태 반영                                       │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 각 레이어의 책임
+### 1.4 데이터 흐름
 
-| 레이어 | 위치 | 역할 |
-|--------|------|------|
-| **Backend API** | `apps/backend` | 데이터 제공 (변경 없음) |
-| **Converter** | `apps/frontend/src/converter/` | API 응답 → UI Spec 변환 |
-| **UI Spec** | TypeScript 타입 | 선언적 중간 표현 (JSON 구조체) |
-| **Renderer** | `apps/frontend/src/renderer/` | UI Spec → React 컴포넌트 렌더링 |
-
-### 현재 vs 변경 후 데이터 흐름
-
-**현재 (직접 렌더링):**
 ```
-MovieStagePage: api.getMovies() → movies.map(m => <div>...</div>)
-```
-
-**변경 후 (IR 경유):**
-```
-MovieStagePage: api.getMovies() → convertMovieStage(movies) → <SpecRenderer spec={spec} />
+Backend API → Page(data fetch) → Generator(data → UISpec) → Modifier Functions → StageRenderer → DOM
+                                         │                          ↑
+                                         └──── Agent Perception ────┘
+                                                    ↓
+                                              Agent Tool Calls
 ```
 
 ---
 
 ## 2. UI Spec 포맷
 
-A2UI의 핵심 설계를 차용하되, React에 맞게 단순화한다.
-
 ### 2.1 설계 원칙
 
-- **플랫 컴포넌트 리스트**: A2UI처럼 트리 중첩 대신 ID 참조 (adjacency list)
-- **구조 / 데이터 / 상태 분리**: `components` (레이아웃) ↔ `dataModel` (서버 데이터) ↔ `state` (UI 상태)
-- **데이터 바인딩**: JSON Pointer 경로(`/movies/0/title`)로 데이터 참조
-- **상태 바인딩**: `$state/` 접두사로 UI 상태 참조 (`$state/selectedMovieId`)
-- **도메인 특화 컴포넌트**: 범용 컴포넌트 + 영화 예매 전용 컴포넌트
-
-> **A2UI와의 차이점**: A2UI는 `dataModel` 하나에 모든 데이터를 담는다.
-> 우리는 서버에서 온 데이터(`dataModel`)와 클라이언트 상호작용으로 생긴 상태(`state`)를
-> 명시적으로 분리한다. 이 분리는 나중에 state 변화를 별도로 추적하거나
-> 외부 시스템에 전달할 때 유용해진다.
+- **Layout 제거**: Stage별 UI 구조는 React 컴포넌트에서 고정
+- **데이터 중심**: Agent가 이해할 수 있는 선언적 데이터 표현
+- **State 포함**: UI 상태 (선택, 입력 등)를 포함하여 Agent가 현재 상태를 파악
+- **Modification 상태 표현**: 현재 적용된 filter, sort, highlight, augment 상태
+- **Derived Visible Items**: `visibleItems`는 `items` + `modification`에서 계산 (별도 저장 안 함)
 
 ### 2.2 Spec 타입 정의
 
 ```typescript
-// UI Spec의 최상위 구조
+// Stage 식별자
+type Stage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'ticket' | 'confirm';
+
+// UI Spec - Agent의 Perception 대상
 interface UISpec {
-  surface: string;           // 화면 식별자 (e.g., "movie_select")
-  components: Component[];   // 플랫 컴포넌트 리스트
-  dataModel: Record<string, unknown>; // 데이터
-  actions?: ActionMap;       // 이벤트 핸들러 매핑
+  stage: Stage;                              // 현재 Stage
+  items: DataItem[];                         // 원본 데이터 아이템 목록
+  state: StateModel;                         // UI 상태 (선택, 입력 등)
+  modification: ModificationState;           // 현재 적용된 Modification 상태
+  meta?: Record<string, unknown>;            // Stage별 추가 메타데이터
 }
 
-// 컴포넌트 정의
-interface Component {
-  id: string;                // 고유 ID (root 필수)
-  type: string;              // 컴포넌트 타입명
-  children?: string[];       // 자식 컴포넌트 ID 배열
-  child?: string;            // 단일 자식 (Card 등)
-  props?: Record<string, unknown>; // 정적 속성
-  data?: DataBinding;        // 데이터 바인딩
+// UI 상태 (Stage별로 다름)
+interface StateModel {
+  selectedId?: string;                       // 단일 선택 (movie, theater, date, time)
+  selectedIds?: string[];                    // 다중 선택 (seat)
+  quantities?: Record<string, number>;       // 수량 (ticket)
 }
 
-// 데이터 바인딩
-type DataBinding =
-  | { path: string }                    // 절대 경로: "/movies/0/title"
-  | { each: string; template: string }; // 반복: each="/movies", template="movie_card_tpl"
+// Modification 상태
+interface ModificationState {
+  filter?: FilterState;
+  sort?: SortState;
+  highlight?: HighlightState;
+  augment?: AugmentState[];
+}
 
-// 액션 매핑
-interface ActionMap {
-  [actionName: string]: {
-    type: 'navigate' | 'store' | 'api';
-    payload: Record<string, unknown>;
-  };
+interface FilterState {
+  field: string;
+  operator: 'eq' | 'neq' | 'contains' | 'gt' | 'lt' | 'gte' | 'lte' | 'in';
+  value: unknown;
+}
+
+interface SortState {
+  field: string;
+  order: 'asc' | 'desc';
+}
+
+interface HighlightState {
+  itemIds: string[];
+  style?: 'border' | 'glow' | 'badge';
+}
+
+interface AugmentState {
+  itemId: string;
+  fields: Record<string, unknown>;
+}
+
+// Visible Items는 렌더링 시 계산 (derived state)
+function getVisibleItems(spec: UISpec): DataItem[] {
+  let result = spec.items;
+  if (spec.modification.filter) {
+    result = applyFilterLogic(result, spec.modification.filter);
+  }
+  if (spec.modification.sort) {
+    result = applySortLogic(result, spec.modification.sort);
+  }
+  return result;
 }
 ```
 
 ### 2.3 실제 예시: Movie Select Stage
 
-**Backend API 응답:**
+**기본 상태:**
 ```json
 {
-  "movies": [
-    { "id": "m1", "title": "Dune: Part Two", "posterUrl": "...", "genre": ["Sci-Fi"], "duration": 166, "rating": "PG-13" },
-    { "id": "m2", "title": "Oppenheimer", "posterUrl": "...", "genre": ["Drama"], "duration": 180, "rating": "R" }
-  ]
+  "stage": "movie",
+  "items": [
+    { "id": "m1", "title": "Dune: Part Two", "genre": ["Sci-Fi"], "rating": "PG-13", "duration": 166 },
+    { "id": "m2", "title": "Oppenheimer", "genre": ["Drama", "History"], "rating": "R", "duration": 180 },
+    { "id": "m3", "title": "Barbie", "genre": ["Comedy"], "rating": "PG-13", "duration": 114 }
+  ],
+  "state": { "selectedId": null },
+  "modification": {}
 }
 ```
 
-**변환된 UI Spec:**
+**Filter 적용 후 (Sci-Fi 장르만):**
 ```json
 {
-  "surface": "movie_select",
-  "components": [
-    {
-      "id": "root",
-      "type": "Grid",
-      "children": { "each": "/movies", "template": "movie_card_tpl" },
-      "props": { "columns": { "sm": 2, "md": 3, "lg": 4 }, "gap": 6 }
-    },
-    {
-      "id": "movie_card_tpl",
-      "type": "MovieCard",
-      "data": { "path": "." },
-      "props": {
-        "action": { "type": "navigate", "event": "selectMovie" }
-      }
-    }
-  ],
-  "dataModel": {
-    "movies": [
-      { "id": "m1", "title": "Dune: Part Two", "posterUrl": "...", "genre": ["Sci-Fi"], "duration": 166, "rating": "PG-13" },
-      { "id": "m2", "title": "Oppenheimer", "posterUrl": "...", "genre": ["Drama"], "duration": 180, "rating": "R" }
+  "stage": "movie",
+  "items": [...],
+  "state": { "selectedId": null },
+  "modification": {
+    "filter": { "field": "genre", "operator": "contains", "value": "Sci-Fi" }
+  }
+}
+```
+→ Renderer가 `getVisibleItems()`로 계산하면 Sci-Fi 영화만 표시
+
+**Sort + Highlight 적용 후:**
+```json
+{
+  "stage": "movie",
+  "items": [...],
+  "state": { "selectedId": "m3" },
+  "modification": {
+    "sort": { "field": "duration", "order": "asc" },
+    "highlight": { "itemIds": ["m3"], "style": "border" }
+  }
+}
+```
+
+**Augment 적용 후:**
+```json
+{
+  "stage": "movie",
+  "items": [...],
+  "state": { "selectedId": "m1" },
+  "modification": {
+    "augment": [
+      { "itemId": "m1", "fields": { "recommendation": "에이전트 추천", "matchScore": 95 } }
     ]
-  },
-  "actions": {
-    "selectMovie": {
-      "type": "navigate",
-      "payload": { "to": "/theater", "store": "movie" }
-    }
   }
 }
 ```
-
-### 2.4 실제 예시: Seat Select Stage
-
-```json
-{
-  "surface": "seat_select",
-  "components": [
-    {
-      "id": "root",
-      "type": "Column",
-      "children": ["screen", "seat_map", "legend", "actions"],
-      "props": { "align": "center", "gap": 6 }
-    },
-    {
-      "id": "screen",
-      "type": "ScreenIndicator"
-    },
-    {
-      "id": "seat_map",
-      "type": "SeatMap",
-      "data": { "path": "/seats" },
-      "props": {
-        "action": { "type": "store", "event": "toggleSeat" }
-      }
-    },
-    {
-      "id": "legend",
-      "type": "SeatLegend"
-    },
-    {
-      "id": "actions",
-      "type": "ActionBar",
-      "props": {
-        "back": { "to": "/time" },
-        "next": { "to": "/tickets", "label": "Continue", "requires": "selectedSeats" }
-      }
-    }
-  ],
-  "dataModel": {
-    "seats": [
-      { "id": "s1-A1", "row": "A", "number": 1, "type": "standard", "status": "available" },
-      { "id": "s1-A2", "row": "A", "number": 2, "type": "standard", "status": "occupied" }
-    ],
-    "selectedSeats": []
-  }
-}
-```
+→ Renderer가 augment 정보를 보고 m1에 "에이전트 추천" 뱃지 표시
 
 ---
 
-## 3. 컴포넌트 카탈로그
+## 3. Modification 시스템
 
-### 3.1 범용 레이아웃 컴포넌트
+### 3.1 Modification 종류
 
-| 타입 | 설명 | 주요 props |
-|------|------|-----------|
-| `Column` | 세로 배치 | `align`, `justify`, `gap` |
-| `Row` | 가로 배치 | `align`, `justify`, `gap` |
-| `Grid` | 그리드 배치 | `columns`, `gap` |
-| `Card` | 카드 컨테이너 | `child`, `onClick` |
-| `Text` | 텍스트 표시 | `text`, `variant` (h1~h5, body, caption) |
-| `Image` | 이미지 표시 | `src`, `alt`, `fit` |
-| `Button` | 버튼 | `label`, `variant` (primary, secondary), `action` |
-| `TextField` | 텍스트 입력 | `label`, `value`, `placeholder` |
+| 종류 | 설명 | 사용 예시 |
+|------|------|----------|
+| **Filter** | 조건에 맞는 데이터만 표시 | "액션 영화만 보여줘" |
+| **Sort** | 순서 변경 | "평점순으로 정렬해줘" |
+| **Highlight** | 특정 아이템 강조 | "추천 영화를 강조해줘" |
+| **Augment** | 필드 값 변경/추가 | "이 영화에 추천 뱃지 달아줘" |
 
-### 3.2 도메인 특화 컴포넌트
+### 3.2 Modifier 함수 (Deterministic)
 
-| 타입 | 설명 | 바인딩 데이터 |
-|------|------|-------------|
-| `MovieCard` | 포스터 + 제목 + 장르 + 러닝타임 | `Movie` |
-| `TheaterCard` | 극장명 + 위치 + 스크린 수 | `Theater` |
-| `DatePicker` | 날짜 선택 카드 그리드 | `string[]` (dates) |
-| `TimePicker` | 시간 + 스크린 + 잔여석 | `Showing[]` |
-| `SeatMap` | 좌석 배치도 (행/열 그리드) | `Seat[]` |
-| `SeatLegend` | 좌석 유형 범례 | (없음, 정적) |
-| `ScreenIndicator` | "SCREEN" 표시 | (없음, 정적) |
-| `TicketCounter` | 티켓 종류 + 수량 +/- | `TicketType` |
-| `BookingSummary` | 예매 요약 정보 | 전체 booking state |
-| `ActionBar` | Back / Continue 버튼 | `back`, `next` |
-| `ConfirmForm` | 이름 + 이메일 입력 폼 | `customerName`, `customerEmail` |
-| `BookingResult` | 예매 완료 화면 | `Booking` |
-
----
-
-## 4. Converter 레이어
-
-각 스테이지별로 **Backend API 응답 → UI Spec** 변환 함수를 작성한다.
-
-### 4.1 파일 구조
-
-```
-apps/frontend/src/converter/
-├── index.ts              # 배럴 export
-├── types.ts              # UISpec, Component, DataBinding 타입
-├── movieStage.ts         # convertMovieStage(movies) → UISpec
-├── theaterStage.ts       # convertTheaterStage(theaters) → UISpec
-├── dateStage.ts          # convertDateStage(dates) → UISpec
-├── timeStage.ts          # convertTimeStage(showings) → UISpec
-├── seatStage.ts          # convertSeatStage(seats) → UISpec
-├── ticketStage.ts        # convertTicketStage(ticketTypes, selectedSeats) → UISpec
-└── confirmStage.ts       # convertConfirmStage(bookingState) → UISpec
-```
-
-### 4.2 변환 함수 인터페이스
+Modifier 함수는 **modification 상태만 업데이트**. Visible items는 렌더링 시 계산.
 
 ```typescript
-// converter/movieStage.ts
-import type { Movie } from '../types';
-import type { UISpec } from './types';
+// apps/frontend/src/spec/modifiers.ts
 
-export function convertMovieStage(movies: Movie[]): UISpec {
+// Filter 적용 - modification.filter만 설정
+export function applyFilter(spec: UISpec, params: FilterState): UISpec {
   return {
-    surface: 'movie_select',
-    components: [
-      {
-        id: 'root',
-        type: 'Grid',
-        children: { each: '/movies', template: 'movie_card_tpl' },
-        props: { columns: { sm: 2, md: 3, lg: 4 }, gap: 6 },
-      },
-      {
-        id: 'movie_card_tpl',
-        type: 'MovieCard',
-        data: { path: '.' },
-        props: { action: { type: 'navigate', event: 'selectMovie' } },
-      },
-    ],
-    dataModel: { movies },
-    actions: {
-      selectMovie: {
-        type: 'navigate',
-        payload: { to: '/theater', store: 'movie' },
-      },
-    },
+    ...spec,
+    modification: { ...spec.modification, filter: params }
   };
 }
-```
 
----
-
-## 5. Renderer 엔진
-
-UI Spec을 받아 React 컴포넌트로 렌더링하는 엔진.
-
-### 5.1 파일 구조
-
-```
-apps/frontend/src/renderer/
-├── index.ts              # <SpecRenderer /> export
-├── SpecRenderer.tsx      # 메인 렌더러 (spec → React tree)
-├── resolveData.ts        # 데이터 바인딩 해석 (JSON Pointer)
-├── registry.ts           # 컴포넌트 레지스트리
-└── components/           # 렌더러용 React 컴포넌트
-    ├── layout/
-    │   ├── Column.tsx
-    │   ├── Row.tsx
-    │   ├── Grid.tsx
-    │   └── Card.tsx
-    ├── base/
-    │   ├── Text.tsx
-    │   ├── Image.tsx
-    │   ├── Button.tsx
-    │   └── TextField.tsx
-    └── domain/
-        ├── MovieCard.tsx
-        ├── TheaterCard.tsx
-        ├── DatePicker.tsx
-        ├── TimePicker.tsx
-        ├── SeatMap.tsx
-        ├── SeatLegend.tsx
-        ├── ScreenIndicator.tsx
-        ├── TicketCounter.tsx
-        ├── ActionBar.tsx
-        ├── ConfirmForm.tsx
-        └── BookingResult.tsx
-```
-
-### 5.2 핵심: SpecRenderer
-
-```typescript
-// renderer/SpecRenderer.tsx
-interface SpecRendererProps {
-  spec: UISpec;
-  onAction?: (actionName: string, data?: unknown) => void;
+// Sort 적용 - modification.sort만 설정
+export function applySort(spec: UISpec, params: SortState): UISpec {
+  return {
+    ...spec,
+    modification: { ...spec.modification, sort: params }
+  };
 }
 
-export function SpecRenderer({ spec, onAction }: SpecRendererProps) {
-  const componentMap = new Map(spec.components.map(c => [c.id, c]));
+// Highlight 적용 - modification.highlight만 설정
+export function applyHighlight(spec: UISpec, params: HighlightState): UISpec {
+  return {
+    ...spec,
+    modification: { ...spec.modification, highlight: params }
+  };
+}
 
-  function renderComponent(id: string): ReactNode {
-    const comp = componentMap.get(id);
-    if (!comp) return null;
+// Augment 적용 - modification.augment만 설정
+export function applyAugment(spec: UISpec, params: AugmentState[]): UISpec {
+  return {
+    ...spec,
+    modification: { ...spec.modification, augment: params }
+  };
+}
 
-    // 데이터 바인딩 해석
-    const resolvedData = comp.data
-      ? resolveData(comp.data, spec.dataModel)
-      : undefined;
+// 선택 (state 업데이트)
+export function selectItem(spec: UISpec, itemId: string): UISpec {
+  return {
+    ...spec,
+    state: { ...spec.state, selectedId: itemId }
+  };
+}
 
-    // 자식 렌더링
-    let renderedChildren: ReactNode = null;
-
-    if (Array.isArray(comp.children)) {
-      // 정적 자식: ["child1", "child2"]
-      renderedChildren = comp.children.map(childId => renderComponent(childId));
-    } else if (comp.children && 'each' in comp.children) {
-      // 반복 자식: { each: "/movies", template: "card_tpl" }
-      const items = resolveData({ path: comp.children.each }, spec.dataModel) as unknown[];
-      renderedChildren = items.map((item, i) =>
-        renderComponent(comp.children.template, { ...spec.dataModel, _item: item, _index: i })
-      );
-    }
-
-    // 레지스트리에서 React 컴포넌트 조회
-    const Component = registry.get(comp.type);
-    if (!Component) {
-      console.warn(`Unknown component type: ${comp.type}`);
-      return null;
-    }
-
-    return (
-      <Component
-        key={id}
-        data={resolvedData}
-        onAction={onAction}
-        {...comp.props}
-      >
-        {renderedChildren}
-      </Component>
-    );
+// 초기화
+export function clearModification(spec: UISpec, type?: 'filter' | 'sort' | 'highlight' | 'augment' | 'all'): UISpec {
+  if (type === 'all' || !type) {
+    return { ...spec, modification: {} };
   }
-
-  return <>{renderComponent('root')}</>;
-}
-```
-
-### 5.3 컴포넌트 레지스트리
-
-```typescript
-// renderer/registry.ts
-import type { ComponentType } from 'react';
-
-const registry = new Map<string, ComponentType<any>>();
-
-export function registerComponent(type: string, component: ComponentType<any>) {
-  registry.set(type, component);
+  const newMod = { ...spec.modification };
+  delete newMod[type];
+  return { ...spec, modification: newMod };
 }
 
-export function getComponent(type: string): ComponentType<any> | undefined {
-  return registry.get(type);
-}
+// Visible Items 계산 (렌더링 시 호출)
+export function getVisibleItems(spec: UISpec): DataItem[] {
+  let result = [...spec.items];
 
-// 초기 등록
-import { Grid } from './components/layout/Grid';
-import { MovieCard } from './components/domain/MovieCard';
-// ...
-
-registerComponent('Grid', Grid);
-registerComponent('MovieCard', MovieCard);
-// ...
-```
-
-### 5.4 데이터 바인딩 해석
-
-```typescript
-// renderer/resolveData.ts
-
-// JSON Pointer 해석: "/movies/0/title" → dataModel.movies[0].title
-export function resolveData(
-  binding: DataBinding,
-  dataModel: Record<string, unknown>
-): unknown {
-  if ('path' in binding) {
-    if (binding.path === '.') return dataModel;
-    const segments = binding.path.replace(/^\//, '').split('/');
-    let current: unknown = dataModel;
-    for (const segment of segments) {
-      if (current == null) return undefined;
-      current = (current as Record<string, unknown>)[segment];
-    }
-    return current;
-  }
-  return undefined;
-}
-```
-
----
-
-## 6. 변경 후 Stage 페이지 (사용 예시)
-
-```typescript
-// pages/MovieStagePage.tsx (변경 후)
-export function MovieStagePage() {
-  const navigate = useNavigate();
-  const { setMovie } = useBookingStore();
-  const [spec, setSpec] = useState<UISpec | null>(null);
-
-  useEffect(() => {
-    api.getMovies().then((data) => {
-      setSpec(convertMovieStage(data.movies));
+  // Filter 적용
+  if (spec.modification.filter) {
+    const { field, operator, value } = spec.modification.filter;
+    result = result.filter(item => {
+      const itemValue = item[field];
+      switch (operator) {
+        case 'eq': return itemValue === value;
+        case 'contains':
+          if (Array.isArray(itemValue)) return itemValue.includes(value);
+          return String(itemValue).includes(String(value));
+        // ... 기타 연산자
+      }
     });
-  }, []);
+  }
 
-  const handleAction = (action: string, data?: unknown) => {
-    if (action === 'selectMovie') {
-      setMovie(data as Movie);
-      navigate('/theater');
+  // Sort 적용
+  if (spec.modification.sort) {
+    const { field, order } = spec.modification.sort;
+    result.sort((a, b) => {
+      const aVal = a[field], bVal = b[field];
+      const cmp = typeof aVal === 'string' ? aVal.localeCompare(bVal) : aVal - bVal;
+      return order === 'asc' ? cmp : -cmp;
+    });
+  }
+
+  return result;
+}
+```
+
+---
+
+## 4. Agent Tool 정의
+
+LLM Agent가 호출하는 Tool 정의:
+
+```typescript
+// apps/frontend/src/agent/tools.ts
+
+const agentTools = [
+  {
+    name: 'filter',
+    description: 'Filter items by a specific field condition',
+    parameters: {
+      field: { type: 'string', description: 'Field to filter by (e.g., "genre", "rating")' },
+      operator: { type: 'string', enum: ['eq', 'neq', 'contains', 'gt', 'lt', 'gte', 'lte', 'in'] },
+      value: { description: 'Value to compare against' }
     }
-  };
+  },
+  {
+    name: 'sort',
+    description: 'Sort items by a specific field',
+    parameters: {
+      field: { type: 'string', description: 'Field to sort by' },
+      order: { type: 'string', enum: ['asc', 'desc'] }
+    }
+  },
+  {
+    name: 'highlight',
+    description: 'Highlight specific items visually',
+    parameters: {
+      itemIds: { type: 'array', description: 'Item IDs to highlight' },
+      style: { type: 'string', enum: ['border', 'glow', 'badge'], optional: true }
+    }
+  },
+  {
+    name: 'augment',
+    description: 'Add additional information to an item',
+    parameters: {
+      itemId: { type: 'string', description: 'Item ID to augment' },
+      fields: { type: 'object', description: 'Fields to add or modify' }
+    }
+  },
+  {
+    name: 'select',
+    description: 'Select an item',
+    parameters: {
+      itemId: { type: 'string', description: 'Item ID to select' }
+    }
+  },
+  {
+    name: 'clearModification',
+    description: 'Clear applied modifications',
+    parameters: {
+      type: { type: 'string', enum: ['filter', 'sort', 'highlight', 'augment', 'all'], optional: true }
+    }
+  },
+  {
+    name: 'next',
+    description: 'Proceed to next stage with current state (selected item is passed to next stage)',
+    parameters: {}
+  },
+  {
+    name: 'prev',
+    description: 'Go back to previous stage (current state is discarded)',
+    parameters: {}
+  }
+];
+```
 
-  if (!spec) return <Layout title="Select Movie" step={1}><p>Loading...</p></Layout>;
+---
+
+## 5. Stage Renderer
+
+각 Stage별 고정 레이아웃 컴포넌트.
+
+### 5.1 StageRenderer
+
+```typescript
+// apps/frontend/src/renderer/StageRenderer.tsx
+
+interface StageRendererProps {
+  spec: UISpec;
+  onSelect: (itemId: string) => void;
+  onNext: () => void;
+  onBack: () => void;
+}
+
+export function StageRenderer({ spec, ...props }: StageRendererProps) {
+  const stageComponents = {
+    movie: MovieStage,
+    theater: TheaterStage,
+    date: DateStage,
+    time: TimeStage,
+    seat: SeatStage,
+    ticket: TicketStage,
+    confirm: ConfirmStage,
+  };
+  const StageComponent = stageComponents[spec.stage];
+  return <StageComponent spec={spec} {...props} />;
+}
+```
+
+### 5.2 Stage 컴포넌트 예시 (MovieStage)
+
+```typescript
+// apps/frontend/src/renderer/stages/MovieStage.tsx
+import { getVisibleItems } from '../../spec/modifiers';
+
+export function MovieStage({ spec, onSelect, onNext }: MovieStageProps) {
+  // items + modification → visible items 계산
+  const visibleItems = getVisibleItems(spec);
 
   return (
-    <Layout title="Select Movie" step={1}>
-      <SpecRenderer spec={spec} onAction={handleAction} />
-    </Layout>
+    <div className="flex flex-col gap-6 items-center">
+      {/* 고정 레이아웃: ButtonGroup */}
+      <ButtonGroup
+        items={visibleItems}
+        selectedId={spec.state.selectedId}
+        onSelect={onSelect}
+        labelField="title"  // 기본: 제목만 표시
+        // highlight, augment 정보 전달
+        highlightedIds={spec.modification.highlight?.itemIds}
+        highlightStyle={spec.modification.highlight?.style}
+        augmentations={spec.modification.augment}
+      />
+      <ActionBar next={{ label: 'Continue', disabled: !spec.selectedId, onClick: onNext }} />
+    </div>
   );
 }
 ```
 
 ---
 
-## 7. 구현 순서
+## 6. UI 컴포넌트
 
-### Phase 1: 코어 인프라
-1. `converter/types.ts` — UISpec, Component, DataBinding 타입 정의
-2. `renderer/resolveData.ts` — JSON Pointer 데이터 바인딩 해석
-3. `renderer/registry.ts` — 컴포넌트 레지스트리
-4. `renderer/SpecRenderer.tsx` — 메인 렌더러
+### 6.1 설계 철학
 
-### Phase 2: 범용 컴포넌트
-5. `Column`, `Row`, `Grid`, `Card` 레이아웃 컴포넌트
-6. `Text`, `Image`, `Button`, `TextField` 기본 컴포넌트
+**기본 UI는 최소한의 정보만 표시**, Agent가 Augment를 통해 필요시 추가 정보를 넣는 방식.
 
-### Phase 3: 도메인 컴포넌트 + Converter
-7. `MovieCard` + `convertMovieStage` → MovieStagePage 적용
-8. `TheaterCard` + `convertTheaterStage` → TheaterStagePage 적용
-9. `DatePicker` + `convertDateStage` → DateStagePage 적용
-10. `TimePicker` + `convertTimeStage` → TimeStagePage 적용
-11. `SeatMap` + `SeatLegend` + `ScreenIndicator` + `convertSeatStage` → SeatStagePage 적용
-12. `TicketCounter` + `convertTicketStage` → TicketStagePage 적용
-13. `ConfirmForm` + `BookingResult` + `convertConfirmStage` → ConfirmPage 적용
-14. `ActionBar`, `BookingSummary` — 공통 컴포넌트
+```
+기본 상태:        [Dune: Part Two]
+                  [Oppenheimer]
+                  [Barbie]
 
-### Phase 4: 리팩토링 및 개선
-15. 기존 Stage 페이지에서 직접 렌더링 코드 제거
-16. 에러/로딩 상태를 위한 spec 확장 (optional)
-17. Storybook 또는 별도 도구로 spec → UI 미리보기 (optional)
+Augment 적용 후:  [Dune: Part Two] ← "SF 추천" 뱃지
+                  [Oppenheimer (3h)] ← 러닝타임 추가
+                  [Barbie]
+```
+
+### 6.2 컴포넌트 카탈로그
+
+| 컴포넌트 | 설명 | 사용 Stage |
+|----------|------|------------|
+| `ButtonGroup` | 텍스트 버튼 목록 (단일 선택) | movie, theater, time |
+| `Calendar` | 달력 (날짜 선택) | date |
+| `SeatMap` | 좌석 배치도 (다중 선택) | seat |
+| `TicketCounter` | 수량 조절 (+/-) | ticket |
+| `BookingSummary` | 예약 요약 정보 | confirm |
+| `ActionBar` | Back/Continue 버튼 | 공통 |
+
+### 6.3 컴포넌트 Props
+
+```typescript
+// ButtonGroup - Movie, Theater, Time 공통
+interface ButtonGroupProps {
+  items: DataItem[];
+  selectedId?: string;
+  onSelect: (id: string) => void;
+  labelField: string;                         // 표시할 필드명 (예: "title", "name", "time")
+  // Modification 지원
+  highlightedIds?: string[];
+  highlightStyle?: 'border' | 'glow' | 'badge';
+  augmentations?: Map<string, Record<string, unknown>>;
+}
+
+// Calendar - Date 선택
+interface CalendarProps {
+  availableDates: string[];                   // 선택 가능한 날짜들
+  selectedDate?: string;
+  onSelect: (date: string) => void;
+  // Modification 지원
+  highlightedDates?: string[];
+  augmentations?: Map<string, Record<string, unknown>>;
+}
+
+// SeatMap - Seat 선택 (standard 좌석만, premium 없음)
+interface SeatMapProps {
+  seats: Seat[];                              // { id, row, number, status: 'available' | 'occupied' }
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  // Modification 지원
+  highlightedIds?: string[];
+  augmentations?: Map<string, Record<string, unknown>>;
+}
+
+// TicketCounter - Ticket 수량
+interface TicketCounterProps {
+  ticketTypes: TicketType[];                  // { id, name, price }
+  quantities: Record<string, number>;
+  maxTotal: number;                           // 선택한 좌석 수
+  onChange: (typeId: string, quantity: number) => void;
+}
+
+// BookingSummary - Confirm (예약 요약만, 입력 폼 없음)
+interface BookingSummaryProps {
+  movie: string;
+  theater: string;
+  date: string;
+  time: string;
+  seats: string[];
+  tickets: { type: string; quantity: number; price: number }[];
+  totalPrice: number;
+}
+```
+
+### 6.4 Stage별 UI 예시
+
+**Movie Stage (ButtonGroup)**
+```
+Select Movie
+─────────────────
+[Dune: Part Two]     ← 선택됨
+[Oppenheimer]
+[Barbie]
+
+        [Continue →]
+```
+
+**Date Stage (Calendar)**
+```
+Select Date
+─────────────────
+    February 2026
+Su Mo Tu We Th Fr Sa
+                   1
+ 2  3  4  5  6  7  8
+ 9 10 11 12 13 14 15
+   ↑ 선택됨
+
+        [Continue →]
+```
+
+**Seat Stage (SeatMap)**
+```
+Select Seats
+─────────────────
+    ┌─ SCREEN ─┐
+
+    A1 A2 A3 A4 A5
+    B1 B2 ●  B4 B5    ● = occupied
+    C1 ◉  ◉  C4 C5    ◉ = selected
+
+        [Continue →]
+```
+
+**Confirm Stage (BookingSummary)**
+```
+Booking Summary
+─────────────────
+Movie:   Dune: Part Two
+Theater: CGV Gangnam
+Date:    Feb 10, 2026
+Time:    19:00
+Seats:   C2, C3
+
+Tickets:
+  Adult x 2    $20.00
+
+Total: $20.00
+
+        [Confirm →]
+```
 
 ---
 
-## 8. A2UI와의 비교 요약
+## 7. A2UI와의 비교
 
-| 항목 | A2UI | 우리 구현 |
-|------|------|----------|
+| 항목 | A2UI (원본) | 우리 구현 |
+|------|------------|----------|
 | 프레임워크 | Lit (Web Components) | React |
-| 메시지 전송 | 서버 → 클라이언트 스트리밍 | 프론트엔드 내부 변환 |
-| 컴포넌트 구조 | 플랫 리스트 + ID 참조 | 동일 |
-| 데이터 바인딩 | JSON Pointer (`/path`) | 동일 |
-| 구조/데이터 분리 | `updateComponents` / `updateDataModel` | `components` / `dataModel` |
-| 컴포넌트 카탈로그 | 범용 18개 + 커스텀 카탈로그 | 범용 8개 + 도메인 11개 |
-| 확장성 | Custom Catalog + Registry | Registry 패턴 |
-| 복잡도 | 높음 (스트리밍, Surface 관리) | 낮음 (동기 변환) |
+| LLM 역할 | UI 전체 설계 | Modification만 |
+| UI 구조 | 동적 (Column, Grid 조합) | 고정 (Stage별) |
+| 데이터 흐름 | 서버 → 클라이언트 스트리밍 | REST API + State |
+| 컴포넌트 | 18개 범용 + 커스텀 | 8개 범용 + 7개 도메인 |
+| Spec 변경 | LLM 생성 | Deterministic 함수 |
+| 복잡도 | 높음 | 낮음 |
+
+---
+
+## 8. 디렉토리 구조
+
+```
+apps/frontend/src/
+├── spec/                         # 새로운 UI Spec 시스템
+│   ├── types.ts                  # UISpec, ModificationState 타입
+│   ├── modifiers.ts              # Modifier 함수들
+│   ├── generators.ts             # Stage별 Spec 생성 함수
+│   └── index.ts                  # 배럴 export
+│
+├── renderer/
+│   ├── StageRenderer.tsx         # Stage 라우팅
+│   ├── stages/                   # 고정 레이아웃 Stage 컴포넌트
+│   │   ├── MovieStage.tsx
+│   │   ├── TheaterStage.tsx
+│   │   └── ...
+│   └── components/domain/        # 도메인 컴포넌트 (기존 유지)
+│       ├── MovieCard.tsx         # highlight/augment 지원 추가
+│       └── ...
+│
+├── agent/                        # Agent 관련
+│   └── tools.ts                  # Tool 정의
+│
+├── converter/                    # 기존 시스템 (하위 호환)
+│   └── ...
+│
+└── pages/                        # 페이지 컴포넌트
+    └── ...
+```

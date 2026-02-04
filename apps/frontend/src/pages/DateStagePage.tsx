@@ -4,17 +4,15 @@ import { Layout } from '../components/Layout';
 import { api } from '../api/client';
 import { useBookingStore } from '../store/bookingStore';
 import { useDevTools } from '../components/DevToolsContext';
-import { convertDateStage } from '../converter/dateStage';
-import { SpecRenderer } from '../renderer';
-import type { UISpec } from '../converter/types';
+import { generateDateSpec, createDateItems, selectItem, type UISpec, type DateItem } from '../spec';
+import { StageRenderer } from '../renderer';
 
 export function DateStagePage() {
   const navigate = useNavigate();
   const { movie, theater, setDate } = useBookingStore();
   const { setBackendData, setUiSpec } = useDevTools();
-  const [spec, setSpec] = useState<UISpec | null>(null);
-  const [dates, setDates] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string | undefined>();
+  const [spec, setSpec] = useState<UISpec<DateItem> | null>(null);
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,34 +25,40 @@ export function DateStagePage() {
     api
       .getDates(movie.id, theater.id)
       .then((data) => {
-        setDates(data.dates);
+        setAvailableDates(data.dates);
         setBackendData({ dates: data.dates });
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [movie, theater, navigate, setBackendData]);
 
-  // Rebuild spec when dates or selection changes
+  // Rebuild spec when dates change
   useEffect(() => {
-    if (dates.length > 0) {
-      const newSpec = convertDateStage(dates, selectedDate);
+    if (availableDates.length > 0 && movie && theater) {
+      // Create date items for the next 14 days
+      const dateItems = createDateItems(new Date(), 14, availableDates);
+      const newSpec = generateDateSpec(dateItems, movie.id, theater.id);
       setSpec(newSpec);
       setUiSpec(newSpec);
     }
-  }, [dates, selectedDate, setUiSpec]);
+  }, [availableDates, movie, theater, setUiSpec]);
 
-  const handleAction = (actionName: string, data?: unknown) => {
-    if (actionName === 'selectDate') {
-      setSelectedDate(data as string);
+  const handleSelect = (id: string) => {
+    if (spec) {
+      const newSpec = selectItem(spec, id);
+      setSpec(newSpec);
+      setUiSpec(newSpec);
     }
-    if (actionName === 'back') {
-      navigate('/theater');
-    }
-    if (actionName === 'next') {
-      if (selectedDate) {
-        setDate(selectedDate);
-        navigate('/time');
-      }
+  };
+
+  const handleBack = () => {
+    navigate('/theater');
+  };
+
+  const handleNext = () => {
+    if (spec?.state.selectedId) {
+      setDate(spec.state.selectedId);
+      navigate('/time');
     }
   };
 
@@ -78,7 +82,12 @@ export function DateStagePage() {
 
   return (
     <Layout title="Select Date" step={3}>
-      <SpecRenderer spec={spec} onAction={handleAction} />
+      <StageRenderer
+        spec={spec}
+        onSelect={handleSelect}
+        onNext={handleNext}
+        onBack={handleBack}
+      />
     </Layout>
   );
 }
