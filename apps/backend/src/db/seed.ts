@@ -78,7 +78,7 @@ async function seed() {
   }
   console.log('Inserted ticket types');
 
-  // Generate showings for next 7 days
+  // Generate showings for next 14 days (updated to match frontend calendar range)
   const today = new Date();
   const showingsData: Array<{
     id: string;
@@ -100,7 +100,14 @@ async function seed() {
     t3: ['m2', 'm3'], // Alamo shows Oppenheimer and Holdovers
   };
 
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+  const SHOWING_DAYS = 14;
+  const startDateStr = today.toISOString().split('T')[0];
+  const endDate = new Date(today);
+  endDate.setDate(endDate.getDate() + SHOWING_DAYS - 1);
+  const endDateStr = endDate.toISOString().split('T')[0];
+  console.log(`Generating showings from ${startDateStr} to ${endDateStr} (${SHOWING_DAYS} days)`);
+
+  for (let dayOffset = 0; dayOffset < SHOWING_DAYS; dayOffset++) {
     const date = new Date(today);
     date.setDate(date.getDate() + dayOffset);
     const dateStr = date.toISOString().split('T')[0];

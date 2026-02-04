@@ -11,7 +11,8 @@
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "build": "npm run build --workspaces",
     "build:backend": "npm run build --workspace=apps/backend",
-    "build:frontend": "npm run build --workspace=apps/frontend"
+    "build:frontend": "npm run build --workspace=apps/frontend",
+    "db:seed": "npm run db:seed --workspace=apps/backend"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
