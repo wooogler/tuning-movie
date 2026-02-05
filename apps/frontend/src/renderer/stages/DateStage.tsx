@@ -231,7 +231,7 @@ export function DateStage({
               )}
 
               {/* Augment 뱃지 */}
-              {day.item?._augmented?.['badge'] && (
+              {day.item?._augmented?.['badge'] as string && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full" />
               )}
             </button>

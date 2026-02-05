@@ -28,19 +28,25 @@ export type Stage =
  * Tool Call을 통해 modification을 적용할 수 있다.
  */
 export interface UISpec<T = DataItem> {
-  /** 현재 Stage */
+  /** Current stage */
   stage: Stage;
 
-  /** 원본 데이터 아이템 목록 */
+  /** Stage title */
+  title: string;
+
+  /** Stage description (optional) */
+  description?: string;
+
+  /** Original data items */
   items: T[];
 
-  /** UI 상태 (선택, 수량 등) */
+  /** UI state (selection, quantities, etc.) */
   state: StateModel;
 
-  /** 현재 적용된 Modification 상태 */
+  /** Current modification state */
   modification: ModificationState;
 
-  /** Stage별 추가 메타데이터 */
+  /** Stage-specific metadata */
   meta?: Record<string, unknown>;
 }
 

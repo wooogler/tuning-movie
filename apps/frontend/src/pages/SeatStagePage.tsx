@@ -93,7 +93,7 @@ export function SeatStagePage() {
   if (!spec) return null;
 
   return (
-    <Layout title="Select Seats" step={5}>
+    <Layout title={spec.title} description={spec.description} step={5}>
       <StageRenderer
         spec={spec}
         onSelect={handleToggle}

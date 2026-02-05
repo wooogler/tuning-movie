@@ -24,13 +24,13 @@ export function SeatStage({
 
   // 좌석 배치 정보
   const rows = (spec.meta?.rows as string[]) ?? [];
-  const seatsPerRow = (spec.meta?.seatsPerRow as number) ?? 10;
+  // const seatsPerRow = (spec.meta?.seatsPerRow as number) ?? 10;
 
   // 좌석을 행별로 그룹화
   const seatsByRow = rows.map((row) =>
     visibleItems
       .filter((seat) => seat.row === row)
-      .sort((a, b) => a.number - b.number)
+      .sort((a, b) => (a.number as number) - (b.number as number))
   );
 
   return (
@@ -91,7 +91,7 @@ export function SeatStage({
                       ${highlightClass}
                     `}
                   >
-                    {seat.number}
+                    {seat.number as number}
                   </button>
                 );
               })}

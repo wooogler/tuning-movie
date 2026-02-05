@@ -4,7 +4,7 @@
  * UISpec의 stage에 따라 적절한 Stage 컴포넌트를 렌더링
  */
 
-import type { UISpec } from '../spec';
+import type { UISpec, MovieItem, TheaterItem, DateItem, TimeItem, SeatItem, TicketItem } from '../spec';
 import {
   MovieStage,
   TheaterStage,
@@ -38,7 +38,7 @@ export function StageRenderer({
     case 'movie':
       return (
         <MovieStage
-          spec={spec}
+          spec={spec as UISpec<MovieItem>}
           onSelect={onSelect}
           onNext={onNext}
         />
@@ -47,7 +47,7 @@ export function StageRenderer({
     case 'theater':
       return (
         <TheaterStage
-          spec={spec}
+          spec={spec as UISpec<TheaterItem>}
           onSelect={onSelect}
           onNext={onNext}
           onBack={onBack}
@@ -57,7 +57,7 @@ export function StageRenderer({
     case 'date':
       return (
         <DateStage
-          spec={spec}
+          spec={spec as UISpec<DateItem>}
           onSelect={onSelect}
           onNext={onNext}
           onBack={onBack}
@@ -67,7 +67,7 @@ export function StageRenderer({
     case 'time':
       return (
         <TimeStage
-          spec={spec}
+          spec={spec as UISpec<TimeItem>}
           onSelect={onSelect}
           onNext={onNext}
           onBack={onBack}
@@ -77,7 +77,7 @@ export function StageRenderer({
     case 'seat':
       return (
         <SeatStage
-          spec={spec}
+          spec={spec as UISpec<SeatItem>}
           onSelect={onSelect}
           onToggle={onToggle ?? onSelect}
           onNext={onNext}
@@ -88,7 +88,7 @@ export function StageRenderer({
     case 'ticket':
       return (
         <TicketStage
-          spec={spec}
+          spec={spec as UISpec<TicketItem>}
           onSelect={onSelect}
           onQuantityChange={onQuantityChange ?? (() => {})}
           onNext={onNext}

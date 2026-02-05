@@ -81,7 +81,7 @@ export function MovieStagePage() {
   if (!spec) return null;
 
   return (
-    <Layout title="Select Movie" step={1}>
+    <Layout title={spec.title} description={spec.description} step={1}>
       <StageRenderer
         spec={spec}
         onSelect={handleSelect}

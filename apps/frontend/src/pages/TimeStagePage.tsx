@@ -81,7 +81,7 @@ export function TimeStagePage() {
   if (!spec) return null;
 
   return (
-    <Layout title="Select Time" step={4}>
+    <Layout title={spec.title} description={spec.description} step={4}>
       <StageRenderer
         spec={spec}
         onSelect={handleSelect}

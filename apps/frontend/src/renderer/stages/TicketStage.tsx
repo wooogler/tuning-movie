@@ -61,13 +61,13 @@ export function TicketStage({
             >
               {/* Ticket info */}
               <div>
-                <div className="font-semibold text-white">{ticket.name}</div>
+                <div className="font-semibold text-white">{ticket.name as string}</div>
                 <div className="text-sm text-gray-400">
-                  ₩{ticket.price.toLocaleString()}
+                  ₩{(ticket.price as number).toLocaleString()}
                 </div>
-                {ticket._augmented?.description && (
+                {(ticket._augmented?.description as string | undefined) && (
                   <div className="text-xs text-primary mt-1">
-                    {ticket._augmented.description as string}
+                    {ticket._augmented?.description as string}
                   </div>
                 )}
               </div>

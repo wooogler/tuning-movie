@@ -42,6 +42,8 @@ export function generateMovieSpec(
 
   return {
     stage: 'movie',
+    title: 'Select Movie',
+    description: 'Choose a movie you want to watch',
     items,
     state: { selectedId },
     modification: {},
@@ -71,6 +73,8 @@ export function generateTheaterSpec(
 
   return {
     stage: 'theater',
+    title: 'Select Theater',
+    description: 'Choose a theater near you',
     items,
     state: { selectedId },
     modification: {},
@@ -97,6 +101,8 @@ export function generateDateSpec(
 ): UISpec<DateItem> {
   return {
     stage: 'date',
+    title: 'Select Date',
+    description: 'Pick a date for your movie',
     items: dates,
     state: { selectedId },
     modification: {},
@@ -158,6 +164,8 @@ export function generateTimeSpec(
 
   return {
     stage: 'time',
+    title: 'Select Time',
+    description: 'Choose a showtime',
     items,
     state: { selectedId },
     modification: {},
@@ -200,6 +208,8 @@ export function generateSeatSpec(
 
   return {
     stage: 'seat',
+    title: 'Select Seats',
+    description: 'Choose your seats',
     items,
     state: { selectedIds: selectedIds ?? [] },
     modification: {},
@@ -245,6 +255,8 @@ export function generateTicketSpec(
 
   return {
     stage: 'ticket',
+    title: 'Select Tickets',
+    description: 'Choose ticket types and quantities',
     items,
     state: { quantities: quantities ?? defaultQuantities },
     modification: {},
@@ -272,9 +284,11 @@ export interface ConfirmMeta {
 export function generateConfirmSpec(meta: ConfirmMeta): UISpec {
   return {
     stage: 'confirm',
+    title: 'Confirm Booking',
+    description: 'Review your booking details',
     items: [],
     state: {},
     modification: {},
-    meta,
+    meta: meta as unknown as Record<string, unknown>,
   };
 }

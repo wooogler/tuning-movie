@@ -142,7 +142,7 @@ export function ConfirmPage() {
   if (!spec) return null;
 
   return (
-    <Layout title="Confirm Booking" step={7}>
+    <Layout title={spec.title} description={spec.description} step={7}>
       <StageRenderer
         spec={spec}
         onSelect={() => {}}

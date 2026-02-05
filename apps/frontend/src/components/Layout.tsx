@@ -3,12 +3,13 @@ import type { ReactNode } from 'react';
 interface LayoutProps {
   children: ReactNode;
   title: string;
+  description?: string;
   step: number;
 }
 
 const steps = ['Movie', 'Theater', 'Date', 'Time', 'Seats', 'Tickets', 'Confirm'];
 
-export function Layout({ children, title, step }: LayoutProps) {
+export function Layout({ children, title, description, step }: LayoutProps) {
   return (
     <div className="min-h-screen bg-dark text-white">
       <div className="max-w-6xl mx-auto px-4 py-6">
@@ -37,7 +38,12 @@ export function Layout({ children, title, step }: LayoutProps) {
         </header>
 
         <main className="mb-8">
-          <h2 className="text-2xl font-semibold text-center mb-6">{title}</h2>
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-semibold mb-2">{title}</h2>
+            {description && (
+              <p className="text-gray-400 text-sm">{description}</p>
+            )}
+          </div>
           {children}
         </main>
       </div>

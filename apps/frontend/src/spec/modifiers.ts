@@ -169,8 +169,8 @@ export function clearModification<T extends DataItem>(
  */
 export function getVisibleItems<T extends DataItem>(
   spec: UISpec<T>
-): VisibleItem[] {
-  let result: VisibleItem[] = spec.items.map((item) => ({ ...item }));
+): (T & Partial<VisibleItem>)[] {
+  let result: any[] = spec.items.map((item) => ({ ...item }));
 
   // 1. Filter 적용
   if (spec.modification.filter) {

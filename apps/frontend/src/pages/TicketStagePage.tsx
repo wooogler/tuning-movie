@@ -101,7 +101,7 @@ export function TicketStagePage() {
   if (!spec) return null;
 
   return (
-    <Layout title="Select Tickets" step={6}>
+    <Layout title={spec.title} description={spec.description} step={6}>
       <StageRenderer
         spec={spec}
         onSelect={() => {}}

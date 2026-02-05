@@ -81,7 +81,7 @@ export function DateStagePage() {
   if (!spec) return null;
 
   return (
-    <Layout title="Select Date" step={3}>
+    <Layout title={spec.title} description={spec.description} step={3}>
       <StageRenderer
         spec={spec}
         onSelect={handleSelect}

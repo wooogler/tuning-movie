@@ -17,7 +17,7 @@ export function ConfirmStage({
   onConfirm,
   onBack,
 }: ConfirmStageProps) {
-  const meta = spec.meta as ConfirmMeta;
+  const meta = spec.meta as unknown as ConfirmMeta;
 
   // 총 가격 계산
   const totalPrice = meta.tickets.reduce(
