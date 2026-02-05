@@ -1,13 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import {
-  MovieStagePage,
-  TheaterStagePage,
-  DateStagePage,
-  TimeStagePage,
-  SeatStagePage,
-  TicketStagePage,
-  ConfirmPage,
-} from './pages';
+import { ChatPage } from './pages/ChatPage';
 import { DevToolsProvider } from './components/DevToolsContext';
 import { DevTools } from './components/DevTools';
 import './App.css';
@@ -17,15 +9,9 @@ function App() {
     <BrowserRouter>
       <DevToolsProvider>
         <div className="flex h-screen">
-          <div className="flex-1 flex items-center justify-center overflow-auto bg-dark">
+          <div className="flex-1 overflow-hidden bg-dark">
             <Routes>
-              <Route path="/" element={<MovieStagePage />} />
-              <Route path="/theater" element={<TheaterStagePage />} />
-              <Route path="/date" element={<DateStagePage />} />
-              <Route path="/time" element={<TimeStagePage />} />
-              <Route path="/seats" element={<SeatStagePage />} />
-              <Route path="/tickets" element={<TicketStagePage />} />
-              <Route path="/confirm" element={<ConfirmPage />} />
+              <Route path="/" element={<ChatPage />} />
             </Routes>
           </div>
           <DevTools />

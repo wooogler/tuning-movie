@@ -55,11 +55,11 @@ export function ButtonGroup({
             onClick={() => !disabled && onSelect(item.id)}
             disabled={disabled}
             className={`
-              relative w-full px-6 py-4 rounded-xl text-left transition-all
+              relative w-full px-6 py-4 rounded-xl text-left transition-all border
               ${
                 isSelected
-                  ? 'bg-primary text-dark font-semibold'
-                  : 'bg-dark-light text-white hover:bg-dark-lighter'
+                  ? 'bg-primary text-dark font-semibold border-primary'
+                  : 'bg-dark-light text-white hover:bg-dark-lighter border-gray-600 hover:border-gray-500'
               }
               ${highlightClass}
               ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}

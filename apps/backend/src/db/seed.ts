@@ -2,7 +2,8 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
 
-const sqlite = new Database('tuning-movie.db');
+const dbPath = process.env.DATABASE_URL || 'tuning-movie.db';
+const sqlite = new Database(dbPath);
 const db = drizzle(sqlite, { schema });
 
 async function seed() {
