@@ -19,12 +19,12 @@ export function MovieStagePage() {
   const [error, setError] = useState<string | null>(null);
 
   const handleNext = useCallback(() => {
-    const selectedMovie = movies.find((m) => m.id === spec?.state.selectedId);
+    const selectedMovie = movies.find((m) => m.id === spec?.state.selected?.id);
     if (selectedMovie) {
       setMovie(selectedMovie);
       navigate('/theater');
     }
-  }, [movies, spec?.state.selectedId, setMovie, navigate]);
+  }, [movies, spec?.state.selected?.id, setMovie, navigate]);
 
   // Tool handler
   useToolHandler({

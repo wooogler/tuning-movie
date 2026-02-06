@@ -12,6 +12,10 @@ primary_region = 'iad'
   NODE_ENV = 'production'
   PORT = '3000'
 
+[mounts]
+  source = 'tuning_movie_data'
+  destination = '/app/apps/backend/data'
+
 [http_service]
   internal_port = 3000
   force_https = true
@@ -23,7 +27,7 @@ primary_region = 'iad'
   [[http_service.checks]]
     interval = '30s'
     timeout = '5s'
-    grace_period = '10s'
+    grace_period = '300s'
     method = 'GET'
     path = '/health'
 

@@ -5,11 +5,9 @@
  */
 
 import { useState, useMemo } from 'react';
-import { getVisibleItems, type DateItem, type VisibleItem } from '../../spec';
+import type { DateItem, HighlightStyle } from '../../spec';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
-
-type VisibleDateItem = DateItem & VisibleItem;
 
 interface CalendarDay {
   date: string; // YYYY-MM-DD
@@ -18,14 +16,17 @@ interface CalendarDay {
   isToday: boolean;
   isAvailable: boolean;
   isSelected: boolean;
-  item?: VisibleDateItem;
+  isHighlighted: boolean;
+  highlightStyle?: HighlightStyle;
 }
 
 function generateCalendarDays(
   year: number,
   month: number,
-  availableItems: VisibleDateItem[],
-  selectedId?: string
+  items: DateItem[],
+  selectedId?: string,
+  highlightedIds?: string[],
+  highlightStyle?: HighlightStyle
 ): CalendarDay[] {
   const days: CalendarDay[] = [];
   const today = new Date();
@@ -39,11 +40,11 @@ function generateCalendarDays(
   const lastDay = new Date(year, month + 1, 0);
   const totalDays = lastDay.getDate();
 
-  // Create a map of available dates for quick lookup
-  const availableMap = new Map<string, VisibleDateItem>();
-  availableItems.forEach((item) => {
-    availableMap.set(item.id, item);
-  });
+  // Create maps for quick lookup
+  const itemMap = new Map<string, DateItem>();
+  items.forEach((item) => itemMap.set(item.id, item));
+
+  const highlightSet = new Set(highlightedIds ?? []);
 
   // Add empty slots for days before the first day of month
   for (let i = 0; i < startDayOfWeek; i++) {
@@ -56,6 +57,7 @@ function generateCalendarDays(
       isToday: dateStr === todayStr,
       isAvailable: false,
       isSelected: false,
+      isHighlighted: false,
     });
   }
 
@@ -63,7 +65,8 @@ function generateCalendarDays(
   for (let day = 1; day <= totalDays; day++) {
     const date = new Date(year, month, day);
     const dateStr = date.toISOString().split('T')[0];
-    const item = availableMap.get(dateStr);
+    const item = itemMap.get(dateStr);
+    const isHighlighted = highlightSet.has(dateStr);
 
     days.push({
       date: dateStr,
@@ -72,7 +75,8 @@ function generateCalendarDays(
       isToday: dateStr === todayStr,
       isAvailable: item?.available ?? false,
       isSelected: dateStr === selectedId,
-      item,
+      isHighlighted,
+      highlightStyle: isHighlighted ? highlightStyle : undefined,
     });
   }
 
@@ -89,6 +93,7 @@ function generateCalendarDays(
         isToday: dateStr === todayStr,
         isAvailable: false,
         isSelected: false,
+        isHighlighted: false,
       });
     }
   }
@@ -102,8 +107,7 @@ export function DateStage({
   onNext,
   onBack,
 }: StageProps<DateItem>) {
-  const visibleItems = getVisibleItems(spec) as VisibleDateItem[];
-  const canProceed = !!spec.state.selectedId;
+  const canProceed = !!spec.state.selected;
 
   // Current viewed month (initialized to today)
   const today = new Date();
@@ -112,8 +116,15 @@ export function DateStage({
 
   // Generate calendar days for current view
   const calendarDays = useMemo(
-    () => generateCalendarDays(viewYear, viewMonth, visibleItems, spec.state.selectedId),
-    [viewYear, viewMonth, visibleItems, spec.state.selectedId]
+    () => generateCalendarDays(
+      viewYear,
+      viewMonth,
+      spec.items,
+      spec.state.selected?.id,
+      spec.modification.highlight?.itemIds,
+      spec.modification.highlight?.style
+    ),
+    [viewYear, viewMonth, spec.items, spec.state.selected?.id, spec.modification.highlight]
   );
 
   // Month navigation
@@ -141,9 +152,9 @@ export function DateStage({
     year: 'numeric',
   });
 
-  // 선택된 날짜 정보 (from original spec.items to get proper typing)
+  // 선택된 날짜 정보
   const selectedDate = spec.items.find(
-    (item) => item.id === spec.state.selectedId
+    (item) => item.id === spec.state.selected?.id
   );
 
   return (
@@ -187,10 +198,10 @@ export function DateStage({
 
         {/* Calendar days */}
         {calendarDays.map((day, index) => {
-          // Highlight 스타일 (if item exists)
+          // Highlight 스타일
           let highlightClass = '';
-          if (day.item?._highlighted) {
-            switch (day.item._highlightStyle) {
+          if (day.isHighlighted) {
+            switch (day.highlightStyle) {
               case 'glow':
                 highlightClass = 'shadow-lg shadow-primary/50';
                 break;
@@ -229,11 +240,6 @@ export function DateStage({
               {day.isToday && !day.isSelected && day.isCurrentMonth && (
                 <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full" />
               )}
-
-              {/* Augment 뱃지 */}
-              {day.item?._augmented?.['badge'] as string && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full" />
-              )}
             </button>
           );
         })}
@@ -242,7 +248,7 @@ export function DateStage({
       {/* 선택된 날짜 표시 */}
       {selectedDate && (
         <div className="text-gray-400">
-          Selected: {selectedDate.date} ({selectedDate.dayOfWeek})
+          Selected: {selectedDate.displayText}
         </div>
       )}
 

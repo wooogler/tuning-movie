@@ -55,7 +55,7 @@ export function TimeStagePage() {
   };
 
   const handleNext = () => {
-    const selectedShowing = showings.find((s) => s.id === spec?.state.selectedId);
+    const selectedShowing = showings.find((s) => s.id === spec?.state.selected?.id);
     if (selectedShowing) {
       setShowing(selectedShowing);
       navigate('/seats');

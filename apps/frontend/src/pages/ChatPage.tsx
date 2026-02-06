@@ -293,7 +293,7 @@ export function ChatPage() {
 
     switch (currentStage) {
       case 'movie': {
-        const selectedId = activeSpec.state.selectedId;
+        const selectedId = activeSpec.state.selected?.id;
         if (!selectedId) return;
         const selectedMovie = movies.find((m) => m.id === selectedId);
         if (!selectedMovie) return;
@@ -304,7 +304,7 @@ export function ChatPage() {
       }
 
       case 'theater': {
-        const selectedId = activeSpec.state.selectedId;
+        const selectedId = activeSpec.state.selected?.id;
         if (!selectedId) return;
         const selectedTheater = theaters.find((t) => t.id === selectedId);
         if (!selectedTheater) return;
@@ -316,7 +316,7 @@ export function ChatPage() {
       }
 
       case 'date': {
-        const selectedId = activeSpec.state.selectedId;
+        const selectedId = activeSpec.state.selected?.id;
         if (!selectedId) return;
         selectionLabel = selectedId;
         setDate(selectedId);
@@ -327,7 +327,7 @@ export function ChatPage() {
       }
 
       case 'time': {
-        const selectedId = activeSpec.state.selectedId;
+        const selectedId = activeSpec.state.selected?.id;
         if (!selectedId) return;
         const selectedShowing = showings.find((s) => s.id === selectedId);
         if (!selectedShowing) return;
@@ -341,8 +341,8 @@ export function ChatPage() {
       }
 
       case 'seat': {
-        const selectedIds = activeSpec.state.selectedIds;
-        if (!selectedIds || selectedIds.length === 0) return;
+        const selectedIds = activeSpec.state.selectedList?.map((item) => item.id) ?? [];
+        if (selectedIds.length === 0) return;
         const selectedSeatObjects = seats.filter((s) => selectedIds.includes(s.id));
         selectionLabel = `${selectedSeatObjects.length} seat(s) selected`;
         setSelectedSeats(selectedSeatObjects);
@@ -355,12 +355,8 @@ export function ChatPage() {
       }
 
       case 'ticket': {
-        const quantities = activeSpec.state.quantities;
-        if (!quantities) return;
-        const totalTickets = Object.values(quantities).reduce(
-          (a, b) => (a as number) + (b as number),
-          0
-        ) as number;
+        const quantities = activeSpec.state.quantities ?? [];
+        const totalTickets = quantities.reduce((sum, q) => sum + q.count, 0);
         if (totalTickets === 0) return;
         selectionLabel = `${totalTickets} ticket(s)`;
         nextCtx.movie = movie;

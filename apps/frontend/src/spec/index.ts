@@ -5,15 +5,16 @@
  *
  * @example
  * ```typescript
- * // 1. Spec 생성
+ * // 1. Spec 생성 (visibleItems 자동 계산됨)
  * const spec = generateMovieSpec(movies);
+ * // spec.visibleItems = [{ id: 'm1', value: 'Dune: Part Two' }, ...]
  *
- * // 2. Modification 적용 (Agent Tool Call)
+ * // 2. Modification 적용 (Agent Tool Call) - visibleItems 자동 갱신
  * const filtered = applyFilter(spec, { field: 'genre', operator: 'contains', value: 'Sci-Fi' });
  * const highlighted = applyHighlight(filtered, { itemIds: ['m1'], style: 'badge' });
  *
- * // 3. 렌더링 시 visible items 계산
- * const visibleItems = getVisibleItems(highlighted);
+ * // 3. Agent는 visibleItems를 직접 읽어 화면 상태 파악
+ * // highlighted.visibleItems = [{ id: 'm1', value: 'Dune: Part Two', isHighlighted: true }]
  * ```
  */
 
@@ -22,6 +23,9 @@ export type {
   Stage,
   UISpec,
   DataItem,
+  DisplayItem,
+  QuantityItem,
+  DisplayConfig,
   StateModel,
   ModificationState,
   FilterState,
@@ -30,11 +34,15 @@ export type {
   HighlightState,
   HighlightStyle,
   AugmentState,
+  // deprecated
   VisibleItem,
+  InternalState,
 } from './types';
 
 // Modifiers
 export {
+  computeVisibleItems,
+  refreshVisibleItems,
   applyFilter,
   applySort,
   applyHighlight,
@@ -44,7 +52,7 @@ export {
   toggleItem,
   setQuantity,
   clearModification,
-  getVisibleItems,
+  getVisibleItems, // deprecated
 } from './modifiers';
 
 // Generators

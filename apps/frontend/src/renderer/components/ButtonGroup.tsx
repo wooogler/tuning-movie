@@ -2,36 +2,40 @@
  * ButtonGroup Component
  *
  * Movie, Theater, Time Stage에서 사용하는 텍스트 버튼 목록
- * highlight/augment 지원
+ * DisplayItem의 value를 직접 렌더링
  */
 
-import type { VisibleItem } from '../../spec';
+import type { DisplayItem, HighlightStyle } from '../../spec';
 
 interface ButtonGroupProps {
-  items: VisibleItem[];
-  selectedId?: string;
+  items: DisplayItem[];
   onSelect: (id: string) => void;
-  labelField: string;
+  selectedId?: string;
+  highlightedIds?: string[];
+  highlightStyle?: HighlightStyle;
   disabled?: boolean;
 }
 
 export function ButtonGroup({
   items,
-  selectedId,
   onSelect,
-  labelField,
+  selectedId,
+  highlightedIds = [],
+  highlightStyle = 'border',
   disabled = false,
 }: ButtonGroupProps) {
+  const highlightSet = new Set(highlightedIds);
+
   return (
     <div className="flex flex-col gap-3 w-full max-w-md">
       {items.map((item) => {
         const isSelected = item.id === selectedId;
-        const label = String(item[labelField] ?? item.id);
+        const isHighlighted = highlightSet.has(item.id);
 
         // Highlight 스타일
         let highlightClass = '';
-        if (item._highlighted) {
-          switch (item._highlightStyle) {
+        if (isHighlighted) {
+          switch (highlightStyle) {
             case 'glow':
               highlightClass = 'shadow-lg shadow-primary/50';
               break;
@@ -45,15 +49,13 @@ export function ButtonGroup({
           }
         }
 
-        // Augment 뱃지
-        const augmentBadge = item._augmented?.badge as string | undefined;
-        const augmentText = item._augmented?.text as string | undefined;
+        const isDisabled = disabled || item.isDisabled;
 
         return (
           <button
             key={item.id}
-            onClick={() => !disabled && onSelect(item.id)}
-            disabled={disabled}
+            onClick={() => !isDisabled && onSelect(item.id)}
+            disabled={isDisabled}
             className={`
               relative w-full px-6 py-4 rounded-xl text-left transition-all border
               ${
@@ -62,24 +64,10 @@ export function ButtonGroup({
                   : 'bg-dark-light text-white hover:bg-dark-lighter border-gray-600 hover:border-gray-500'
               }
               ${highlightClass}
-              ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+              ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
             `}
           >
-            <span className="block">{label}</span>
-
-            {/* Augment 추가 텍스트 */}
-            {augmentText && (
-              <span className="block text-sm text-gray-400 mt-1">
-                {augmentText}
-              </span>
-            )}
-
-            {/* Augment 뱃지 */}
-            {augmentBadge && (
-              <span className="absolute top-2 right-2 px-2 py-1 text-xs bg-yellow-400 text-dark rounded-full font-semibold">
-                {augmentBadge}
-              </span>
-            )}
+            <span className="block">{item.value}</span>
           </button>
         );
       })}

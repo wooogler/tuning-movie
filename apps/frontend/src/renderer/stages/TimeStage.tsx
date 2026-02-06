@@ -4,7 +4,7 @@
  * 상영 시간 선택 Stage - ButtonGroup 사용
  */
 
-import { getVisibleItems, type TimeItem } from '../../spec';
+import type { TimeItem } from '../../spec';
 import { ButtonGroup } from '../components/ButtonGroup';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
@@ -15,16 +15,16 @@ export function TimeStage({
   onNext,
   onBack,
 }: StageProps<TimeItem>) {
-  const visibleItems = getVisibleItems(spec);
-  const canProceed = !!spec.state.selectedId;
+  const canProceed = !!spec.state.selected;
 
   return (
     <div className="flex flex-col items-center gap-6">
       <ButtonGroup
-        items={visibleItems}
-        selectedId={spec.state.selectedId}
+        items={spec.visibleItems}
         onSelect={onSelect}
-        labelField="time"
+        selectedId={spec.state.selected?.id}
+        highlightedIds={spec.modification.highlight?.itemIds}
+        highlightStyle={spec.modification.highlight?.style}
       />
 
       <ActionBar

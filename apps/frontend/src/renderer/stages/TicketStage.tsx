@@ -4,7 +4,7 @@
  * 티켓 종류별 수량 선택 Stage - TicketCounter 사용
  */
 
-import { getVisibleItems, type TicketItem } from '../../spec';
+import type { TicketItem, HighlightStyle } from '../../spec';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
 
@@ -18,26 +18,33 @@ export function TicketStage({
   onNext,
   onBack,
 }: TicketStageProps) {
-  const visibleItems = getVisibleItems(spec);
-  const quantities = spec.state.quantities ?? {};
+  const quantities = spec.state.quantities ?? [];
   const maxTotal = (spec.meta?.maxTotal as number) ?? 0;
 
+  // ID → count 맵 생성
+  const quantityMap = new Map(quantities.map((q) => [q.item.id, q.count]));
+
+  // Highlight 정보
+  const highlightedIds = new Set(spec.modification.highlight?.itemIds ?? []);
+  const highlightStyle: HighlightStyle = spec.modification.highlight?.style ?? 'border';
+
   // 현재 총 수량
-  const currentTotal = Object.values(quantities).reduce((sum, q) => sum + q, 0);
+  const currentTotal = quantities.reduce((sum, q) => sum + q.count, 0);
   const canProceed = currentTotal === maxTotal && maxTotal > 0;
 
   return (
     <div className="flex flex-col items-center gap-6">
       <div className="w-full max-w-md space-y-4">
-        {visibleItems.map((ticket) => {
-          const quantity = quantities[ticket.id] ?? 0;
+        {spec.items.map((ticket) => {
+          const quantity = quantityMap.get(ticket.id) ?? 0;
           const canIncrease = currentTotal < maxTotal;
           const canDecrease = quantity > 0;
+          const isHighlighted = highlightedIds.has(ticket.id);
 
           // Highlight 스타일
           let highlightClass = '';
-          if (ticket._highlighted) {
-            switch (ticket._highlightStyle) {
+          if (isHighlighted) {
+            switch (highlightStyle) {
               case 'glow':
                 highlightClass = 'shadow-lg shadow-primary/50';
                 break;
@@ -61,13 +68,13 @@ export function TicketStage({
             >
               {/* Ticket info */}
               <div>
-                <div className="font-semibold text-white">{ticket.name as string}</div>
+                <div className="font-semibold text-white">{ticket.name}</div>
                 <div className="text-sm text-gray-400">
-                  ₩{(ticket.price as number).toLocaleString()}
+                  {ticket.priceDisplay}
                 </div>
-                {(ticket._augmented?.description as string | undefined) && (
-                  <div className="text-xs text-primary mt-1">
-                    {ticket._augmented?.description as string}
+                {ticket.description && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {ticket.description}
                   </div>
                 )}
               </div>

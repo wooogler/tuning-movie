@@ -50,8 +50,13 @@ export function useToolHandler<T extends DataItem>({
           newSpec = applyHighlight(spec, params as unknown as HighlightState);
           break;
         case 'augment': {
-          const { itemId, fields } = params as { itemId: string; fields: Record<string, unknown> };
-          newSpec = applyAugment(spec, [{ itemId, fields }]);
+          const { itemId, value, prefix, suffix } = params as {
+            itemId: string;
+            value?: string;
+            prefix?: string;
+            suffix?: string;
+          };
+          newSpec = applyAugment(spec, [{ itemId, value, prefix, suffix }]);
           break;
         }
         case 'clearModification': {

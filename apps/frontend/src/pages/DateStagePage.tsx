@@ -56,8 +56,8 @@ export function DateStagePage() {
   };
 
   const handleNext = () => {
-    if (spec?.state.selectedId) {
-      setDate(spec.state.selectedId);
+    if (spec?.state.selected?.id) {
+      setDate(spec.state.selected.id);
       navigate('/time');
     }
   };

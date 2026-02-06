@@ -2,103 +2,187 @@
  * Modifier Functions
  *
  * Deterministic 함수들 - 같은 입력 → 같은 출력
- * UISpec의 modification 상태를 업데이트하는 pure functions
+ * UISpec의 state와 modification을 업데이트하는 pure functions
  */
 
 import type {
   UISpec,
   DataItem,
+  DisplayItem,
+  QuantityItem,
   FilterState,
   SortState,
   HighlightState,
   AugmentState,
-  VisibleItem,
 } from './types';
 
 // =============================================================================
-// Modification Functions
+// Visible Items Computation
 // =============================================================================
 
 /**
- * Filter 적용 - modification.filter 설정
+ * items + modification → visibleItems 계산
  */
-export function applyFilter<T extends DataItem>(
+export function computeVisibleItems<T extends DataItem>(
+  spec: UISpec<T>
+): DisplayItem[] {
+  const { items, modification, display } = spec;
+  const valueField = display.valueField;
+
+  // 1. Filter 적용
+  let filteredItems = [...items];
+  if (modification.filter) {
+    filteredItems = applyFilterLogic(filteredItems, modification.filter);
+  }
+
+  // 2. Sort 적용
+  if (modification.sort) {
+    filteredItems = applySortLogic(filteredItems, modification.sort);
+  }
+
+  // 3. Augment 맵 생성
+  const augmentMap = new Map<string, AugmentState>();
+  if (modification.augment) {
+    modification.augment.forEach((a) => augmentMap.set(a.itemId, a));
+  }
+
+  // 4. DisplayItem 생성
+  return filteredItems.map((item) => {
+    let value = String(item[valueField] ?? item.id);
+
+    // Augment 적용
+    const augment = augmentMap.get(item.id);
+    if (augment) {
+      if (augment.value !== undefined) {
+        value = augment.value;
+      } else {
+        if (augment.prefix) value = augment.prefix + value;
+        if (augment.suffix) value = value + augment.suffix;
+      }
+    }
+
+    const displayItem: DisplayItem = { id: item.id, value };
+
+    // Disabled 상태
+    if ('status' in item && item.status === 'occupied') {
+      displayItem.isDisabled = true;
+    }
+
+    return displayItem;
+  });
+}
+
+/**
+ * ID → DisplayItem 맵 생성 헬퍼
+ */
+function createDisplayItemMap<T extends DataItem>(
   spec: UISpec<T>,
-  params: FilterState
-): UISpec<T> {
+  visibleItems: DisplayItem[]
+): Map<string, DisplayItem> {
+  const map = new Map<string, DisplayItem>();
+  const valueField = spec.display.valueField;
+
+  visibleItems.forEach((item) => map.set(item.id, item));
+
+  // visibleItems에 없는 아이템은 원본에서 생성
+  spec.items.forEach((item) => {
+    if (!map.has(item.id)) {
+      map.set(item.id, {
+        id: item.id,
+        value: String(item[valueField] ?? item.id),
+      });
+    }
+  });
+
+  return map;
+}
+
+/**
+ * modification.highlight → state.highlighted 동기화
+ */
+function syncHighlighted<T extends DataItem>(
+  spec: UISpec<T>,
+  visibleItems: DisplayItem[]
+): DisplayItem[] | undefined {
+  const highlightIds = spec.modification.highlight?.itemIds;
+  if (!highlightIds || highlightIds.length === 0) return undefined;
+
+  const map = createDisplayItemMap(spec, visibleItems);
+  return highlightIds
+    .map((id) => map.get(id))
+    .filter((item): item is DisplayItem => item !== undefined);
+}
+
+/**
+ * Spec 업데이트 후 visibleItems 재계산 및 highlighted 동기화
+ */
+export function refreshSpec<T extends DataItem>(spec: UISpec<T>): UISpec<T> {
+  const visibleItems = computeVisibleItems(spec);
+  const highlighted = syncHighlighted(spec, visibleItems);
+
   return {
     ...spec,
-    modification: { ...spec.modification, filter: params },
+    visibleItems,
+    state: {
+      ...spec.state,
+      highlighted,
+    },
   };
 }
 
 /**
- * Sort 적용 - modification.sort 설정
+ * @deprecated Use refreshSpec instead
  */
-export function applySort<T extends DataItem>(
-  spec: UISpec<T>,
-  params: SortState
+export function refreshVisibleItems<T extends DataItem>(
+  spec: UISpec<T>
 ): UISpec<T> {
-  return {
-    ...spec,
-    modification: { ...spec.modification, sort: params },
-  };
+  return refreshSpec(spec);
 }
 
-/**
- * Highlight 적용 - modification.highlight 설정
- */
-export function applyHighlight<T extends DataItem>(
-  spec: UISpec<T>,
-  params: HighlightState
-): UISpec<T> {
-  return {
-    ...spec,
-    modification: { ...spec.modification, highlight: params },
-  };
-}
+// =============================================================================
+// Selection Functions
+// =============================================================================
 
 /**
- * Augment 적용 - modification.augment 설정
- * 기존 augment에 추가하거나 새로 설정
- */
-export function applyAugment<T extends DataItem>(
-  spec: UISpec<T>,
-  params: AugmentState[],
-  replace = false
-): UISpec<T> {
-  const existingAugment = spec.modification.augment ?? [];
-  const newAugment = replace ? params : [...existingAugment, ...params];
-
-  return {
-    ...spec,
-    modification: { ...spec.modification, augment: newAugment },
-  };
-}
-
-/**
- * 단일 아이템 선택 - state.selectedId 업데이트
+ * 단일 아이템 선택
  */
 export function selectItem<T extends DataItem>(
   spec: UISpec<T>,
   itemId: string
 ): UISpec<T> {
+  const visibleItems = spec.visibleItems;
+  const map = createDisplayItemMap(spec, visibleItems);
+  const displayItem = map.get(itemId);
+
   return {
     ...spec,
-    state: { ...spec.state, selectedId: itemId },
+    state: {
+      ...spec.state,
+      selected: displayItem,
+    },
   };
 }
 
 /**
- * 다중 아이템 선택 - state.selectedIds 업데이트
+ * 다중 아이템 선택
  */
 export function selectItems<T extends DataItem>(
   spec: UISpec<T>,
   itemIds: string[]
 ): UISpec<T> {
+  const visibleItems = spec.visibleItems;
+  const map = createDisplayItemMap(spec, visibleItems);
+
+  const selectedList = itemIds
+    .map((id) => map.get(id))
+    .filter((item): item is DisplayItem => item !== undefined);
+
   return {
     ...spec,
-    state: { ...spec.state, selectedIds: itemIds },
+    state: {
+      ...spec.state,
+      selectedList,
+    },
   };
 }
 
@@ -109,119 +193,150 @@ export function toggleItem<T extends DataItem>(
   spec: UISpec<T>,
   itemId: string
 ): UISpec<T> {
-  const currentIds = spec.state.selectedIds ?? [];
+  const currentList = spec.state.selectedList ?? [];
+  const currentIds = currentList.map((item) => item.id);
+
   const newIds = currentIds.includes(itemId)
     ? currentIds.filter((id) => id !== itemId)
     : [...currentIds, itemId];
 
-  return {
-    ...spec,
-    state: { ...spec.state, selectedIds: newIds },
-  };
+  return selectItems(spec, newIds);
 }
 
 /**
- * 티켓 수량 설정 - state.quantities 업데이트
+ * 티켓 수량 설정
  */
 export function setQuantity<T extends DataItem>(
   spec: UISpec<T>,
   typeId: string,
-  quantity: number
+  count: number
 ): UISpec<T> {
-  const currentQuantities = spec.state.quantities ?? {};
+  const visibleItems = spec.visibleItems;
+  const map = createDisplayItemMap(spec, visibleItems);
+  const displayItem = map.get(typeId);
+
+  if (!displayItem) return spec;
+
+  const currentQuantities = spec.state.quantities ?? [];
+
+  // 기존 항목 찾기
+  const existingIndex = currentQuantities.findIndex(
+    (q) => q.item.id === typeId
+  );
+
+  let newQuantities: QuantityItem[];
+
+  if (existingIndex >= 0) {
+    // 기존 항목 업데이트
+    newQuantities = currentQuantities.map((q, i) =>
+      i === existingIndex ? { item: displayItem, count } : q
+    );
+  } else {
+    // 새 항목 추가
+    newQuantities = [...currentQuantities, { item: displayItem, count }];
+  }
+
   return {
     ...spec,
     state: {
       ...spec.state,
-      quantities: { ...currentQuantities, [typeId]: quantity },
+      quantities: newQuantities,
     },
   };
 }
 
+// =============================================================================
+// Modification Functions
+// =============================================================================
+
+/**
+ * Filter 적용
+ */
+export function applyFilter<T extends DataItem>(
+  spec: UISpec<T>,
+  params: FilterState
+): UISpec<T> {
+  const newSpec = {
+    ...spec,
+    modification: { ...spec.modification, filter: params },
+  };
+  return refreshSpec(newSpec);
+}
+
+/**
+ * Sort 적용
+ */
+export function applySort<T extends DataItem>(
+  spec: UISpec<T>,
+  params: SortState
+): UISpec<T> {
+  const newSpec = {
+    ...spec,
+    modification: { ...spec.modification, sort: params },
+  };
+  return refreshSpec(newSpec);
+}
+
+/**
+ * Highlight 적용
+ */
+export function applyHighlight<T extends DataItem>(
+  spec: UISpec<T>,
+  params: HighlightState
+): UISpec<T> {
+  const newSpec = {
+    ...spec,
+    modification: { ...spec.modification, highlight: params },
+  };
+  return refreshSpec(newSpec);
+}
+
+/**
+ * Augment 적용
+ */
+export function applyAugment<T extends DataItem>(
+  spec: UISpec<T>,
+  params: AugmentState[],
+  replace = false
+): UISpec<T> {
+  const existingAugment = spec.modification.augment ?? [];
+  const newAugment = replace ? params : [...existingAugment, ...params];
+
+  const newSpec = {
+    ...spec,
+    modification: { ...spec.modification, augment: newAugment },
+  };
+  return refreshSpec(newSpec);
+}
+
 /**
  * Modification 초기화
- * @param type - 특정 타입만 초기화하거나 'all'로 전체 초기화
  */
 export function clearModification<T extends DataItem>(
   spec: UISpec<T>,
   type?: 'filter' | 'sort' | 'highlight' | 'augment' | 'all'
 ): UISpec<T> {
+  let newSpec: UISpec<T>;
+
   if (type === 'all' || !type) {
-    return { ...spec, modification: {} };
+    newSpec = { ...spec, modification: {} };
+  } else {
+    const newModification = { ...spec.modification };
+    delete newModification[type];
+    newSpec = { ...spec, modification: newModification };
   }
 
-  const newModification = { ...spec.modification };
-  delete newModification[type];
-  return { ...spec, modification: newModification };
-}
-
-// =============================================================================
-// Visible Items Calculation (렌더링 시 호출)
-// =============================================================================
-
-/**
- * items + modification → visible items 계산
- *
- * 렌더링 시 호출되어 실제 표시할 아이템 목록 반환
- * - filter 적용
- * - sort 적용
- * - highlight/augment 플래그 추가
- */
-export function getVisibleItems<T extends DataItem>(
-  spec: UISpec<T>
-): (T & Partial<VisibleItem>)[] {
-  let result: any[] = spec.items.map((item) => ({ ...item }));
-
-  // 1. Filter 적용
-  if (spec.modification.filter) {
-    result = applyFilterLogic(result, spec.modification.filter);
-  }
-
-  // 2. Sort 적용
-  if (spec.modification.sort) {
-    result = applySortLogic(result, spec.modification.sort);
-  }
-
-  // 3. Highlight 플래그 추가
-  if (spec.modification.highlight) {
-    const { itemIds, style } = spec.modification.highlight;
-    result = result.map((item) => {
-      if (itemIds.includes(item.id)) {
-        return {
-          ...item,
-          _highlighted: true,
-          _highlightStyle: style ?? 'border',
-        };
-      }
-      return item;
-    });
-  }
-
-  // 4. Augment 필드 추가
-  if (spec.modification.augment) {
-    const augmentMap = new Map(
-      spec.modification.augment.map((a) => [a.itemId, a.fields])
-    );
-    result = result.map((item) => {
-      const augmented = augmentMap.get(item.id);
-      if (augmented) {
-        return { ...item, _augmented: augmented };
-      }
-      return item;
-    });
-  }
-
-  return result;
+  return refreshSpec(newSpec);
 }
 
 // =============================================================================
 // Internal Logic Functions
 // =============================================================================
 
-function applyFilterLogic(
-  items: VisibleItem[],
+function applyFilterLogic<T extends DataItem>(
+  items: T[],
   filter: FilterState
-): VisibleItem[] {
+): T[] {
   const { field, operator, value } = filter;
 
   return items.filter((item) => {
@@ -253,7 +368,7 @@ function applyFilterLogic(
   });
 }
 
-function applySortLogic(items: VisibleItem[], sort: SortState): VisibleItem[] {
+function applySortLogic<T extends DataItem>(items: T[], sort: SortState): T[] {
   const { field, order } = sort;
 
   return [...items].sort((a, b) => {
@@ -271,4 +386,17 @@ function applySortLogic(items: VisibleItem[], sort: SortState): VisibleItem[] {
 
     return order === 'asc' ? comparison : -comparison;
   });
+}
+
+// =============================================================================
+// Legacy Support
+// =============================================================================
+
+/**
+ * @deprecated Use computeVisibleItems instead
+ */
+export function getVisibleItems<T extends DataItem>(
+  spec: UISpec<T>
+): DisplayItem[] {
+  return computeVisibleItems(spec);
 }

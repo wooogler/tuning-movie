@@ -4,7 +4,7 @@
  * 좌석 선택 Stage - SeatMap 사용
  */
 
-import { getVisibleItems, type SeatItem } from '../../spec';
+import type { SeatItem, HighlightStyle } from '../../spec';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
 
@@ -18,19 +18,22 @@ export function SeatStage({
   onNext,
   onBack,
 }: SeatStageProps) {
-  const visibleItems = getVisibleItems(spec);
-  const selectedIds = spec.state.selectedIds ?? [];
+  const selectedList = spec.state.selectedList ?? [];
+  const selectedIds = selectedList.map((item) => item.id);
   const canProceed = selectedIds.length > 0;
 
   // 좌석 배치 정보
   const rows = (spec.meta?.rows as string[]) ?? [];
-  // const seatsPerRow = (spec.meta?.seatsPerRow as number) ?? 10;
 
-  // 좌석을 행별로 그룹화
+  // Highlight 정보
+  const highlightedIds = new Set(spec.modification.highlight?.itemIds ?? []);
+  const highlightStyle: HighlightStyle = spec.modification.highlight?.style ?? 'border';
+
+  // 좌석을 행별로 그룹화 (원본 items 사용)
   const seatsByRow = rows.map((row) =>
-    visibleItems
+    spec.items
       .filter((seat) => seat.row === row)
-      .sort((a, b) => (a.number as number) - (b.number as number))
+      .sort((a, b) => a.number - b.number)
   );
 
   return (
@@ -55,11 +58,12 @@ export function SeatStage({
               {rowSeats.map((seat) => {
                 const isSelected = selectedIds.includes(seat.id);
                 const isOccupied = seat.status === 'occupied';
+                const isHighlighted = highlightedIds.has(seat.id);
 
                 // Highlight 스타일
                 let highlightClass = '';
-                if (seat._highlighted) {
-                  switch (seat._highlightStyle) {
+                if (isHighlighted) {
+                  switch (highlightStyle) {
                     case 'glow':
                       highlightClass = 'shadow-md shadow-primary/70';
                       break;
@@ -78,7 +82,6 @@ export function SeatStage({
                     key={seat.id}
                     onClick={() => !isOccupied && onToggle(seat.id)}
                     disabled={isOccupied}
-                    title={seat._augmented?.recommendation as string}
                     className={`
                       w-8 h-8 rounded-t-lg text-xs font-medium transition-all
                       ${
@@ -91,7 +94,7 @@ export function SeatStage({
                       ${highlightClass}
                     `}
                   >
-                    {seat.number as number}
+                    {seat.number}
                   </button>
                 );
               })}
@@ -117,9 +120,9 @@ export function SeatStage({
       </div>
 
       {/* Selected seats info */}
-      {selectedIds.length > 0 && (
+      {selectedList.length > 0 && (
         <div className="text-gray-400">
-          Selected: {selectedIds.join(', ')} ({selectedIds.length} seats)
+          Selected: {selectedList.map((item) => item.value).join(', ')} ({selectedList.length} seats)
         </div>
       )}
 

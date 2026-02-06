@@ -2,6 +2,10 @@
  * UI Spec Type Definitions
  *
  * Agent가 GUI 상태를 읽고(Perception) 조작(Modification)하기 위한 선언적 타입
+ *
+ * 핵심 원칙: Agent는 사람처럼 화면을 본다
+ * - visibleItems: 화면에 보이는 것들
+ * - state: 현재 상태 (DisplayItem으로 value 확인 + id로 액션)
  */
 
 // =============================================================================
@@ -18,46 +22,85 @@ export type Stage =
   | 'confirm';
 
 // =============================================================================
+// Display Item (화면에 보이는 아이템)
+// =============================================================================
+
+/**
+ * 화면에 표시되는 아이템
+ *
+ * Agent가 보는 것(value)과 액션에 사용할 것(id)을 함께 제공
+ */
+export interface DisplayItem {
+  /** 아이템 ID (tool call용) */
+  id: string;
+
+  /** 화면에 표시되는 값 */
+  value: string;
+
+  /** 비활성화 여부 (예: 이미 예약된 좌석) */
+  isDisabled?: boolean;
+}
+
+/**
+ * 수량이 있는 아이템 (티켓용)
+ */
+export interface QuantityItem {
+  item: DisplayItem;
+  count: number;
+}
+
+// =============================================================================
 // UI Spec
 // =============================================================================
 
 /**
  * UI Spec - Agent의 Perception 대상
- *
- * Agent는 이 Spec을 읽어 현재 GUI 상태를 파악하고,
- * Tool Call을 통해 modification을 적용할 수 있다.
  */
 export interface UISpec<T = DataItem> {
-  /** Current stage */
+  // --- Context (현재 어디인가) ---
   stage: Stage;
-
-  /** Stage title */
   title: string;
-
-  /** Stage description (optional) */
   description?: string;
 
-  /** Original data items */
-  items: T[];
+  // --- Visible State (화면에 뭐가 보이는가) ---
+  visibleItems: DisplayItem[];
 
-  /** UI state (selection, quantities, etc.) */
+  // --- State (현재 상태) ---
+  /**
+   * 현재 상태 - DisplayItem으로 제공
+   * Agent가 value로 상태를 파악하고, id로 액션을 취할 수 있음
+   */
   state: StateModel;
 
-  /** Current modification state */
+  // --- Source Data (원본 데이터) ---
+  items: T[];
+
+  // --- Modifications (적용된 변경사항) ---
   modification: ModificationState;
 
-  /** Stage-specific metadata */
+  // --- Display Config ---
+  display: DisplayConfig;
+
+  // --- Additional Info ---
   meta?: Record<string, unknown>;
+}
+
+// =============================================================================
+// Display Config
+// =============================================================================
+
+export interface DisplayConfig {
+  /** 기본적으로 표시되는 필드 (value 생성에 사용) */
+  valueField: string;
+
+  /** 렌더링 컴포넌트 타입 */
+  component: 'buttonGroup' | 'calendar' | 'seatMap' | 'counter' | 'summary';
 }
 
 // =============================================================================
 // Data Item
 // =============================================================================
 
-/**
- * 모든 데이터 아이템의 기본 타입
- * 각 Stage의 items 배열에 들어가는 요소
- */
 export interface DataItem {
   id: string;
   [key: string]: unknown;
@@ -68,34 +111,30 @@ export interface DataItem {
 // =============================================================================
 
 /**
- * UI 상태 - Stage별로 다른 필드 사용
+ * 현재 상태
  *
- * - movie, theater, date, time: selectedId (단일 선택)
- * - seat: selectedIds (다중 선택)
- * - ticket: quantities (티켓 종류별 수량)
- * - confirm: 없음 (meta에 요약 정보)
+ * 모든 상태가 DisplayItem으로 제공됨
+ * - value: Agent가 화면에서 보는 것
+ * - id: Agent가 액션할 때 사용하는 것
  */
 export interface StateModel {
-  /** 단일 선택된 아이템 ID (movie, theater, date, time) */
-  selectedId?: string;
+  /** 선택된 아이템 (단일 선택: movie, theater, date, time) */
+  selected?: DisplayItem;
 
-  /** 다중 선택된 아이템 ID 배열 (seat) */
-  selectedIds?: string[];
+  /** 선택된 아이템들 (다중 선택: seat) */
+  selectedList?: DisplayItem[];
 
-  /** 티켓 종류별 수량 (ticket) */
-  quantities?: Record<string, number>;
+  /** 하이라이트된 아이템들 */
+  highlighted?: DisplayItem[];
+
+  /** 티켓 수량 */
+  quantities?: QuantityItem[];
 }
 
 // =============================================================================
 // Modification State
 // =============================================================================
 
-/**
- * Modification 상태
- *
- * Agent가 Tool Call로 적용한 modification들
- * visibleItems는 렌더링 시 items + modification에서 계산 (derived state)
- */
 export interface ModificationState {
   filter?: FilterState;
   sort?: SortState;
@@ -103,7 +142,6 @@ export interface ModificationState {
   augment?: AugmentState[];
 }
 
-/** Filter 설정 */
 export interface FilterState {
   field: string;
   operator: FilterOperator;
@@ -111,22 +149,20 @@ export interface FilterState {
 }
 
 export type FilterOperator =
-  | 'eq'      // 같음
-  | 'neq'     // 같지 않음
-  | 'contains' // 포함 (배열 또는 문자열)
-  | 'gt'      // 큼
-  | 'lt'      // 작음
-  | 'gte'     // 크거나 같음
-  | 'lte'     // 작거나 같음
-  | 'in';     // 값 목록에 포함
+  | 'eq'
+  | 'neq'
+  | 'contains'
+  | 'gt'
+  | 'lt'
+  | 'gte'
+  | 'lte'
+  | 'in';
 
-/** Sort 설정 */
 export interface SortState {
   field: string;
   order: 'asc' | 'desc';
 }
 
-/** Highlight 설정 */
 export interface HighlightState {
   itemIds: string[];
   style?: HighlightStyle;
@@ -134,27 +170,31 @@ export interface HighlightState {
 
 export type HighlightStyle = 'border' | 'glow' | 'badge';
 
-/** Augment 설정 - 아이템에 추가 필드 표시 */
 export interface AugmentState {
   itemId: string;
-  fields: Record<string, unknown>;
+  value?: string;
+  suffix?: string;
+  prefix?: string;
 }
 
 // =============================================================================
-// Visible Item (렌더링용)
+// Legacy Types (하위 호환성)
 // =============================================================================
 
 /**
- * 렌더링 시 사용되는 확장된 아이템 타입
- * getVisibleItems() 함수가 반환하는 타입
+ * @deprecated Use DisplayItem instead
  */
 export interface VisibleItem extends DataItem {
-  /** highlight 적용 여부 */
   _highlighted?: boolean;
-
-  /** highlight 스타일 */
   _highlightStyle?: HighlightStyle;
-
-  /** augment로 추가된 필드들 */
   _augmented?: Record<string, unknown>;
+}
+
+/**
+ * @deprecated No longer used - state contains everything needed
+ */
+export interface InternalState {
+  selectedId?: string;
+  selectedIds?: string[];
+  quantities?: Record<string, number>;
 }

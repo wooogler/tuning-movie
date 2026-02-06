@@ -4,7 +4,7 @@
  * 영화 선택 Stage - ButtonGroup 사용
  */
 
-import { getVisibleItems, type MovieItem } from '../../spec';
+import type { MovieItem } from '../../spec';
 import { ButtonGroup } from '../components/ButtonGroup';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
@@ -14,16 +14,16 @@ export function MovieStage({
   onSelect,
   onNext,
 }: StageProps<MovieItem>) {
-  const visibleItems = getVisibleItems(spec);
-  const canProceed = !!spec.state.selectedId;
+  const canProceed = !!spec.state.selected;
 
   return (
     <div className="flex flex-col items-center gap-6">
       <ButtonGroup
-        items={visibleItems}
-        selectedId={spec.state.selectedId}
+        items={spec.visibleItems}
         onSelect={onSelect}
-        labelField="title"
+        selectedId={spec.state.selected?.id}
+        highlightedIds={spec.modification.highlight?.itemIds}
+        highlightStyle={spec.modification.highlight?.style}
       />
 
       <ActionBar

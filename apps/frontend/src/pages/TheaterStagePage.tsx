@@ -55,7 +55,7 @@ export function TheaterStagePage() {
   };
 
   const handleNext = () => {
-    const selectedTheater = theaters.find((t) => t.id === spec?.state.selectedId);
+    const selectedTheater = theaters.find((t) => t.id === spec?.state.selected?.id);
     if (selectedTheater) {
       setTheater(selectedTheater);
       navigate('/date');

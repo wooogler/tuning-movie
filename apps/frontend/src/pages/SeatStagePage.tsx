@@ -64,10 +64,11 @@ export function SeatStagePage() {
   };
 
   const handleNext = () => {
-    if (spec?.state.selectedIds && spec.state.selectedIds.length > 0) {
+    const selectedIds = spec?.state.selectedList?.map((item) => item.id) ?? [];
+    if (selectedIds.length > 0) {
       // Convert selected IDs to Seat objects for the store
       const selectedSeatObjects = seats.filter((s) =>
-        spec.state.selectedIds?.includes(s.id)
+        selectedIds.includes(s.id)
       );
       setSelectedSeats(selectedSeatObjects);
       navigate('/tickets');

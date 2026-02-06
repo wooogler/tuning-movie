@@ -36,22 +36,14 @@ export function TicketStagePage() {
   // Rebuild spec when ticketTypes change
   useEffect(() => {
     if (ticketTypes.length > 0) {
-      // Convert store tickets to quantities
-      const quantities: Record<string, number> = {};
-      ticketTypes.forEach((t) => {
-        const existing = tickets.find((ticket) => ticket.ticketType.id === t.id);
-        quantities[t.id] = existing?.quantity ?? 0;
-      });
-
       const newSpec = generateTicketSpec(
         ticketTypes,
-        selectedSeats.map((s) => s.id),
-        quantities
+        selectedSeats.map((s) => s.id)
       );
       setSpec(newSpec);
       setUiSpec(newSpec);
     }
-  }, [ticketTypes, selectedSeats, tickets, setUiSpec]);
+  }, [ticketTypes, selectedSeats, setUiSpec]);
 
   const handleQuantityChange = useCallback(
     (typeId: string, quantity: number) => {

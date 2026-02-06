@@ -4,7 +4,7 @@
  * 극장 선택 Stage - ButtonGroup 사용
  */
 
-import { getVisibleItems, type TheaterItem } from '../../spec';
+import type { TheaterItem } from '../../spec';
 import { ButtonGroup } from '../components/ButtonGroup';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
@@ -15,16 +15,16 @@ export function TheaterStage({
   onNext,
   onBack,
 }: StageProps<TheaterItem>) {
-  const visibleItems = getVisibleItems(spec);
-  const canProceed = !!spec.state.selectedId;
+  const canProceed = !!spec.state.selected;
 
   return (
     <div className="flex flex-col items-center gap-6">
       <ButtonGroup
-        items={visibleItems}
-        selectedId={spec.state.selectedId}
+        items={spec.visibleItems}
         onSelect={onSelect}
-        labelField="name"
+        selectedId={spec.state.selected?.id}
+        highlightedIds={spec.modification.highlight?.itemIds}
+        highlightStyle={spec.modification.highlight?.style}
       />
 
       <ActionBar
