@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useRef } from 'react';
+import { createContext, useContext, useState, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import type { UISpec } from '../spec';
 
@@ -9,7 +9,7 @@ interface DevToolsContextValue {
   uiSpec: UISpec | null;
   setBackendData: (data: Record<string, unknown>) => void;
   setUiSpec: (spec: UISpec | null) => void;
-  onToolApply: ToolApplyHandler | null;
+  onToolApply: ToolApplyHandler;
   setOnToolApply: (handler: ToolApplyHandler | null) => void;
 }
 
@@ -24,6 +24,14 @@ export function DevToolsProvider({ children }: { children: ReactNode }) {
     onToolApplyRef.current = handler;
   };
 
+  // Stable wrapper that reads the ref at call time, not at render time
+  const onToolApply = useCallback(
+    (toolName: string, params: Record<string, unknown>) => {
+      onToolApplyRef.current?.(toolName, params);
+    },
+    []
+  );
+
   return (
     <DevToolsContext.Provider
       value={{
@@ -31,7 +39,7 @@ export function DevToolsProvider({ children }: { children: ReactNode }) {
         uiSpec,
         setBackendData,
         setUiSpec,
-        onToolApply: onToolApplyRef.current,
+        onToolApply,
         setOnToolApply,
       }}
     >

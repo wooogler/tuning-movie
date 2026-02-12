@@ -172,9 +172,7 @@ export type HighlightStyle = 'border' | 'glow' | 'badge';
 
 export interface AugmentState {
   itemId: string;
-  value?: string;
-  suffix?: string;
-  prefix?: string;
+  value: string;
 }
 
 // =============================================================================

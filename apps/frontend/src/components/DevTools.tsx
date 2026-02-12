@@ -206,7 +206,7 @@ function JsonViewer({ data }: { data: unknown }) {
 // Agent Tools Panel
 interface AgentToolsPanelProps {
   tools: ToolDefinition[];
-  onApply: ((toolName: string, params: Record<string, unknown>) => void) | null;
+  onApply: (toolName: string, params: Record<string, unknown>) => void;
   hasSpec: boolean;
 }
 
@@ -228,7 +228,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
   };
 
   const handleApply = () => {
-    if (!currentTool || !onApply) return;
+    if (!currentTool) return;
 
     // Convert params to proper types
     const typedParams: Record<string, unknown> = {};
@@ -339,9 +339,13 @@ function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
                   value={params[paramName] || ''}
                   onChange={(e) => handleParamChange(paramName, e.target.value)}
                   placeholder={
-                    paramDef.type === 'array'
+                    currentTool.name === 'augment' && paramName === 'items'
+                      ? '[{"itemId": "m1", "value": "New Text"}]'
+                      : currentTool.name === 'highlight' && paramName === 'itemIds'
                       ? '["id1", "id2"]'
-                      : '{ "badge": "추천" }'
+                      : paramDef.type === 'array'
+                      ? '["id1", "id2"]'
+                      : '{ "key": "value" }'
                   }
                   className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary h-14 resize-none"
                 />
@@ -363,7 +367,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
       <div className="flex items-center gap-2">
         <button
           onClick={handleApply}
-          disabled={!onApply}
+          disabled={!hasSpec}
           className="px-4 py-1.5 bg-primary text-white text-sm rounded hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Apply
@@ -377,8 +381,8 @@ function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
             {lastResult}
           </span>
         )}
-        {!onApply && (
-          <span className="text-yellow-500 text-xs">Not connected</span>
+        {!hasSpec && (
+          <span className="text-yellow-500 text-xs">No spec loaded</span>
         )}
       </div>
     </div>

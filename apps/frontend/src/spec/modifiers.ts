@@ -50,15 +50,10 @@ export function computeVisibleItems<T extends DataItem>(
   return filteredItems.map((item) => {
     let value = String(item[valueField] ?? item.id);
 
-    // Augment 적용
+    // Augment 적용 - value 직접 교체
     const augment = augmentMap.get(item.id);
     if (augment) {
-      if (augment.value !== undefined) {
-        value = augment.value;
-      } else {
-        if (augment.prefix) value = augment.prefix + value;
-        if (augment.suffix) value = value + augment.suffix;
-      }
+      value = augment.value;
     }
 
     const displayItem: DisplayItem = { id: item.id, value };

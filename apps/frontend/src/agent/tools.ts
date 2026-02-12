@@ -77,15 +77,11 @@ export const modificationTools: ToolDefinition[] = [
   },
   {
     name: 'augment',
-    description: 'Add additional information to an item (badge, text, etc.)',
+    description: 'Change the display value of specific items',
     parameters: {
-      itemId: {
-        type: 'string',
-        description: 'Item ID to augment',
-      },
-      fields: {
-        type: 'object',
-        description: 'Fields to add or modify (e.g., { badge: "추천", text: "Best choice" })',
+      items: {
+        type: 'array',
+        description: 'Array of { itemId: string, value: string } to change display values',
       },
     },
   },
