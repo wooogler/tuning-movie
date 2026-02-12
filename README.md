@@ -112,10 +112,10 @@ tuning-movie/
 │   │   ├── src/
 │   │   │   ├── api/       # API client
 │   │   │   ├── components/# React components
-│   │   │   ├── converter/ # Data conversion logic
-│   │   │   ├── pages/     # Page components
+│   │   │   ├── pages/     # Chat-based booking page
 │   │   │   ├── renderer/  # Declarative rendering engine
-│   │   │   ├── store/     # Zustand state management
+│   │   │   ├── spec/      # Agent-facing UI spec and modifiers
+│   │   │   ├── store/     # Chat message store
 │   │   │   └── types/     # TypeScript types
 │   │   └── package.json
 │   └── backend/           # Fastify backend

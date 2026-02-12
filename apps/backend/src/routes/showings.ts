@@ -1,6 +1,31 @@
 import { FastifyInstance } from 'fastify';
-import { eq, and } from 'drizzle-orm';
-import { db, showings } from '../db';
+import { and, eq, inArray } from 'drizzle-orm';
+import { db, seats, showings } from '../db';
+
+function withAvailableSeats<T extends { id: string }>(showingRows: T[]): Array<T & { availableSeats: number }> {
+  if (showingRows.length === 0) return [];
+
+  const showingIds = showingRows.map((showing) => showing.id);
+  const showingSeats = db
+    .select({ showingId: seats.showingId, status: seats.status })
+    .from(seats)
+    .where(inArray(seats.showingId, showingIds))
+    .all();
+
+  const availableSeatCountByShowing = new Map<string, number>();
+  for (const seat of showingSeats) {
+    if (seat.status !== 'available') continue;
+    availableSeatCountByShowing.set(
+      seat.showingId,
+      (availableSeatCountByShowing.get(seat.showingId) ?? 0) + 1
+    );
+  }
+
+  return showingRows.map((showing) => ({
+    ...showing,
+    availableSeats: availableSeatCountByShowing.get(showing.id) ?? 0,
+  }));
+}
 
 export async function showingRoutes(fastify: FastifyInstance) {
   // Get showings by movie and theater
@@ -25,7 +50,7 @@ export async function showingRoutes(fastify: FastifyInstance) {
       result = result.filter((s) => s.date === date);
     }
 
-    return { showings: result };
+    return { showings: withAvailableSeats(result) };
   });
 
   // Get available dates for a movie at a theater
@@ -66,7 +91,7 @@ export async function showingRoutes(fastify: FastifyInstance) {
       )
       .all();
 
-    return { showings: result };
+    return { showings: withAvailableSeats(result) };
   });
 
   // Get showing by ID
@@ -78,6 +103,7 @@ export async function showingRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: 'Showing not found' });
     }
 
-    return { showing };
+    const [showingWithAvailability] = withAvailableSeats([showing]);
+    return { showing: showingWithAvailability };
   });
 }

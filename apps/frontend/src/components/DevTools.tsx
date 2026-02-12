@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { useBookingStore } from '../store/bookingStore';
-import { useDevTools } from './DevToolsContext';
+import { useDevTools } from './devToolsContextShared';
 import { agentTools } from '../agent/tools';
 import type { ToolDefinition } from '../agent/tools';
 
 type Tab = 'booking' | 'backend' | 'spec';
 
 export function DevTools() {
-  const bookingStore = useBookingStore();
   const { backendData, uiSpec, onToolApply } = useDevTools();
   const [isOpen, setIsOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('spec');
@@ -76,16 +74,11 @@ export function DevTools() {
       <div className="flex-1 overflow-auto p-4 min-h-0">
         {activeTab === 'booking' && (
           <JsonViewer
-            data={{
-              movie: bookingStore.movie,
-              theater: bookingStore.theater,
-              date: bookingStore.date,
-              showing: bookingStore.showing,
-              selectedSeats: bookingStore.selectedSeats,
-              tickets: bookingStore.tickets,
-              customerName: bookingStore.customerName,
-              customerEmail: bookingStore.customerEmail,
-            }}
+            data={
+              uiSpec?.state.booking
+                ? { stage: uiSpec.stage, booking: uiSpec.state.booking }
+                : { message: 'No booking context' }
+            }
           />
         )}
         {activeTab === 'backend' && (
@@ -300,7 +293,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
           </optgroup>
           <optgroup label="Interaction Tools">
             {tools
-              .filter((t) => ['select', 'next', 'prev'].includes(t.name))
+              .filter((t) => ['select', 'setQuantity', 'next', 'prev'].includes(t.name))
               .map((tool) => (
                 <option key={tool.name} value={tool.name}>
                   {tool.name}

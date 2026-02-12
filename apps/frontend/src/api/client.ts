@@ -2,18 +2,48 @@ import type { Movie, Theater, Showing, Seat, TicketType, Booking, BookingRequest
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
+async function getErrorMessage(response: Response): Promise<string> {
+  const defaultMessage = `HTTP ${response.status}`;
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (contentType.includes('application/json')) {
+    const error = await response.json().catch(() => null);
+    if (error && typeof error === 'object') {
+      if (typeof (error as { error?: unknown }).error === 'string') {
+        return (error as { error: string }).error;
+      }
+      if (typeof (error as { message?: unknown }).message === 'string') {
+        return (error as { message: string }).message;
+      }
+    }
+    return defaultMessage;
+  }
+
+  const text = await response.text().catch(() => '');
+  if (!text) return defaultMessage;
+  return `${defaultMessage}: ${text.slice(0, 120)}`;
+}
+
 async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network request failed';
+    throw new Error(
+      `Cannot reach backend API (${API_BASE_URL || 'same-origin'}). ${message}`
+    );
+  }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+    const message = await getErrorMessage(response);
+    throw new Error(message);
   }
 
   return response.json();

@@ -25,6 +25,8 @@ export type {
   DataItem,
   DisplayItem,
   QuantityItem,
+  BookingContext,
+  BookingTicketSelection,
   DisplayConfig,
   StateModel,
   ModificationState,

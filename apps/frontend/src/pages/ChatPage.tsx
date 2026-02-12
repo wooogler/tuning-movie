@@ -1,13 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../api/client';
-import { useBookingStore } from '../store/bookingStore';
 import {
   useChatStore,
   getNextStage,
   getPrevStage,
   STAGE_ORDER,
 } from '../store/chatStore';
-import { useDevTools } from '../components/DevToolsContext';
+import { useDevTools } from '../components/devToolsContextShared';
 import {
   generateMovieSpec,
   generateTheaterSpec,
@@ -21,23 +20,100 @@ import {
   toggleItem,
   setQuantity,
   type ConfirmMeta,
+  type BookingContext,
+  type BookingTicketSelection,
+  type UISpec,
+  type Stage,
 } from '../spec';
 import { MessageList, ChatInput } from '../components/chat';
 import { useToolHandler } from '../hooks';
-import type { Movie, Theater, Showing, Seat, TicketType, Booking } from '../types';
+import type { Movie, Theater, Showing, TicketType, Booking } from '../types';
 
-// Context for loading stage data (to avoid stale closures)
 interface StageContext {
-  movie?: Movie | null;
-  theater?: Theater | null;
-  date?: string | null;
-  showing?: Showing | null;
-  selectedSeats?: Seat[];
-  tickets?: { ticketType: TicketType; quantity: number }[];
+  booking?: BookingContext;
+}
+
+function getBookingContext(spec: UISpec | null): BookingContext {
+  return spec?.state.booking ?? {};
+}
+
+function withBookingContext<T>(spec: UISpec<T>, booking: BookingContext): UISpec<T> {
+  return {
+    ...spec,
+    state: {
+      ...spec.state,
+      booking,
+    },
+  };
+}
+
+function projectBookingForStage(stage: Stage, booking: BookingContext): BookingContext {
+  switch (stage) {
+    case 'movie':
+      return {};
+    case 'theater':
+      return { movie: booking.movie };
+    case 'date':
+      return {
+        movie: booking.movie,
+        theater: booking.theater,
+      };
+    case 'time':
+      return {
+        movie: booking.movie,
+        theater: booking.theater,
+        date: booking.date,
+      };
+    case 'seat':
+      return {
+        movie: booking.movie,
+        theater: booking.theater,
+        date: booking.date,
+        showing: booking.showing,
+      };
+    case 'ticket':
+      return {
+        movie: booking.movie,
+        theater: booking.theater,
+        date: booking.date,
+        showing: booking.showing,
+        selectedSeats: booking.selectedSeats,
+        tickets: booking.tickets,
+      };
+    case 'confirm':
+      return {
+        movie: booking.movie,
+        theater: booking.theater,
+        date: booking.date,
+        showing: booking.showing,
+        selectedSeats: booking.selectedSeats,
+        tickets: booking.tickets,
+      };
+    default:
+      return {};
+  }
+}
+
+function buildTicketSelections(
+  quantities: NonNullable<UISpec['state']['quantities']>,
+  ticketTypes: TicketType[]
+): BookingTicketSelection[] {
+  return quantities
+    .filter((q) => q.count > 0)
+    .map((q) => {
+      const ticketType = ticketTypes.find((t) => t.id === q.item.id);
+      if (!ticketType) return null;
+      return {
+        ticketTypeId: ticketType.id,
+        name: ticketType.name,
+        price: ticketType.price,
+        quantity: q.count,
+      };
+    })
+    .filter((ticket): ticket is BookingTicketSelection => ticket !== null);
 }
 
 export function ChatPage() {
-  // Stores - extract individual values
   const messages = useChatStore((s) => s.messages);
   const currentStage = useChatStore((s) => s.currentStage);
   const activeSpec = useChatStore((s) => s.activeSpec);
@@ -46,53 +122,25 @@ export function ChatPage() {
   const updateActiveSpec = useChatStore((s) => s.updateActiveSpec);
   const resetChat = useChatStore((s) => s.reset);
 
-  const movie = useBookingStore((s) => s.movie);
-  const theater = useBookingStore((s) => s.theater);
-  const date = useBookingStore((s) => s.date);
-  const showing = useBookingStore((s) => s.showing);
-  const selectedSeats = useBookingStore((s) => s.selectedSeats);
-  const tickets = useBookingStore((s) => s.tickets);
-  const setMovie = useBookingStore((s) => s.setMovie);
-  const setTheater = useBookingStore((s) => s.setTheater);
-  const setDate = useBookingStore((s) => s.setDate);
-  const setShowing = useBookingStore((s) => s.setShowing);
-  const setSelectedSeats = useBookingStore((s) => s.setSelectedSeats);
-  const setTickets = useBookingStore((s) => s.setTickets);
-  const resetBooking = useBookingStore((s) => s.reset);
-
   const { setBackendData, setUiSpec } = useDevTools();
 
-  // Local data cache
   const [movies, setMovies] = useState<Movie[]>([]);
   const [theaters, setTheaters] = useState<Theater[]>([]);
   const [showings, setShowings] = useState<Showing[]>([]);
-  const [seats, setSeats] = useState<Seat[]>([]);
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
 
-  // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
 
-  // Track if initial load has happened
   const initialized = useRef(false);
-
-  // =========================================================================
-  // Data Fetching & Spec Generation (with context to avoid stale closures)
-  // =========================================================================
 
   const loadStageData = useCallback(
     async (stage: typeof currentStage, ctx: StageContext = {}) => {
       setLoading(true);
       setError(null);
 
-      // Use context values or fall back to current store values
-      const ctxMovie = ctx.movie !== undefined ? ctx.movie : movie;
-      const ctxTheater = ctx.theater !== undefined ? ctx.theater : theater;
-      const ctxDate = ctx.date !== undefined ? ctx.date : date;
-      const ctxShowing = ctx.showing !== undefined ? ctx.showing : showing;
-      const ctxSelectedSeats = ctx.selectedSeats !== undefined ? ctx.selectedSeats : selectedSeats;
-      const ctxTickets = ctx.tickets !== undefined ? ctx.tickets : tickets;
+      const bookingCtx = ctx.booking ?? getBookingContext(activeSpec);
 
       try {
         switch (stage) {
@@ -100,68 +148,93 @@ export function ChatPage() {
             const data = await api.getMovies();
             setMovies(data.movies);
             setBackendData({ movies: data.movies });
-            const spec = generateMovieSpec(data.movies);
+            const spec = withBookingContext(generateMovieSpec(data.movies), {});
             addSystemMessage('movie', spec);
             setUiSpec(spec);
             break;
           }
 
           case 'theater': {
-            if (!ctxMovie) {
+            if (!bookingCtx.movie) {
               setError('No movie selected');
               return;
             }
-            const data = await api.getTheatersByMovie(ctxMovie.id);
+            const data = await api.getTheatersByMovie(bookingCtx.movie.id);
             setTheaters(data.theaters);
             setBackendData({ theaters: data.theaters });
-            const spec = generateTheaterSpec(data.theaters, ctxMovie.id);
+            const spec = withBookingContext(
+              generateTheaterSpec(data.theaters, bookingCtx.movie.id),
+              bookingCtx
+            );
             addSystemMessage('theater', spec);
             setUiSpec(spec);
             break;
           }
 
           case 'date': {
-            if (!ctxMovie || !ctxTheater) {
+            if (!bookingCtx.movie || !bookingCtx.theater) {
               setError('Missing movie or theater');
               return;
             }
-            const data = await api.getDates(ctxMovie.id, ctxTheater.id);
+            const data = await api.getDates(bookingCtx.movie.id, bookingCtx.theater.id);
             setBackendData({ dates: data.dates });
             const dateItems = createDateItems(new Date(), 14, data.dates);
-            const spec = generateDateSpec(dateItems, ctxMovie.id, ctxTheater.id);
+            const spec = withBookingContext(
+              generateDateSpec(dateItems, bookingCtx.movie.id, bookingCtx.theater.id),
+              bookingCtx
+            );
             addSystemMessage('date', spec);
             setUiSpec(spec);
             break;
           }
 
           case 'time': {
-            if (!ctxMovie || !ctxTheater || !ctxDate) {
+            if (!bookingCtx.movie || !bookingCtx.theater || !bookingCtx.date) {
               setError('Missing movie, theater, or date');
               return;
             }
-            const data = await api.getTimes(ctxMovie.id, ctxTheater.id, ctxDate);
+            const data = await api.getTimes(
+              bookingCtx.movie.id,
+              bookingCtx.theater.id,
+              bookingCtx.date
+            );
             setShowings(data.showings);
             setBackendData({ showings: data.showings });
-            const spec = generateTimeSpec(data.showings, ctxMovie.id, ctxTheater.id, ctxDate);
+            const spec = withBookingContext(
+              generateTimeSpec(
+                data.showings,
+                bookingCtx.movie.id,
+                bookingCtx.theater.id,
+                bookingCtx.date
+              ),
+              bookingCtx
+            );
             addSystemMessage('time', spec);
             setUiSpec(spec);
             break;
           }
 
           case 'seat': {
-            if (!ctxShowing || !ctxMovie || !ctxTheater || !ctxDate) {
+            if (
+              !bookingCtx.showing ||
+              !bookingCtx.movie ||
+              !bookingCtx.theater ||
+              !bookingCtx.date
+            ) {
               setError('Missing showing information');
               return;
             }
-            const data = await api.getSeats(ctxShowing.id);
-            setSeats(data.seats);
+            const data = await api.getSeats(bookingCtx.showing.id);
             setBackendData({ seats: data.seats });
-            const spec = generateSeatSpec(
-              data.seats,
-              ctxMovie.id,
-              ctxTheater.id,
-              ctxDate,
-              ctxShowing.id
+            const spec = withBookingContext(
+              generateSeatSpec(
+                data.seats,
+                bookingCtx.movie.id,
+                bookingCtx.theater.id,
+                bookingCtx.date,
+                bookingCtx.showing.id
+              ),
+              bookingCtx
             );
             addSystemMessage('seat', spec);
             setUiSpec(spec);
@@ -169,41 +242,69 @@ export function ChatPage() {
           }
 
           case 'ticket': {
+            const selectedSeats = bookingCtx.selectedSeats ?? [];
+            if (selectedSeats.length === 0) {
+              setError('No seats selected');
+              return;
+            }
+
             const data = await api.getTicketTypes();
             setTicketTypes(data.ticketTypes);
             setBackendData({ ticketTypes: data.ticketTypes });
-            const spec = generateTicketSpec(
-              data.ticketTypes,
-              ctxSelectedSeats.map((s) => s.id)
+
+            let spec = withBookingContext(
+              generateTicketSpec(data.ticketTypes, selectedSeats.map((s) => s.id)),
+              bookingCtx
             );
+
+            for (const ticket of bookingCtx.tickets ?? []) {
+              spec = setQuantity(spec, ticket.ticketTypeId, ticket.quantity);
+            }
+
+            spec = withBookingContext(spec, bookingCtx);
             addSystemMessage('ticket', spec);
             setUiSpec(spec);
             break;
           }
 
           case 'confirm': {
-            if (!ctxMovie || !ctxTheater || !ctxDate || !ctxShowing) {
+            if (
+              !bookingCtx.movie ||
+              !bookingCtx.theater ||
+              !bookingCtx.date ||
+              !bookingCtx.showing
+            ) {
               setError('Missing booking information');
               return;
             }
-            const totalPrice = ctxTickets.reduce(
-              (sum, t) => sum + t.ticketType.price * t.quantity,
+
+            const selectedSeats = bookingCtx.selectedSeats ?? [];
+            const selectedTickets = bookingCtx.tickets ?? [];
+            if (selectedSeats.length === 0 || selectedTickets.length === 0) {
+              setError('Missing seats or tickets');
+              return;
+            }
+
+            const totalPrice = selectedTickets.reduce(
+              (sum, ticket) => sum + ticket.price * ticket.quantity,
               0
             );
+
             const meta: ConfirmMeta = {
-              movie: { id: ctxMovie.id, title: ctxMovie.title },
-              theater: { id: ctxTheater.id, name: ctxTheater.name },
-              date: ctxDate,
-              time: ctxShowing.time,
-              seats: ctxSelectedSeats.map((s) => s.id),
-              tickets: ctxTickets.map((t) => ({
-                type: t.ticketType.name,
-                quantity: t.quantity,
-                price: t.ticketType.price,
+              movie: bookingCtx.movie,
+              theater: bookingCtx.theater,
+              date: bookingCtx.date,
+              time: bookingCtx.showing.time,
+              seats: selectedSeats.map((seat) => seat.value),
+              tickets: selectedTickets.map((ticket) => ({
+                type: ticket.name,
+                quantity: ticket.quantity,
+                price: ticket.price,
               })),
               totalPrice,
             };
-            const spec = generateConfirmSpec(meta);
+
+            const spec = withBookingContext(generateConfirmSpec(meta), bookingCtx);
             addSystemMessage('confirm', spec);
             setUiSpec(spec);
             break;
@@ -215,30 +316,15 @@ export function ChatPage() {
         setLoading(false);
       }
     },
-    [
-      movie,
-      theater,
-      date,
-      showing,
-      selectedSeats,
-      tickets,
-      addSystemMessage,
-      setBackendData,
-      setUiSpec,
-    ]
+    [activeSpec, addSystemMessage, setBackendData, setUiSpec]
   );
 
-  // Initialize with movie stage
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true;
-      loadStageData('movie');
+      loadStageData('movie', { booking: {} });
     }
   }, [loadStageData]);
-
-  // =========================================================================
-  // Selection Handlers
-  // =========================================================================
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -263,181 +349,44 @@ export function ChatPage() {
   const handleQuantityChange = useCallback(
     (typeId: string, quantity: number) => {
       if (!activeSpec) return;
-      const newSpec = setQuantity(activeSpec, typeId, quantity);
+
+      let newSpec = setQuantity(activeSpec, typeId, quantity);
+      const bookingCtx = getBookingContext(newSpec);
+      const newTickets = buildTicketSelections(newSpec.state.quantities ?? [], ticketTypes);
+
+      newSpec = withBookingContext(newSpec, {
+        ...bookingCtx,
+        tickets: newTickets,
+      });
+
       updateActiveSpec(newSpec);
       setUiSpec(newSpec);
-
-      // Also update booking store for tickets
-      const ticketType = ticketTypes.find((t) => t.id === typeId);
-      if (ticketType) {
-        const newTickets = tickets.filter((t) => t.ticketType.id !== typeId);
-        if (quantity > 0) {
-          newTickets.push({ ticketType, quantity });
-        }
-        setTickets(newTickets);
-      }
     },
-    [activeSpec, ticketTypes, tickets, updateActiveSpec, setUiSpec, setTickets]
+    [activeSpec, ticketTypes, updateActiveSpec, setUiSpec]
   );
 
-  // =========================================================================
-  // Navigation Handlers
-  // =========================================================================
-
-  const handleNext = useCallback(async () => {
+  const handleConfirm = useCallback(async () => {
     if (!activeSpec) return;
 
-    // Get selection label for user message
-    let selectionLabel = '';
-    const nextCtx: StageContext = {};
+    const bookingCtx = getBookingContext(activeSpec);
+    const selectedSeats = bookingCtx.selectedSeats ?? [];
+    const selectedTickets = bookingCtx.tickets ?? [];
 
-    switch (currentStage) {
-      case 'movie': {
-        const selectedId = activeSpec.state.selected?.id;
-        if (!selectedId) return;
-        const selectedMovie = movies.find((m) => m.id === selectedId);
-        if (!selectedMovie) return;
-        selectionLabel = selectedMovie.title;
-        setMovie(selectedMovie);
-        nextCtx.movie = selectedMovie;
-        break;
-      }
-
-      case 'theater': {
-        const selectedId = activeSpec.state.selected?.id;
-        if (!selectedId) return;
-        const selectedTheater = theaters.find((t) => t.id === selectedId);
-        if (!selectedTheater) return;
-        selectionLabel = selectedTheater.name;
-        setTheater(selectedTheater);
-        nextCtx.movie = movie;
-        nextCtx.theater = selectedTheater;
-        break;
-      }
-
-      case 'date': {
-        const selectedId = activeSpec.state.selected?.id;
-        if (!selectedId) return;
-        selectionLabel = selectedId;
-        setDate(selectedId);
-        nextCtx.movie = movie;
-        nextCtx.theater = theater;
-        nextCtx.date = selectedId;
-        break;
-      }
-
-      case 'time': {
-        const selectedId = activeSpec.state.selected?.id;
-        if (!selectedId) return;
-        const selectedShowing = showings.find((s) => s.id === selectedId);
-        if (!selectedShowing) return;
-        selectionLabel = selectedShowing.time;
-        setShowing(selectedShowing);
-        nextCtx.movie = movie;
-        nextCtx.theater = theater;
-        nextCtx.date = date;
-        nextCtx.showing = selectedShowing;
-        break;
-      }
-
-      case 'seat': {
-        const selectedIds = activeSpec.state.selectedList?.map((item) => item.id) ?? [];
-        if (selectedIds.length === 0) return;
-        const selectedSeatObjects = seats.filter((s) => selectedIds.includes(s.id));
-        selectionLabel = `${selectedSeatObjects.length} seat(s) selected`;
-        setSelectedSeats(selectedSeatObjects);
-        nextCtx.movie = movie;
-        nextCtx.theater = theater;
-        nextCtx.date = date;
-        nextCtx.showing = showing;
-        nextCtx.selectedSeats = selectedSeatObjects;
-        break;
-      }
-
-      case 'ticket': {
-        const quantities = activeSpec.state.quantities ?? [];
-        const totalTickets = quantities.reduce((sum, q) => sum + q.count, 0);
-        if (totalTickets === 0) return;
-        selectionLabel = `${totalTickets} ticket(s)`;
-        nextCtx.movie = movie;
-        nextCtx.theater = theater;
-        nextCtx.date = date;
-        nextCtx.showing = showing;
-        nextCtx.selectedSeats = selectedSeats;
-        nextCtx.tickets = tickets;
-        break;
-      }
-
-      case 'confirm': {
-        await handleConfirm();
-        return;
-      }
+    if (!bookingCtx.showing || selectedSeats.length === 0 || selectedTickets.length === 0) {
+      setError('Missing booking information');
+      return;
     }
-
-    // Add user message
-    addUserMessage(currentStage, 'select', selectionLabel);
-
-    // Move to next stage with context
-    const nextStage = getNextStage(currentStage);
-    if (nextStage) {
-      loadStageData(nextStage, nextCtx);
-    }
-  }, [
-    activeSpec,
-    currentStage,
-    movies,
-    theaters,
-    showings,
-    seats,
-    movie,
-    theater,
-    date,
-    showing,
-    selectedSeats,
-    tickets,
-    setMovie,
-    setTheater,
-    setDate,
-    setShowing,
-    setSelectedSeats,
-    addUserMessage,
-    loadStageData,
-  ]);
-
-  const handleBack = useCallback(async () => {
-    const prevStage = getPrevStage(currentStage);
-    if (!prevStage) return;
-
-    // Add user message for going back
-    addUserMessage(currentStage, 'back', '← Back');
-
-    // Build context from current store state
-    const ctx: StageContext = {
-      movie,
-      theater,
-      date,
-      showing,
-      selectedSeats,
-      tickets,
-    };
-
-    // Load previous stage data
-    loadStageData(prevStage, ctx);
-  }, [currentStage, movie, theater, date, showing, selectedSeats, tickets, addUserMessage, loadStageData]);
-
-  const handleConfirm = useCallback(async () => {
-    if (!showing) return;
 
     setLoading(true);
     setError(null);
 
     try {
       const result = await api.createBooking({
-        showingId: showing.id,
-        seats: selectedSeats.map((s) => s.id),
-        tickets: tickets.map((t) => ({
-          ticketTypeId: t.ticketType.id,
-          quantity: t.quantity,
+        showingId: bookingCtx.showing.id,
+        seats: selectedSeats.map((seat) => seat.id),
+        tickets: selectedTickets.map((ticket) => ({
+          ticketTypeId: ticket.ticketTypeId,
+          quantity: ticket.quantity,
         })),
         customerName: 'Guest',
         customerEmail: 'guest@example.com',
@@ -450,26 +399,172 @@ export function ChatPage() {
     } finally {
       setLoading(false);
     }
-  }, [showing, selectedSeats, tickets, addUserMessage]);
+  }, [activeSpec, addUserMessage]);
+
+  const handleNext = useCallback(async () => {
+    if (!activeSpec) return;
+
+    let selectionLabel = '';
+    const currentBooking = getBookingContext(activeSpec);
+    let nextBooking: BookingContext = currentBooking;
+
+    switch (currentStage) {
+      case 'movie': {
+        const selectedId = activeSpec.state.selected?.id;
+        if (!selectedId) return;
+
+        const selectedMovie = movies.find((movie) => movie.id === selectedId);
+        if (!selectedMovie) return;
+
+        selectionLabel = selectedMovie.title;
+        nextBooking = {
+          movie: { id: selectedMovie.id, title: selectedMovie.title },
+          selectedSeats: [],
+          tickets: [],
+        };
+        break;
+      }
+
+      case 'theater': {
+        const selectedId = activeSpec.state.selected?.id;
+        if (!selectedId) return;
+
+        const selectedTheater = theaters.find((theater) => theater.id === selectedId);
+        if (!selectedTheater) return;
+
+        selectionLabel = selectedTheater.name;
+        nextBooking = {
+          ...currentBooking,
+          theater: { id: selectedTheater.id, name: selectedTheater.name },
+          date: undefined,
+          showing: undefined,
+          selectedSeats: [],
+          tickets: [],
+        };
+        break;
+      }
+
+      case 'date': {
+        const selectedDate = activeSpec.state.selected?.id;
+        if (!selectedDate) return;
+
+        selectionLabel = selectedDate;
+        nextBooking = {
+          ...currentBooking,
+          date: selectedDate,
+          showing: undefined,
+          selectedSeats: [],
+          tickets: [],
+        };
+        break;
+      }
+
+      case 'time': {
+        const selectedId = activeSpec.state.selected?.id;
+        if (!selectedId) return;
+
+        const selectedShowing = showings.find((showing) => showing.id === selectedId);
+        if (!selectedShowing) return;
+
+        selectionLabel = selectedShowing.time;
+        nextBooking = {
+          ...currentBooking,
+          showing: {
+            id: selectedShowing.id,
+            time: selectedShowing.time,
+          },
+          selectedSeats: [],
+          tickets: [],
+        };
+        break;
+      }
+
+      case 'seat': {
+        const selectedSeats = activeSpec.state.selectedList ?? [];
+        if (selectedSeats.length === 0) return;
+
+        selectionLabel = `${selectedSeats.length} seat(s) selected`;
+        nextBooking = {
+          ...currentBooking,
+          selectedSeats,
+          tickets: [],
+        };
+        break;
+      }
+
+      case 'ticket': {
+        const selectedSeats = currentBooking.selectedSeats ?? [];
+        const selectedTickets = currentBooking.tickets ?? [];
+
+        const totalTickets = selectedTickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
+        if (selectedSeats.length === 0) {
+          setError('No seats selected');
+          return;
+        }
+        if (totalTickets !== selectedSeats.length) {
+          setError('Ticket count must match selected seat count');
+          return;
+        }
+
+        selectionLabel = `${totalTickets} ticket(s)`;
+        nextBooking = {
+          ...currentBooking,
+          tickets: selectedTickets,
+        };
+        break;
+      }
+
+      case 'confirm': {
+        await handleConfirm();
+        return;
+      }
+    }
+
+    addUserMessage(currentStage, 'select', selectionLabel);
+
+    const nextStage = getNextStage(currentStage);
+    if (nextStage) {
+      loadStageData(nextStage, {
+        booking: projectBookingForStage(nextStage, nextBooking),
+      });
+    }
+  }, [
+    activeSpec,
+    currentStage,
+    movies,
+    theaters,
+    showings,
+    addUserMessage,
+    loadStageData,
+    handleConfirm,
+  ]);
+
+  const handleBack = useCallback(async () => {
+    if (!activeSpec) return;
+
+    const prevStage = getPrevStage(currentStage);
+    if (!prevStage) return;
+
+    addUserMessage(currentStage, 'back', 'Back');
+
+    const currentBooking = getBookingContext(activeSpec);
+    loadStageData(prevStage, {
+      booking: projectBookingForStage(prevStage, currentBooking),
+    });
+  }, [activeSpec, currentStage, addUserMessage, loadStageData]);
 
   const handleBookAnother = useCallback(() => {
-    resetBooking();
     resetChat();
     setBooking(null);
     initialized.current = false;
-    loadStageData('movie');
-  }, [resetBooking, resetChat, loadStageData]);
-
-  // =========================================================================
-  // Tool Handler (for DevTools Agent Tools)
-  // =========================================================================
+    loadStageData('movie', { booking: {} });
+  }, [resetChat, loadStageData]);
 
   const handleSetSpec = useCallback(
     (newSpec: typeof activeSpec) => {
-      if (newSpec) {
-        updateActiveSpec(newSpec);
-        setUiSpec(newSpec);
-      }
+      if (!newSpec) return;
+      updateActiveSpec(newSpec);
+      setUiSpec(newSpec);
     },
     [updateActiveSpec, setUiSpec]
   );
@@ -482,13 +577,8 @@ export function ChatPage() {
     multiSelect: currentStage === 'seat',
   });
 
-  // =========================================================================
-  // Render
-  // =========================================================================
-
   return (
     <div className="flex flex-col h-screen bg-dark">
-      {/* Header */}
       <header className="shrink-0 border-b border-gray-700 bg-dark px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <h1 className="text-lg font-semibold text-white">Movie Booking</h1>
@@ -498,7 +588,6 @@ export function ChatPage() {
         </div>
       </header>
 
-      {/* Messages */}
       <MessageList
         messages={messages}
         activeSpec={activeSpec}
@@ -510,25 +599,18 @@ export function ChatPage() {
         onConfirm={handleConfirm}
       />
 
-      {/* Loading indicator */}
       {loading && (
-        <div className="shrink-0 px-4 py-2 text-center text-gray-400 text-sm">
-          Loading...
-        </div>
+        <div className="shrink-0 px-4 py-2 text-center text-gray-400 text-sm">Loading...</div>
       )}
 
-      {/* Error display */}
       {error && (
-        <div className="shrink-0 px-4 py-2 text-center text-primary text-sm">
-          Error: {error}
-        </div>
+        <div className="shrink-0 px-4 py-2 text-center text-primary text-sm">Error: {error}</div>
       )}
 
-      {/* Booking success */}
       {booking && (
         <div className="shrink-0 px-4 py-4 border-t border-gray-700 bg-dark-light">
           <div className="max-w-3xl mx-auto text-center">
-            <div className="text-2xl mb-2">🎉</div>
+            <div className="text-2xl mb-2">Booking Complete</div>
             <p className="text-white font-medium">Booking Confirmed!</p>
             <p className="text-gray-400 text-sm mb-3">Booking ID: {booking.id}</p>
             <button
@@ -541,7 +623,6 @@ export function ChatPage() {
         </div>
       )}
 
-      {/* Input */}
       <ChatInput disabled placeholder="Text input coming soon..." />
     </div>
   );

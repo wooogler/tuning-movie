@@ -92,6 +92,15 @@ function createDisplayItemMap<T extends DataItem>(
   return map;
 }
 
+function findSelectableDisplayItem<T extends DataItem>(
+  spec: UISpec<T>,
+  itemId: string
+): DisplayItem | undefined {
+  const item = spec.visibleItems.find((visible) => visible.id === itemId);
+  if (!item || item.isDisabled) return undefined;
+  return item;
+}
+
 /**
  * modification.highlight → state.highlighted 동기화
  */
@@ -145,9 +154,8 @@ export function selectItem<T extends DataItem>(
   spec: UISpec<T>,
   itemId: string
 ): UISpec<T> {
-  const visibleItems = spec.visibleItems;
-  const map = createDisplayItemMap(spec, visibleItems);
-  const displayItem = map.get(itemId);
+  const displayItem = findSelectableDisplayItem(spec, itemId);
+  if (!displayItem) return spec;
 
   return {
     ...spec,
@@ -165,11 +173,8 @@ export function selectItems<T extends DataItem>(
   spec: UISpec<T>,
   itemIds: string[]
 ): UISpec<T> {
-  const visibleItems = spec.visibleItems;
-  const map = createDisplayItemMap(spec, visibleItems);
-
   const selectedList = itemIds
-    .map((id) => map.get(id))
+    .map((id) => findSelectableDisplayItem(spec, id))
     .filter((item): item is DisplayItem => item !== undefined);
 
   return {
@@ -206,9 +211,9 @@ export function setQuantity<T extends DataItem>(
   typeId: string,
   count: number
 ): UISpec<T> {
-  const visibleItems = spec.visibleItems;
-  const map = createDisplayItemMap(spec, visibleItems);
-  const displayItem = map.get(typeId);
+  if (!Number.isInteger(count) || count < 0) return spec;
+
+  const displayItem = spec.visibleItems.find((item) => item.id === typeId);
 
   if (!displayItem) return spec;
 

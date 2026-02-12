@@ -49,6 +49,22 @@ export interface QuantityItem {
   count: number;
 }
 
+export interface BookingTicketSelection {
+  ticketTypeId: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+export interface BookingContext {
+  movie?: { id: string; title: string };
+  theater?: { id: string; name: string };
+  date?: string;
+  showing?: { id: string; time: string };
+  selectedSeats?: DisplayItem[];
+  tickets?: BookingTicketSelection[];
+}
+
 // =============================================================================
 // UI Spec
 // =============================================================================
@@ -129,6 +145,9 @@ export interface StateModel {
 
   /** 티켓 수량 */
   quantities?: QuantityItem[];
+
+  /** 예약 컨텍스트 (단일 source of truth) */
+  booking?: BookingContext;
 }
 
 // =============================================================================

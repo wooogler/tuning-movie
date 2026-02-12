@@ -117,6 +117,20 @@ export const interactionTools: ToolDefinition[] = [
     },
   },
   {
+    name: 'setQuantity',
+    description: 'Set quantity for a ticket type in ticket stage',
+    parameters: {
+      typeId: {
+        type: 'string',
+        description: 'Ticket type ID',
+      },
+      quantity: {
+        type: 'number',
+        description: 'Ticket quantity (0 or higher)',
+      },
+    },
+  },
+  {
     name: 'next',
     description: 'Proceed to next stage with current state (selected item is passed to next stage)',
     parameters: {},
@@ -146,6 +160,7 @@ export const toolCategories: Record<string, 'modification' | 'interaction'> = {
   augment: 'modification',
   clearModification: 'modification',
   select: 'interaction',
+  setQuantity: 'interaction',
   next: 'interaction',
   prev: 'interaction',
 };
