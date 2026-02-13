@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { api } from '../api/client';
 import {
   useChatStore,
@@ -136,8 +136,11 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('chat');
+  const [carouselOffset, setCarouselOffset] = useState(0);
+  const [carouselOpacity, setCarouselOpacity] = useState(1);
 
   const initialized = useRef(false);
+  const previousStageRef = useRef<Stage>(currentStage);
 
   const loadStageData = useCallback(
     async (stage: typeof currentStage, ctx: StageContext = {}) => {
@@ -582,6 +585,59 @@ export function ChatPage() {
   });
 
   const currentStep = STAGE_ORDER.indexOf(currentStage) + 1;
+  const previousStage = getPrevStage(currentStage);
+  const nextStage = getNextStage(currentStage);
+
+  const stageSpecMap = useMemo(() => {
+    const map = new Map<Stage, UISpec>();
+    for (const message of messages) {
+      if (message.type === 'system') {
+        map.set(message.stage, message.spec);
+      }
+    }
+    if (activeSpec) {
+      map.set(currentStage, activeSpec);
+    }
+    return map;
+  }, [messages, activeSpec, currentStage]);
+
+  const previousSpec = previousStage ? stageSpecMap.get(previousStage) ?? null : null;
+  const nextSpec = nextStage ? stageSpecMap.get(nextStage) ?? null : null;
+
+  useEffect(() => {
+    if (viewMode !== 'carousel') {
+      previousStageRef.current = currentStage;
+      return;
+    }
+
+    const prevStage = previousStageRef.current;
+    if (prevStage === currentStage) return;
+
+    const prevIndex = STAGE_ORDER.indexOf(prevStage);
+    const currentIndex = STAGE_ORDER.indexOf(currentStage);
+    const direction = currentIndex >= prevIndex ? 1 : -1;
+
+    setCarouselOffset(direction * 120);
+    setCarouselOpacity(0.86);
+
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setCarouselOffset(0);
+        setCarouselOpacity(1);
+      });
+    });
+
+    previousStageRef.current = currentStage;
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [currentStage, viewMode]);
+
+  const carouselTransition =
+    'transform 860ms cubic-bezier(0.22, 1, 0.36, 1), opacity 760ms cubic-bezier(0.22, 1, 0.36, 1)';
 
   return (
     <div className="flex flex-col h-screen bg-dark">
@@ -633,8 +689,8 @@ export function ChatPage() {
         />
       ) : (
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          <div className="max-w-3xl mx-auto space-y-4">
-            <div className="flex flex-wrap gap-2">
+          <div className="max-w-7xl mx-auto space-y-4">
+            <div className="flex flex-wrap justify-center gap-2">
               {STAGE_ORDER.map((stage, index) => {
                 const isCurrent = stage === currentStage;
                 const isPassed = index < currentStep - 1;
@@ -655,20 +711,83 @@ export function ChatPage() {
               })}
             </div>
 
-            <div className="rounded-2xl bg-dark-light border border-gray-700 p-4 md:p-6">
-              {activeSpec ? (
-                <StageRenderer
-                  spec={activeSpec}
-                  onSelect={handleSelect}
-                  onToggle={handleToggle}
-                  onQuantityChange={handleQuantityChange}
-                  onNext={handleNext}
-                  onBack={handleBack}
-                  onConfirm={handleConfirm}
-                />
-              ) : (
-                <div className="text-center text-gray-400 py-8">Loading...</div>
-              )}
+            <div className="relative h-[680px] overflow-hidden rounded-3xl border border-gray-700 bg-dark-light/60">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-dark-light/95 to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-dark-light/95 to-transparent" />
+
+              <div className="h-full w-full p-5">
+                <div
+                  className="grid h-full grid-cols-3 gap-5"
+                  style={{
+                    transform: `translateX(${carouselOffset}px)`,
+                    opacity: carouselOpacity,
+                    transition: carouselTransition,
+                  }}
+                >
+                  <div className="h-full overflow-hidden rounded-2xl border border-gray-700 bg-dark-light pointer-events-none">
+                    <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-gray-400">
+                      {previousStage ? `Previous · ${previousStage}` : 'Previous'}
+                    </div>
+                    {previousSpec ? (
+                      <div className="h-full overflow-y-auto px-4 pb-5 pt-3 opacity-75">
+                        <StageRenderer
+                          spec={previousSpec}
+                          onSelect={() => {}}
+                          onToggle={() => {}}
+                          onQuantityChange={() => {}}
+                          onNext={() => {}}
+                          onBack={() => {}}
+                          onConfirm={() => {}}
+                        />
+                      </div>
+                    ) : (
+                      <div className="px-4 py-10 text-center text-sm text-gray-500">No previous stage</div>
+                    )}
+                  </div>
+
+                  <div className="h-full overflow-hidden rounded-2xl border border-primary/45 bg-dark-light">
+                    <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-primary">
+                      Current · {currentStage}
+                    </div>
+                    {activeSpec ? (
+                      <div className="h-full overflow-y-auto px-4 pb-5 pt-3">
+                        <StageRenderer
+                          spec={activeSpec}
+                          onSelect={handleSelect}
+                          onToggle={handleToggle}
+                          onQuantityChange={handleQuantityChange}
+                          onNext={handleNext}
+                          onBack={handleBack}
+                          onConfirm={handleConfirm}
+                        />
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-gray-400">Loading...</div>
+                    )}
+                  </div>
+
+                  <div className="h-full overflow-hidden rounded-2xl border border-gray-700 bg-dark-light pointer-events-none">
+                    <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-gray-400">
+                      {nextStage ? `Next · ${nextStage}` : 'Next'}
+                    </div>
+                    {nextSpec ? (
+                      <div className="h-full overflow-y-auto px-4 pb-5 pt-3 opacity-75">
+                        <StageRenderer
+                          spec={nextSpec}
+                          onSelect={() => {}}
+                          onToggle={() => {}}
+                          onQuantityChange={() => {}}
+                          onNext={() => {}}
+                          onBack={() => {}}
+                          onConfirm={() => {}}
+                        />
+                      </div>
+                    ) : (
+                      <div className="px-4 py-10 text-center text-sm text-gray-500">No next stage yet</div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -698,9 +817,14 @@ export function ChatPage() {
         </div>
       )}
 
-      {viewMode === 'chat' && (
-        <ChatInput disabled placeholder="Text input coming soon..." />
-      )}
+      <ChatInput
+        disabled
+        placeholder={
+          viewMode === 'chat'
+            ? 'Text input coming soon...'
+            : 'Carousel mode: input is available here as well'
+        }
+      />
     </div>
   );
 }
