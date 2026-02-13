@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useDevTools } from './devToolsContextShared';
 import { agentTools } from '../agent/tools';
 import type { ToolDefinition } from '../agent/tools';
+import type { UISpec } from '../spec';
 
 type Tab = 'booking' | 'backend' | 'spec';
 
@@ -99,6 +100,7 @@ export function DevTools() {
             tools={agentTools}
             onApply={onToolApply}
             hasSpec={!!uiSpec}
+            uiSpec={uiSpec}
           />
         </div>
       </div>
@@ -201,14 +203,35 @@ interface AgentToolsPanelProps {
   tools: ToolDefinition[];
   onApply: (toolName: string, params: Record<string, unknown>) => void;
   hasSpec: boolean;
+  uiSpec: UISpec | null;
 }
 
-function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
+function parseArrayInput(value: string): unknown[] {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      throw new Error('Value must be an array');
+    }
+    return parsed;
+  } catch {
+    const fallback = value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (fallback.length === 0) {
+      throw new Error('Value must be a JSON array or comma-separated list');
+    }
+    return fallback;
+  }
+}
+
+function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelProps) {
   const [selectedTool, setSelectedTool] = useState<string>(tools[0]?.name || '');
   const [params, setParams] = useState<Record<string, string>>({});
   const [lastResult, setLastResult] = useState<string | null>(null);
 
   const currentTool = tools.find((t) => t.name === selectedTool);
+  const exampleIds = (uiSpec?.visibleItems ?? []).slice(0, 2).map((item) => item.id);
 
   const handleToolChange = (toolName: string) => {
     setSelectedTool(toolName);
@@ -238,9 +261,9 @@ function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
       // Type conversion
       if (paramDef.type === 'array') {
         try {
-          typedParams[key] = JSON.parse(value);
+          typedParams[key] = parseArrayInput(value);
         } catch {
-          setLastResult(`Error: Invalid JSON for "${key}"`);
+          setLastResult(`Error: "${key}" must be JSON array or comma-separated list`);
           return;
         }
       } else if (paramDef.type === 'object') {
@@ -333,9 +356,11 @@ function AgentToolsPanel({ tools, onApply, hasSpec }: AgentToolsPanelProps) {
                   onChange={(e) => handleParamChange(paramName, e.target.value)}
                   placeholder={
                     currentTool.name === 'augment' && paramName === 'items'
-                      ? '[{"itemId": "m1", "value": "New Text"}]'
+                      ? `[{"itemId": "${exampleIds[0] || 'id1'}", "value": "New Text"}]`
                       : currentTool.name === 'highlight' && paramName === 'itemIds'
-                      ? '["id1", "id2"]'
+                      ? exampleIds.length > 0
+                        ? JSON.stringify(exampleIds)
+                        : '["id1", "id2"]'
                       : paramDef.type === 'array'
                       ? '["id1", "id2"]'
                       : '{ "key": "value" }'
