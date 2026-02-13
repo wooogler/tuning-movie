@@ -26,12 +26,15 @@ import {
   type Stage,
 } from '../spec';
 import { MessageList, ChatInput } from '../components/chat';
+import { StageRenderer } from '../renderer';
 import { useToolHandler } from '../hooks';
 import type { Movie, Theater, Showing, TicketType, Booking } from '../types';
 
 interface StageContext {
   booking?: BookingContext;
 }
+
+type ViewMode = 'chat' | 'carousel';
 
 function getBookingContext(spec: UISpec | null): BookingContext {
   return spec?.state.booking ?? {};
@@ -132,6 +135,7 @@ export function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('chat');
 
   const initialized = useRef(false);
 
@@ -577,27 +581,98 @@ export function ChatPage() {
     multiSelect: currentStage === 'seat',
   });
 
+  const currentStep = STAGE_ORDER.indexOf(currentStage) + 1;
+
   return (
     <div className="flex flex-col h-screen bg-dark">
       <header className="shrink-0 border-b border-gray-700 bg-dark px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <h1 className="text-lg font-semibold text-white">Movie Booking</h1>
-          <div className="text-sm text-gray-400">
-            Step {STAGE_ORDER.indexOf(currentStage) + 1} of {STAGE_ORDER.length}
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-gray-400">
+              Step {currentStep} of {STAGE_ORDER.length}
+            </div>
+            <div className="flex items-center rounded-lg border border-gray-700 bg-dark-light p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('chat')}
+                className={`px-2 py-1 text-xs rounded ${
+                  viewMode === 'chat'
+                    ? 'bg-primary text-dark font-semibold'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                Chat
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('carousel')}
+                className={`px-2 py-1 text-xs rounded ${
+                  viewMode === 'carousel'
+                    ? 'bg-primary text-dark font-semibold'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                Carousel
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <MessageList
-        messages={messages}
-        activeSpec={activeSpec}
-        onSelect={handleSelect}
-        onToggle={handleToggle}
-        onQuantityChange={handleQuantityChange}
-        onNext={handleNext}
-        onBack={handleBack}
-        onConfirm={handleConfirm}
-      />
+      {viewMode === 'chat' ? (
+        <MessageList
+          messages={messages}
+          activeSpec={activeSpec}
+          onSelect={handleSelect}
+          onToggle={handleToggle}
+          onQuantityChange={handleQuantityChange}
+          onNext={handleNext}
+          onBack={handleBack}
+          onConfirm={handleConfirm}
+        />
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div className="max-w-3xl mx-auto space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {STAGE_ORDER.map((stage, index) => {
+                const isCurrent = stage === currentStage;
+                const isPassed = index < currentStep - 1;
+                return (
+                  <span
+                    key={stage}
+                    className={`px-2 py-1 rounded text-xs capitalize ${
+                      isCurrent
+                        ? 'bg-primary text-dark font-semibold'
+                        : isPassed
+                        ? 'bg-dark-light text-gray-200'
+                        : 'bg-dark-border text-gray-500'
+                    }`}
+                  >
+                    {stage}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl bg-dark-light border border-gray-700 p-4 md:p-6">
+              {activeSpec ? (
+                <StageRenderer
+                  spec={activeSpec}
+                  onSelect={handleSelect}
+                  onToggle={handleToggle}
+                  onQuantityChange={handleQuantityChange}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                  onConfirm={handleConfirm}
+                />
+              ) : (
+                <div className="text-center text-gray-400 py-8">Loading...</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div className="shrink-0 px-4 py-2 text-center text-gray-400 text-sm">Loading...</div>
@@ -623,7 +698,9 @@ export function ChatPage() {
         </div>
       )}
 
-      <ChatInput disabled placeholder="Text input coming soon..." />
+      {viewMode === 'chat' && (
+        <ChatInput disabled placeholder="Text input coming soon..." />
+      )}
     </div>
   );
 }
