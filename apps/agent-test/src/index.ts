@@ -8,6 +8,7 @@ const DEFAULT_HTTP_PORT = 3400;
 const DEFAULT_RELAY_URL = 'ws://localhost:3000/agent/ws';
 const DEFAULT_SESSION_ID = 'default';
 const DEFAULT_REQUEST_TIMEOUT_MS = 12000;
+const SNAPSHOT_POLL_INTERVAL_MS = 2000;
 
 type EventDirection = 'in' | 'out' | 'internal';
 
@@ -107,6 +108,7 @@ class AgentTestServer {
 
   private relayWs: WebSocket | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private snapshotPollTimer: NodeJS.Timeout | null = null;
   private connected = false;
   private joined = false;
 
@@ -114,6 +116,8 @@ class AgentTestServer {
   private eventSeq = 0;
   private pending = new Map<string, PendingRequest>();
   private events: AgentEvent[] = [];
+  private snapshotSyncInFlight = false;
+  private snapshotRetryTimer: NodeJS.Timeout | null = null;
 
   private snapshot: RuntimeSnapshot | null = null;
   private lastUserMessage: { text: string; stage?: string; timestamp: string } | null = null;
@@ -162,6 +166,11 @@ class AgentTestServer {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.stopSnapshotPolling();
+    if (this.snapshotRetryTimer) {
+      clearTimeout(this.snapshotRetryTimer);
+      this.snapshotRetryTimer = null;
+    }
 
     for (const socket of this.controlSockets) {
       socket.close();
@@ -196,6 +205,9 @@ class AgentTestServer {
           events: this.events.slice(-40),
         },
       });
+      if (this.connected && this.joined && this.snapshot === null) {
+        this.requestSnapshotSync('control.ready');
+      }
 
       socket.on('message', (raw: unknown) => {
         const text = parseText(raw);
@@ -489,6 +501,7 @@ class AgentTestServer {
     ws.on('open', () => {
       this.connected = true;
       this.joined = false;
+      this.startSnapshotPolling();
 
       this.pushEvent('internal', 'relay.open', {});
       this.broadcastState();
@@ -510,6 +523,12 @@ class AgentTestServer {
     ws.on('close', () => {
       this.connected = false;
       this.joined = false;
+      this.stopSnapshotPolling();
+      this.snapshotSyncInFlight = false;
+      if (this.snapshotRetryTimer) {
+        clearTimeout(this.snapshotRetryTimer);
+        this.snapshotRetryTimer = null;
+      }
 
       this.pushEvent('internal', 'relay.close', {
         reconnectInMs: 1200,
@@ -535,6 +554,28 @@ class AgentTestServer {
     });
   }
 
+  private startSnapshotPolling(): void {
+    if (this.snapshotPollTimer) return;
+
+    this.snapshotPollTimer = setInterval(() => {
+      if (!this.connected || !this.joined) return;
+      if (this.controlSockets.size === 0) return;
+
+      const hasPendingSnapshot = Array.from(this.pending.values()).some(
+        (entry) => entry.requestType === 'snapshot.get'
+      );
+      if (hasPendingSnapshot) return;
+
+      this.requestSnapshotSync('snapshot.poll');
+    }, SNAPSHOT_POLL_INTERVAL_MS);
+  }
+
+  private stopSnapshotPolling(): void {
+    if (!this.snapshotPollTimer) return;
+    clearInterval(this.snapshotPollTimer);
+    this.snapshotPollTimer = null;
+  }
+
   private handleRelayInbound(raw: unknown): void {
     const text = parseText(raw);
 
@@ -555,6 +596,7 @@ class AgentTestServer {
     this.applyRelayInboundState(envelope);
 
     if (!envelope.replyTo) {
+      this.tryResolvePendingWithoutReplyTo(envelope);
       return;
     }
 
@@ -574,11 +616,48 @@ class AgentTestServer {
     pending.resolve(envelope);
   }
 
+  private tryResolvePendingWithoutReplyTo(envelope: RelayEnvelope): void {
+    const expectedRequestTypeByResponseType: Record<string, string> = {
+      'session.started': 'session.start',
+      'snapshot.state': 'snapshot.get',
+      'tool.result': 'tool.call',
+      'session.ended': 'session.end',
+    };
+
+    const expectedRequestType = expectedRequestTypeByResponseType[envelope.type];
+    if (!expectedRequestType) {
+      return;
+    }
+
+    const pendingEntry = Array.from(this.pending.entries()).find(
+      ([, entry]) => entry.requestType === expectedRequestType
+    );
+    if (!pendingEntry) {
+      return;
+    }
+
+    const [requestId, pending] = pendingEntry;
+    clearTimeout(pending.timer);
+    this.pending.delete(requestId);
+    pending.resolve({
+      ...envelope,
+      replyTo: requestId,
+    });
+
+    this.pushEvent('internal', 'relay.missing-replyTo-recovered', {
+      responseType: envelope.type,
+      recoveredReplyTo: requestId,
+    });
+  }
+
   private applyRelayInboundState(envelope: RelayEnvelope): void {
     switch (envelope.type) {
       case 'relay.joined':
         this.joined = true;
         this.broadcastState();
+        if (this.snapshot === null) {
+          this.requestSnapshotSync('relay.joined');
+        }
         return;
 
       case 'snapshot.state': {
@@ -592,6 +671,10 @@ class AgentTestServer {
           messageHistory: Array.isArray(payload.messageHistory) ? payload.messageHistory : [],
           toolSchema: Array.isArray(payload.toolSchema) ? payload.toolSchema : [],
         };
+        if (this.snapshotRetryTimer) {
+          clearTimeout(this.snapshotRetryTimer);
+          this.snapshotRetryTimer = null;
+        }
         this.broadcastSnapshot();
         this.broadcastState();
         return;
@@ -606,7 +689,9 @@ class AgentTestServer {
           messageHistory: Array.isArray(payload.messageHistory)
             ? payload.messageHistory
             : previous?.messageHistory ?? [],
-          toolSchema: previous?.toolSchema ?? [],
+          toolSchema: Array.isArray(payload.toolSchema)
+            ? payload.toolSchema
+            : previous?.toolSchema ?? [],
         };
         this.broadcastSnapshot();
         return;
@@ -622,7 +707,9 @@ class AgentTestServer {
           messageHistory: Array.isArray(payload.messageHistory)
             ? payload.messageHistory
             : previous?.messageHistory ?? [],
-          toolSchema: previous?.toolSchema ?? [],
+          toolSchema: Array.isArray(payload.toolSchema)
+            ? payload.toolSchema
+            : previous?.toolSchema ?? [],
         };
         this.broadcastSnapshot();
         return;
@@ -652,18 +739,42 @@ class AgentTestServer {
     }
   }
 
+  private requestSnapshotSync(reason: string): void {
+    if (!this.connected || !this.joined) return;
+    if (this.snapshotSyncInFlight) return;
+
+    this.snapshotSyncInFlight = true;
+    this.sendRelayRequest('snapshot.get', {})
+      .catch((error) => {
+        this.pushEvent('internal', 'snapshot.sync.failed', {
+          reason,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        this.broadcastState();
+        this.scheduleSnapshotRetry(reason);
+      })
+      .finally(() => {
+        this.snapshotSyncInFlight = false;
+      });
+  }
+
+  private scheduleSnapshotRetry(reason: string): void {
+    if (this.snapshot !== null) return;
+    if (!this.connected || !this.joined) return;
+    if (this.snapshotRetryTimer) return;
+
+    this.snapshotRetryTimer = setTimeout(() => {
+      this.snapshotRetryTimer = null;
+      this.requestSnapshotSync(`retry:${reason}`);
+    }, 1500);
+  }
+
   private async sendRelayRequest(
     type: string,
     payload: Record<string, unknown>,
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
   ): Promise<Record<string, unknown>> {
     const requestId = this.nextRequestId();
-
-    this.sendRelayEnvelope({
-      type,
-      id: requestId,
-      payload,
-    });
 
     const response = await new Promise<RelayEnvelope>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -677,6 +788,18 @@ class AgentTestServer {
         reject,
         timer,
       });
+
+      try {
+        this.sendRelayEnvelope({
+          type,
+          id: requestId,
+          payload,
+        });
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(requestId);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
 
     return {

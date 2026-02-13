@@ -112,6 +112,7 @@ MVP principles:
 - one WebSocket channel
 - no concurrency/revision lock
 - external reads only: `uiSpec`, `messageHistory`, `toolSchema`
+- `toolSchema` is generated per stage and enforced on host-side tool execution
 - external writes: `tool.call` and `agent.message`
 - host forwards participant chat input to external agent via `user.message`
 - session end triggers log flush + state reset

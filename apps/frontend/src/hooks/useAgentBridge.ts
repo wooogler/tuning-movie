@@ -21,7 +21,12 @@ interface UseAgentBridgeResult {
 
 function buildWsUrl(): string {
   const configured = import.meta.env.VITE_AGENT_WS_URL as string | undefined;
-  const endpoint = configured && configured.trim() ? configured.trim() : '/agent/ws';
+  const endpoint =
+    configured && configured.trim()
+      ? configured.trim()
+      : import.meta.env.DEV
+      ? 'ws://localhost:3000/agent/ws'
+      : '/agent/ws';
 
   if (/^wss?:\/\//.test(endpoint)) {
     return endpoint;
@@ -151,6 +156,7 @@ export function useAgentBridge({
               toolName,
               uiSpec: snapshot.uiSpec,
               messageHistory: snapshot.messageHistory,
+              toolSchema: snapshot.toolSchema,
             },
           });
         } catch (error) {
@@ -267,9 +273,10 @@ export function useAgentBridge({
         source: 'host',
         uiSpec: latestRef.current.uiSpec,
         messageHistory: latestRef.current.messageHistory,
+        toolSchema: latestRef.current.toolSchema,
       },
     });
-  }, [isJoined, uiSpec, messageHistory, sendEnvelope]);
+  }, [isJoined, uiSpec, messageHistory, toolSchema, sendEnvelope]);
 
   const sendUserMessageToAgent = useCallback(
     (text: string, stage: Stage) => {

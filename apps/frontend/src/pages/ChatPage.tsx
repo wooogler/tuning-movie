@@ -28,7 +28,7 @@ import {
 import { MessageList, ChatInput } from '../components/chat';
 import { StageRenderer } from '../renderer';
 import { useToolHandler, useAgentBridge } from '../hooks';
-import { agentTools } from '../agent/tools';
+import { agentTools, type ToolDefinition } from '../agent/tools';
 import type { Movie, Theater, Showing, TicketType, Booking } from '../types';
 
 interface StageContext {
@@ -36,6 +36,66 @@ interface StageContext {
 }
 
 type ViewMode = 'chat' | 'carousel';
+
+const stageInteractionTools: Record<Stage, string[]> = {
+  movie: ['select'],
+  theater: ['select', 'prev'],
+  date: ['select', 'prev'],
+  time: ['select', 'prev'],
+  seat: ['select', 'prev'],
+  ticket: ['setQuantity', 'prev'],
+  confirm: ['prev'],
+};
+
+function canUseNextTool(spec: UISpec): boolean {
+  switch (spec.stage) {
+    case 'movie':
+    case 'theater':
+    case 'date':
+    case 'time':
+      return Boolean(spec.state.selected?.id);
+    case 'seat':
+      return (spec.state.selectedList?.length ?? 0) > 0;
+    case 'ticket': {
+      const maxTotal = typeof spec.meta?.maxTotal === 'number' ? spec.meta.maxTotal : 0;
+      const currentTotal = (spec.state.quantities ?? []).reduce((sum, quantity) => sum + quantity.count, 0);
+      return maxTotal > 0 && currentTotal === maxTotal;
+    }
+    case 'confirm':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function buildToolSchemaForStage(spec: UISpec | null, fallbackStage: Stage): ToolDefinition[] {
+  if (!spec) {
+    return agentTools.filter((tool) => tool.name === 'postMessage');
+  }
+
+  const stage = spec.stage ?? fallbackStage;
+  const allowed = new Set<string>([
+    'filter',
+    'sort',
+    'highlight',
+    'augment',
+    'clearModification',
+    ...(stageInteractionTools[stage] ?? ['postMessage']),
+    'postMessage',
+  ]);
+
+  if (!spec.visibleItems.some((item) => !item.isDisabled)) {
+    allowed.delete('select');
+  }
+
+  if (canUseNextTool(spec)) {
+    allowed.add('next');
+  } else {
+    allowed.delete('next');
+  }
+
+  return agentTools.filter((tool) => allowed.has(tool.name));
+}
 
 function getBookingContext(spec: UISpec | null): BookingContext {
   return spec?.state.booking ?? {};
@@ -597,6 +657,11 @@ export function ChatPage() {
     loadStageData('movie', { booking: {} });
   }, [resetChat, loadStageData]);
 
+  const agentToolSchema = useMemo(
+    () => buildToolSchemaForStage(activeSpec, currentStage),
+    [activeSpec, currentStage]
+  );
+
   const {
     sendUserMessageToAgent,
     isConnected: isAgentBridgeConnected,
@@ -604,7 +669,7 @@ export function ChatPage() {
   } = useAgentBridge({
     uiSpec: activeSpec,
     messageHistory: messages,
-    toolSchema: agentTools,
+    toolSchema: agentToolSchema,
     onToolCall: onToolApply,
     onAgentMessage: (text: string) => {
       const stage = activeSpec?.stage ?? currentStage;

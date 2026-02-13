@@ -6,15 +6,19 @@ export const PANEL_HTML = `<!doctype html>
     <title>Agent Test Console</title>
     <style>
       :root {
-        --bg: #060b14;
-        --panel: #101826;
-        --panel-2: #0f1522;
-        --line: #2a3648;
-        --text: #e6edf6;
-        --muted: #9ca8ba;
-        --primary: #2dd4bf;
-        --primary-2: #0f766e;
-        --danger: #ef4444;
+        --bg: #f3f7fc;
+        --surface: #ffffff;
+        --surface-2: #f8fbff;
+        --line: #d7e2ef;
+        --line-strong: #b9cadf;
+        --text: #10233a;
+        --muted: #5b718b;
+        --primary: #0b6dca;
+        --primary-soft: #e9f3ff;
+        --danger: #bd2130;
+        --danger-soft: #ffeef0;
+        --ok: #0f8a61;
+        --ok-soft: #e8fff6;
       }
 
       * {
@@ -23,58 +27,111 @@ export const PANEL_HTML = `<!doctype html>
 
       body {
         margin: 0;
-        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: linear-gradient(180deg, #eaf1fb 0%, #f7f9fd 45%, #eef4fb 100%);
         color: var(--text);
-        background: radial-gradient(circle at 15% -20%, #0b2a4a 0%, var(--bg) 50%, #04060c 100%);
+        font-family: 'SF Pro Text', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
       }
 
       .shell {
-        width: min(980px, calc(100vw - 24px));
-        height: calc(100vh - 24px);
-        margin: 12px auto;
-        border: 1px solid var(--line);
+        width: min(1160px, calc(100vw - 20px));
+        height: calc(100vh - 20px);
+        margin: 10px auto;
+        border: 1px solid var(--line-strong);
         border-radius: 14px;
-        overflow: hidden;
-        background: var(--panel-2);
+        background: var(--surface);
         display: flex;
         flex-direction: column;
+        overflow: hidden;
       }
 
       .header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 12px 14px;
+        padding: 14px 16px;
         border-bottom: 1px solid var(--line);
-        background: #0b1220;
+        background: #f0f6ff;
       }
 
-      .header-title {
+      .header h1 {
         margin: 0;
-        font-size: 16px;
-        font-weight: 700;
+        font-size: 24px;
+        line-height: 1.1;
       }
 
-      .header-sub {
-        margin: 4px 0 0;
-        font-size: 12px;
+      .header p {
+        margin: 6px 0 0;
         color: var(--muted);
+        font-size: 14px;
       }
 
       .badge {
-        border: 1px solid var(--primary-2);
-        color: #8ef7ea;
-        background: #08323a;
+        border: 1px solid var(--line-strong);
         border-radius: 999px;
-        font-size: 11px;
-        padding: 5px 10px;
-        white-space: nowrap;
+        padding: 8px 12px;
+        background: #f8fbff;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .main {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+      }
+
+      .surface {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface-2);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .perception {
+        flex: 6;
+      }
+
+      .action {
+        flex: 4;
+      }
+
+      .surface-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .surface-header h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .surface-header .hint {
+        margin: 0;
+        font-size: 13px;
+        color: var(--muted);
       }
 
       .tabs {
-        display: flex;
+        display: grid;
         border-bottom: 1px solid var(--line);
-        background: #0a101a;
+        background: #eef5fd;
+      }
+
+      .tabs.perception-tabs {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+
+      .tabs.action-tabs {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
       .tab-btn {
@@ -82,21 +139,26 @@ export const PANEL_HTML = `<!doctype html>
         border-right: 1px solid var(--line);
         background: transparent;
         color: var(--muted);
-        padding: 9px 12px;
+        font-size: 14px;
+        font-weight: 700;
+        padding: 11px 10px;
         cursor: pointer;
-        font-size: 12px;
+      }
+
+      .tab-btn:last-child {
+        border-right: 0;
       }
 
       .tab-btn.active {
-        color: var(--text);
-        background: #121d2e;
-        border-bottom: 2px solid var(--primary);
+        color: var(--primary);
+        background: #ffffff;
       }
 
-      .content {
+      .panel-wrap {
         flex: 1;
+        min-height: 0;
         overflow: auto;
-        padding: 12px;
+        padding: 10px;
       }
 
       .panel {
@@ -107,29 +169,32 @@ export const PANEL_HTML = `<!doctype html>
         display: block;
       }
 
-      .panel-grid {
+      .grid {
         display: grid;
-        grid-template-columns: 1fr;
-        gap: 12px;
+        gap: 10px;
+      }
+
+      .grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .card {
         border: 1px solid var(--line);
         border-radius: 10px;
-        background: var(--panel);
+        background: #ffffff;
         padding: 10px;
       }
 
       .card h3 {
         margin: 0 0 8px;
-        font-size: 13px;
+        font-size: 15px;
       }
 
       .kv {
         display: grid;
-        grid-template-columns: 150px 1fr;
-        gap: 6px 10px;
-        font-size: 12px;
+        grid-template-columns: 180px 1fr;
+        gap: 6px 8px;
+        font-size: 14px;
       }
 
       .kv-key {
@@ -139,42 +204,26 @@ export const PANEL_HTML = `<!doctype html>
       .mono {
         margin: 0;
         border: 1px solid var(--line);
-        border-radius: 10px;
-        background: #060b14;
-        color: #d4deed;
+        border-radius: 8px;
+        background: #f8fbff;
+        color: #162d46;
         padding: 10px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 12px;
-        line-height: 1.5;
+        font-size: 13px;
+        line-height: 1.55;
         white-space: pre-wrap;
         word-break: break-word;
-        max-height: 320px;
+        max-height: 420px;
         overflow: auto;
       }
 
-      .actions {
-        border-top: 1px solid var(--line);
-        background: #0b1220;
-      }
-
-      .actions-header {
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--line);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .actions-header h3 {
-        margin: 0;
+      .hint {
+        color: var(--muted);
         font-size: 13px;
+        margin: 0 0 8px;
       }
 
-      .actions-body {
-        padding: 12px;
-      }
-
-      .grid-2 {
+      .quick-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
@@ -185,104 +234,86 @@ export const PANEL_HTML = `<!doctype html>
       textarea,
       select {
         width: 100%;
-        border: 1px solid #3a4a63;
+        border: 1px solid var(--line-strong);
         border-radius: 8px;
-        background: #0a1220;
+        font-size: 14px;
+        padding: 9px 10px;
+        background: #ffffff;
         color: var(--text);
-        font-size: 12px;
-        padding: 8px;
       }
 
       button {
         cursor: pointer;
-        background: #123646;
-        border-color: #1a5b70;
-        font-weight: 600;
+        font-weight: 700;
       }
 
       button:hover {
-        filter: brightness(1.08);
+        filter: brightness(0.98);
       }
 
-      .btn-ghost {
-        background: #131b28;
-        border-color: #2f3f56;
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        border-color: #0757a0;
+        color: #ffffff;
+      }
+
+      .btn-soft {
+        background: var(--primary-soft);
+        border-color: #b7d8f7;
+        color: #0b4e8f;
       }
 
       .btn-danger {
-        background: #3a171c;
-        border-color: #7f1d1d;
+        background: var(--danger-soft);
+        border-color: #f4b2bb;
+        color: var(--danger);
       }
 
-      .label {
-        display: block;
-        margin-bottom: 4px;
-        font-size: 11px;
-        color: var(--muted);
+      .btn-ghost {
+        background: #f6faff;
+        border-color: var(--line);
+        color: #335173;
       }
 
-      textarea {
-        min-height: 70px;
-        resize: vertical;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      }
-
-      .action-tabs {
-        display: flex;
+      .row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
-        margin: 10px 0;
-      }
-
-      .action-tab {
-        width: auto;
-        padding: 6px 10px;
-      }
-
-      .action-tab.active {
-        background: #14556a;
-        border-color: #2296aa;
-      }
-
-      .action-panel {
-        display: none;
-      }
-
-      .action-panel.active {
-        display: block;
+        margin-bottom: 10px;
       }
 
       .tool-param {
         margin-bottom: 8px;
       }
 
-      .quick-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px;
-      }
-
-      .quick-btn {
-        background: #122636;
-        border-color: #1f455b;
-        text-align: left;
-      }
-
-      .hint {
-        font-size: 11px;
+      .label {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
         color: var(--muted);
-        margin-bottom: 8px;
+        font-weight: 600;
       }
 
-      .result {
+      .action-result {
         margin-top: 10px;
       }
 
-      .result.error {
-        border-color: #7f1d1d;
-        color: #fecaca;
+      .action-result.error {
+        border-color: #ee9aa5;
+        background: #fff3f5;
+        color: #8b1622;
       }
 
-      @media (max-width: 740px) {
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 960px) {
         .shell {
           width: 100vw;
           height: 100vh;
@@ -290,13 +321,16 @@ export const PANEL_HTML = `<!doctype html>
           border-radius: 0;
         }
 
-        .grid-2,
-        .quick-grid {
+        .grid.two,
+        .row,
+        .quick-grid,
+        .tabs.perception-tabs,
+        .tabs.action-tabs {
           grid-template-columns: 1fr;
         }
 
         .kv {
-          grid-template-columns: 120px 1fr;
+          grid-template-columns: 140px 1fr;
         }
       }
     </style>
@@ -305,137 +339,210 @@ export const PANEL_HTML = `<!doctype html>
     <div class="shell">
       <div class="header">
         <div>
-          <h1 class="header-title">Agent Test Console</h1>
-          <p class="header-sub">DevTool-style remote panel for external-agent protocol</p>
+          <h1>Agent Test Console</h1>
+          <p>Perception and action surface for external-agent protocol</p>
         </div>
         <span id="connBadge" class="badge">control ws: connecting...</span>
       </div>
 
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="overview">Overview</button>
-        <button class="tab-btn" data-tab="uiSpec">UI Spec</button>
-        <button class="tab-btn" data-tab="history">Message History</button>
-        <button class="tab-btn" data-tab="schema">Tool Schema</button>
-        <button class="tab-btn" data-tab="events">Events</button>
-      </div>
+      <div class="main">
+        <section class="surface perception">
+          <div class="surface-header">
+            <h2>Perception</h2>
+            <p class="hint">What the agent can see right now</p>
+          </div>
 
-      <div class="content">
-        <section class="panel active" id="panel-overview">
-          <div class="panel-grid">
-            <div class="card">
-              <h3>Recognized State</h3>
-              <div id="recognizedState" class="kv"></div>
-            </div>
+          <div class="tabs perception-tabs">
+            <button class="tab-btn active" data-p-tab="uiSpec">UI Spec</button>
+            <button class="tab-btn" data-p-tab="schema">Tool Schema</button>
+            <button class="tab-btn" data-p-tab="history">Message History</button>
+            <button class="tab-btn" data-p-tab="status">Status</button>
+            <button class="tab-btn" data-p-tab="events">Events</button>
+          </div>
 
-            <div class="card">
-              <h3>Quick Select (from UI Spec visibleItems)</h3>
-              <p class="hint">Click to send <code>tool.call(select)</code> immediately.</p>
-              <div id="quickSelect" class="quick-grid"></div>
-            </div>
+          <div class="panel-wrap">
+            <section class="panel active" id="p-panel-uiSpec">
+              <pre id="uiSpecRaw" class="mono"></pre>
+            </section>
 
-            <div class="card">
-              <h3>Raw Status</h3>
-              <pre id="statusRaw" class="mono"></pre>
-            </div>
+            <section class="panel" id="p-panel-schema">
+              <pre id="schemaRaw" class="mono"></pre>
+            </section>
+
+            <section class="panel" id="p-panel-history">
+              <pre id="historyRaw" class="mono"></pre>
+            </section>
+
+            <section class="panel" id="p-panel-status">
+              <div class="grid two">
+                <div class="card">
+                  <h3>Recognized State</h3>
+                  <div id="recognizedState" class="kv"></div>
+                </div>
+                <div class="card">
+                  <h3>Raw Status</h3>
+                  <pre id="statusRaw" class="mono"></pre>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel" id="p-panel-events">
+              <pre id="eventsRaw" class="mono"></pre>
+            </section>
           </div>
         </section>
 
-        <section class="panel" id="panel-uiSpec">
-          <pre id="uiSpecRaw" class="mono"></pre>
-        </section>
-
-        <section class="panel" id="panel-history">
-          <pre id="historyRaw" class="mono"></pre>
-        </section>
-
-        <section class="panel" id="panel-schema">
-          <pre id="schemaRaw" class="mono"></pre>
-        </section>
-
-        <section class="panel" id="panel-events">
-          <pre id="eventsRaw" class="mono"></pre>
-        </section>
-      </div>
-
-      <div class="actions">
-        <div class="actions-header">
-          <h3>Agent Actions</h3>
-          <span class="hint">Session + tool + message</span>
-        </div>
-
-        <div class="actions-body">
-          <div class="grid-2" style="margin-bottom: 8px;">
-            <button id="btnReconnect" class="btn-ghost">Relay Reconnect</button>
-            <button id="btnSnapshot" class="btn-ghost">Snapshot Get</button>
+        <section class="surface action">
+          <div class="surface-header">
+            <h2>Action</h2>
+            <button id="btnSessionEnd" class="btn-danger" style="width: auto; padding: 8px 12px;">Session End</button>
           </div>
 
-          <div class="grid-2" style="margin-bottom: 8px;">
-            <button id="btnSessionStart" class="btn-ghost">Session Start</button>
-            <button id="btnSessionEnd" class="btn-danger">Session End</button>
+          <div class="tabs action-tabs">
+            <button class="tab-btn active" data-a-tab="interaction">GUI Interaction</button>
+            <button class="tab-btn" data-a-tab="modification">GUI Modification</button>
+            <button id="actionTabMessage" class="tab-btn" data-a-tab="message">Post Message</button>
           </div>
 
-          <div class="grid-2" style="margin-bottom: 10px;">
-            <button id="btnToolNext" class="btn-ghost">Tool: next</button>
-            <button id="btnToolPrev" class="btn-ghost">Tool: prev</button>
+          <div class="panel-wrap">
+            <section class="panel active" id="a-panel-interaction">
+              <p class="hint">Only tools currently allowed in tool schema are shown.</p>
+
+              <div id="interactionEmpty" class="card hidden">
+                <p class="hint" style="margin: 0;">No GUI interaction tools are currently available.</p>
+              </div>
+
+              <div id="interactionRowNextPrev" class="row hidden">
+                <button id="btnToolNext" class="btn-soft">next</button>
+                <button id="btnToolPrev" class="btn-soft">prev</button>
+              </div>
+
+              <div id="interactionSelectSection" class="card hidden" style="margin-bottom: 10px;">
+                <h3 style="margin-bottom: 6px;">select</h3>
+                <p class="hint">Click an item to send <code>tool.call(select)</code>.</p>
+                <div id="quickSelect" class="quick-grid"></div>
+              </div>
+
+              <div id="interactionSetQtySection" class="card hidden">
+                <h3 style="margin-bottom: 6px;">setQuantity</h3>
+                <div class="tool-param">
+                  <label class="label" for="setQuantityTypeId">typeId</label>
+                  <input id="setQuantityTypeId" placeholder="ticket type id" />
+                </div>
+                <div class="tool-param">
+                  <label class="label" for="setQuantityQty">quantity</label>
+                  <input id="setQuantityQty" type="number" min="0" step="1" value="1" />
+                </div>
+                <button id="btnSetQuantity" class="btn-primary">Apply setQuantity</button>
+              </div>
+            </section>
+
+            <section class="panel" id="a-panel-modification">
+              <p class="hint">Only modification tools currently allowed in tool schema are shown.</p>
+
+              <div id="modEmpty" class="card hidden">
+                <p class="hint" style="margin: 0;">No GUI modification tools are currently available.</p>
+              </div>
+
+              <div id="modMain" class="hidden">
+                <div class="tool-param">
+                  <label class="label" for="modToolName">Tool</label>
+                  <select id="modToolName"></select>
+                </div>
+
+                <div class="tool-param">
+                  <label class="label" for="modReason">Reason</label>
+                  <input id="modReason" value="Manual GUI modification from agent-test console" />
+                </div>
+
+                <div id="modParamsWrap"></div>
+
+                <button id="btnApplyModification" class="btn-primary">Apply Modification</button>
+              </div>
+
+              <div id="clearModSection" class="card hidden" style="margin-top: 10px;">
+                <h3 style="margin-bottom: 6px;">clearModification</h3>
+                <div class="row" style="margin-bottom: 8px;">
+                  <select id="clearModType">
+                    <option value="all">all</option>
+                    <option value="filter">filter</option>
+                    <option value="sort">sort</option>
+                    <option value="highlight">highlight</option>
+                    <option value="augment">augment</option>
+                  </select>
+                  <button id="btnClearModification" class="btn-soft">Clear</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel" id="a-panel-message">
+              <p class="hint">Post explanation or intent to the chat timeline.</p>
+              <p id="messageUnavailableHint" class="hint hidden">Tool <code>postMessage</code> is not currently available.</p>
+              <div class="tool-param">
+                <label class="label" for="agentMessageText">Message</label>
+                <textarea id="agentMessageText" placeholder="I selected a movie and will proceed to theater selection."></textarea>
+              </div>
+              <button id="btnSendMessage" class="btn-primary">Send agent.message</button>
+            </section>
+
+            <pre id="actionResult" class="mono action-result"></pre>
           </div>
-
-          <div class="action-tabs">
-            <button class="action-tab active" data-action-mode="tool">Tool Call</button>
-            <button class="action-tab" data-action-mode="message">Agent Message</button>
-          </div>
-
-          <section class="action-panel active" id="action-panel-tool">
-            <label class="label" for="toolName">Tool</label>
-            <select id="toolName"></select>
-
-            <label class="label" for="toolReason">Reason</label>
-            <input id="toolReason" value="Manual tool call from agent-test console" />
-
-            <div id="toolParamsWrap"></div>
-
-            <button id="btnToolApply">Apply Tool</button>
-          </section>
-
-          <section class="action-panel" id="action-panel-message">
-            <label class="label" for="agentMessageText">Text</label>
-            <textarea id="agentMessageText" placeholder="I will select a date to narrow showtimes."></textarea>
-            <button id="btnSendMessage">Send agent.message</button>
-          </section>
-
-          <pre id="actionResult" class="mono result"></pre>
-        </div>
+        </section>
       </div>
     </div>
 
     <script>
       (function () {
-        const $ = function (id) {
+        var $ = function (id) {
           return document.getElementById(id);
         };
 
-        const connBadgeEl = $('connBadge');
-        const statusRawEl = $('statusRaw');
-        const recognizedStateEl = $('recognizedState');
-        const quickSelectEl = $('quickSelect');
-        const uiSpecRawEl = $('uiSpecRaw');
-        const historyRawEl = $('historyRaw');
-        const schemaRawEl = $('schemaRaw');
-        const eventsRawEl = $('eventsRaw');
-        const actionResultEl = $('actionResult');
+        var connBadgeEl = $('connBadge');
+        var statusRawEl = $('statusRaw');
+        var recognizedStateEl = $('recognizedState');
+        var uiSpecRawEl = $('uiSpecRaw');
+        var historyRawEl = $('historyRaw');
+        var schemaRawEl = $('schemaRaw');
+        var eventsRawEl = $('eventsRaw');
+        var quickSelectEl = $('quickSelect');
 
-        const toolNameEl = $('toolName');
-        const toolReasonEl = $('toolReason');
-        const toolParamsWrapEl = $('toolParamsWrap');
-        const agentMessageTextEl = $('agentMessageText');
+        var actionResultEl = $('actionResult');
+        var btnSessionEndEl = $('btnSessionEnd');
 
-        let ws = null;
-        let seq = 0;
-        let status = {};
-        let snapshot = null;
-        let events = [];
-        let toolParamValues = {};
+        var btnToolNextEl = $('btnToolNext');
+        var btnToolPrevEl = $('btnToolPrev');
+        var btnSetQuantityEl = $('btnSetQuantity');
+        var setQuantityTypeIdEl = $('setQuantityTypeId');
+        var setQuantityQtyEl = $('setQuantityQty');
 
-        const pendingReplies = new Map();
+        var modToolNameEl = $('modToolName');
+        var modReasonEl = $('modReason');
+        var modParamsWrapEl = $('modParamsWrap');
+        var btnApplyModificationEl = $('btnApplyModification');
+        var clearModTypeEl = $('clearModType');
+        var btnClearModificationEl = $('btnClearModification');
+
+        var agentMessageTextEl = $('agentMessageText');
+        var btnSendMessageEl = $('btnSendMessage');
+        var actionTabMessageEl = $('actionTabMessage');
+        var messageUnavailableHintEl = $('messageUnavailableHint');
+
+        var interactionEmptyEl = $('interactionEmpty');
+        var interactionRowNextPrevEl = $('interactionRowNextPrev');
+        var interactionSelectSectionEl = $('interactionSelectSection');
+        var interactionSetQtySectionEl = $('interactionSetQtySection');
+
+        var modEmptyEl = $('modEmpty');
+        var modMainEl = $('modMain');
+        var clearModSectionEl = $('clearModSection');
+
+        var ws = null;
+        var seq = 0;
+        var status = {};
+        var snapshot = null;
+        var events = [];
+
+        var modParamValues = {};
 
         function nextId(prefix) {
           seq += 1;
@@ -469,89 +576,127 @@ export const PANEL_HTML = `<!doctype html>
         function setConnectionBadge(text, ok) {
           connBadgeEl.textContent = text;
           if (ok) {
-            connBadgeEl.style.background = '#08323a';
-            connBadgeEl.style.borderColor = '#0f766e';
-            connBadgeEl.style.color = '#8ef7ea';
+            connBadgeEl.style.background = 'var(--ok-soft)';
+            connBadgeEl.style.borderColor = '#8fdfc2';
+            connBadgeEl.style.color = 'var(--ok)';
           } else {
-            connBadgeEl.style.background = '#3a171c';
-            connBadgeEl.style.borderColor = '#7f1d1d';
-            connBadgeEl.style.color = '#fecaca';
+            connBadgeEl.style.background = 'var(--danger-soft)';
+            connBadgeEl.style.borderColor = '#efb6bd';
+            connBadgeEl.style.color = 'var(--danger)';
           }
         }
 
         function getUiSpec() {
-          const snap = asObj(snapshot);
+          var snap = asObj(snapshot);
           if (!snap) return null;
           return snap.uiSpec || null;
         }
 
         function getMessageHistory() {
-          const snap = asObj(snapshot);
+          var snap = asObj(snapshot);
           if (!snap) return [];
           return asArray(snap.messageHistory);
         }
 
         function getToolSchema() {
-          const snap = asObj(snapshot);
+          var snap = asObj(snapshot);
           if (!snap) return [];
           return asArray(snap.toolSchema);
         }
 
-        function setActiveTab(tabName) {
-          const buttons = document.querySelectorAll('[data-tab]');
-          const panels = document.querySelectorAll('.panel');
+        function findToolDefinition(toolName) {
+          var schema = getToolSchema();
+          for (var i = 0; i < schema.length; i += 1) {
+            var def = asObj(schema[i]);
+            if (!def || typeof def.name !== 'string') continue;
+            if (def.name === toolName) return def;
+          }
+          return null;
+        }
 
-          buttons.forEach(function (btn) {
-            btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+        function hasTool(toolName) {
+          return Boolean(findToolDefinition(toolName));
+        }
+
+        function setActivePerceptionTab(tabName) {
+          document.querySelectorAll('[data-p-tab]').forEach(function (btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-p-tab') === tabName);
           });
 
-          panels.forEach(function (panel) {
-            panel.classList.toggle('active', panel.id === 'panel-' + tabName);
+          document.querySelectorAll('[id^="p-panel-"]').forEach(function (panel) {
+            panel.classList.toggle('active', panel.id === 'p-panel-' + tabName);
           });
         }
 
-        function setActiveActionMode(mode) {
-          const buttons = document.querySelectorAll('[data-action-mode]');
-          const panels = document.querySelectorAll('.action-panel');
-
-          buttons.forEach(function (btn) {
-            btn.classList.toggle('active', btn.getAttribute('data-action-mode') === mode);
+        function setActiveActionTab(tabName) {
+          document.querySelectorAll('[data-a-tab]').forEach(function (btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-a-tab') === tabName);
           });
 
-          panels.forEach(function (panel) {
-            panel.classList.toggle('active', panel.id === 'action-panel-' + mode);
+          document.querySelectorAll('[id^="a-panel-"]').forEach(function (panel) {
+            panel.classList.toggle('active', panel.id === 'a-panel-' + tabName);
           });
         }
 
-        function renderRawViews() {
-          statusRawEl.textContent = toJson(status || {});
-          uiSpecRawEl.textContent = toJson(getUiSpec());
-          historyRawEl.textContent = toJson(getMessageHistory());
-          schemaRawEl.textContent = toJson(getToolSchema());
-          eventsRawEl.textContent = toJson(events.slice(-120));
+        function setActionResult(payload, isError) {
+          actionResultEl.classList.toggle('error', Boolean(isError));
+          actionResultEl.textContent = toJson(payload);
         }
 
-        function renderRecognizedState() {
-          const uiSpec = asObj(getUiSpec());
-          const state = asObj(uiSpec ? uiSpec.state : null);
-          const selected = asObj(state ? state.selected : null);
-          const selectedList = state ? asArray(state.selectedList) : [];
-          const visibleItems = uiSpec ? asArray(uiSpec.visibleItems) : [];
-          const quantities = state ? asArray(state.quantities) : [];
-          const messageHistory = getMessageHistory();
-          const toolSchema = getToolSchema();
+        function sendControl(type, payload) {
+          if (!ws || ws.readyState !== WebSocket.OPEN) {
+            throw new Error('control ws is not connected');
+          }
 
-          let ticketTotal = 0;
+          var id = nextId('c');
+          ws.send(JSON.stringify({ type: type, id: id, payload: payload || {} }));
+          return id;
+        }
+
+        function sendToolCall(toolName, params, reason) {
+          return sendControl('tool.call', {
+            toolName: toolName,
+            params: params || {},
+            reason: reason || 'Manual tool call from agent-test console',
+          });
+        }
+
+        function parseArrayInput(raw) {
+          try {
+            var parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed;
+          } catch (_) {
+            // ignore
+          }
+
+          return String(raw)
+            .split(',')
+            .map(function (v) {
+              return v.trim();
+            })
+            .filter(Boolean);
+        }
+
+        function renderPerception() {
+          var uiSpec = asObj(getUiSpec());
+          var state = asObj(uiSpec ? uiSpec.state : null);
+          var selected = asObj(state ? state.selected : null);
+          var selectedList = state ? asArray(state.selectedList) : [];
+          var visibleItems = uiSpec ? asArray(uiSpec.visibleItems) : [];
+          var quantities = state ? asArray(state.quantities) : [];
+          var messageHistory = getMessageHistory();
+          var toolSchema = getToolSchema();
+
+          var ticketTotal = 0;
           quantities.forEach(function (entry) {
-            const row = asObj(entry);
+            var row = asObj(entry);
             if (!row) return;
-            const count = row.count;
-            if (typeof count === 'number' && Number.isFinite(count)) {
-              ticketTotal += count;
+            if (typeof row.count === 'number' && Number.isFinite(row.count)) {
+              ticketTotal += row.count;
             }
           });
 
-          const rows = [
+          var rows = [
             ['Relay Connected', status && status.connected ? 'yes' : 'no'],
             ['Relay Joined', status && status.joined ? 'yes' : 'no'],
             ['UISpec', uiSpec ? 'detected' : 'none'],
@@ -572,148 +717,125 @@ export const PANEL_HTML = `<!doctype html>
 
           recognizedStateEl.innerHTML = rows
             .map(function (row) {
-              return (
-                '<div class="kv-key">' +
-                escapeHtml(row[0]) +
-                '</div><div>' +
-                escapeHtml(row[1]) +
-                '</div>'
-              );
+              return '<div class="kv-key">' + escapeHtml(row[0]) + '</div><div>' + escapeHtml(row[1]) + '</div>';
             })
             .join('');
 
+          statusRawEl.textContent = toJson(status || {});
+          uiSpecRawEl.textContent = toJson(getUiSpec());
+          schemaRawEl.textContent = toJson(getToolSchema());
+          historyRawEl.textContent = toJson(getMessageHistory());
+          eventsRawEl.textContent = toJson(events.slice(-150));
+        }
+
+        function renderQuickSelect() {
+          if (!hasTool('select')) {
+            quickSelectEl.innerHTML = '<p class="hint" style="margin:0;">Tool <code>select</code> is not available.</p>';
+            return;
+          }
+
+          var uiSpec = asObj(getUiSpec());
+          var visibleItems = uiSpec ? asArray(uiSpec.visibleItems) : [];
           if (visibleItems.length === 0) {
-            quickSelectEl.innerHTML = '<div class="hint">No visibleItems in current UISpec.</div>';
+            quickSelectEl.innerHTML = '<p class="hint" style="margin:0;">No visible items in current UI Spec.</p>';
             return;
           }
 
-          const buttons = visibleItems.slice(0, 10).map(function (item) {
-            const row = asObj(item);
-            if (!row || typeof row.id !== 'string') return null;
-            const label =
-              typeof row.value === 'string' && row.value.trim() ? row.value.trim() : row.id;
-            return (
-              '<button class="quick-btn" data-select-id="' +
-              escapeHtml(row.id) +
-              '">' +
-              escapeHtml(label) +
-              '</button>'
-            );
+          var html = visibleItems.slice(0, 14).map(function (item) {
+            var row = asObj(item);
+            if (!row || typeof row.id !== 'string') return '';
+            var label = typeof row.value === 'string' && row.value.trim() ? row.value.trim() : row.id;
+            return '<button class="btn-ghost" data-select-id="' + escapeHtml(row.id) + '">' + escapeHtml(label) + '</button>';
           });
 
-          quickSelectEl.innerHTML = buttons.filter(Boolean).join('');
+          quickSelectEl.innerHTML = html.join('');
         }
 
-        function findToolDefinition(toolName) {
-          const schema = getToolSchema();
-          for (let i = 0; i < schema.length; i += 1) {
-            const def = asObj(schema[i]);
-            if (!def) continue;
-            if (def.name === toolName) return def;
-          }
-          return null;
+        function getAvailableModificationTools() {
+          var all = ['filter', 'sort', 'highlight', 'augment'];
+          return all.filter(function (name) {
+            return hasTool(name);
+          });
         }
 
-        function refreshToolSelector() {
-          const schema = getToolSchema();
-          const current = toolNameEl.value;
+        function renderModToolSelector() {
+          var available = getAvailableModificationTools();
+          var current = modToolNameEl.value;
 
-          toolNameEl.innerHTML = '';
-
-          schema.forEach(function (tool) {
-            const def = asObj(tool);
-            if (!def || typeof def.name !== 'string') return;
-            const option = document.createElement('option');
-            option.value = def.name;
-            option.textContent = def.name;
-            toolNameEl.appendChild(option);
+          modToolNameEl.innerHTML = '';
+          available.forEach(function (name) {
+            var option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            modToolNameEl.appendChild(option);
           });
 
-          if (current && findToolDefinition(current)) {
-            toolNameEl.value = current;
-          } else if (toolNameEl.options.length > 0) {
-            toolNameEl.value = toolNameEl.options[0].value;
-            toolParamValues = {};
+          if (current && available.indexOf(current) !== -1) {
+            modToolNameEl.value = current;
+          } else if (available.length > 0) {
+            modToolNameEl.value = available[0];
+            modParamValues = {};
           }
 
-          renderToolParams();
+          renderModParams();
         }
 
-        function parseArrayInput(raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) return parsed;
-          } catch (_) {
-            // ignore
-          }
+        function renderModParams() {
+          modParamsWrapEl.innerHTML = '';
 
-          return String(raw)
-            .split(',')
-            .map(function (v) {
-              return v.trim();
-            })
-            .filter(Boolean);
-        }
+          var toolName = modToolNameEl.value;
+          if (!toolName) return;
 
-        function renderToolParams() {
-          toolParamsWrapEl.innerHTML = '';
+          var toolDef = findToolDefinition(toolName);
+          var params = asObj(toolDef ? toolDef.parameters : null);
 
-          const selectedTool = toolNameEl.value;
-          const toolDef = findToolDefinition(selectedTool);
-          const parameters = asObj(toolDef ? toolDef.parameters : null);
-
-          if (!parameters || Object.keys(parameters).length === 0) {
-            const hint = document.createElement('p');
-            hint.className = 'hint';
-            hint.textContent = 'This tool has no parameters.';
-            toolParamsWrapEl.appendChild(hint);
+          if (!params || Object.keys(params).length === 0) {
+            modParamsWrapEl.innerHTML = '<p class="hint">This tool has no parameters.</p>';
             return;
           }
 
-          Object.keys(parameters).forEach(function (paramName) {
-            const paramDef = asObj(parameters[paramName]) || {};
-            const type = typeof paramDef.type === 'string' ? paramDef.type : 'string';
-            const optional = Boolean(paramDef.optional);
-            const description =
-              typeof paramDef.description === 'string' ? paramDef.description : paramName;
-            const enumValues = asArray(paramDef.enum);
+          Object.keys(params).forEach(function (paramName) {
+            var paramDef = asObj(params[paramName]) || {};
+            var type = typeof paramDef.type === 'string' ? paramDef.type : 'string';
+            var optional = Boolean(paramDef.optional);
+            var description = typeof paramDef.description === 'string' ? paramDef.description : paramName;
+            var enumValues = asArray(paramDef.enum);
 
-            const wrapper = document.createElement('div');
+            var wrapper = document.createElement('div');
             wrapper.className = 'tool-param';
 
-            const label = document.createElement('label');
+            var label = document.createElement('label');
             label.className = 'label';
             label.textContent = paramName + (optional ? ' (optional)' : '');
             wrapper.appendChild(label);
 
-            let input;
-
+            var input;
             if (enumValues.length > 0) {
-              const select = document.createElement('select');
-              const empty = document.createElement('option');
+              var select = document.createElement('select');
+              var empty = document.createElement('option');
               empty.value = '';
               empty.textContent = 'Select...';
               select.appendChild(empty);
 
-              enumValues.forEach(function (v) {
-                const option = document.createElement('option');
-                option.value = String(v);
-                option.textContent = String(v);
+              enumValues.forEach(function (value) {
+                var option = document.createElement('option');
+                option.value = String(value);
+                option.textContent = String(value);
                 select.appendChild(option);
               });
 
-              select.value = toolParamValues[paramName] || '';
+              select.value = modParamValues[paramName] || '';
               input = select;
             } else if (type === 'array' || type === 'object') {
-              const textarea = document.createElement('textarea');
+              var textarea = document.createElement('textarea');
               textarea.placeholder = description;
-              textarea.value = toolParamValues[paramName] || '';
+              textarea.value = modParamValues[paramName] || '';
               input = textarea;
             } else {
-              const text = document.createElement('input');
+              var text = document.createElement('input');
               text.type = type === 'number' ? 'number' : 'text';
               text.placeholder = description;
-              text.value = toolParamValues[paramName] || '';
+              text.value = modParamValues[paramName] || '';
               input = text;
             }
 
@@ -721,31 +843,30 @@ export const PANEL_HTML = `<!doctype html>
             input.setAttribute('data-param-type', type);
             input.setAttribute('data-param-optional', optional ? 'true' : 'false');
             input.addEventListener('input', function (event) {
-              const target = event.target;
+              var target = event.target;
               if (!target) return;
-              toolParamValues[paramName] = target.value;
+              modParamValues[paramName] = target.value;
             });
 
             wrapper.appendChild(input);
-            toolParamsWrapEl.appendChild(wrapper);
+            modParamsWrapEl.appendChild(wrapper);
           });
         }
 
-        function collectToolParams() {
-          const selectedTool = toolNameEl.value;
-          const toolDef = findToolDefinition(selectedTool);
-          const parameters = asObj(toolDef ? toolDef.parameters : null);
-          const result = {};
+        function collectModParams() {
+          var toolName = modToolNameEl.value;
+          var toolDef = findToolDefinition(toolName);
+          var paramsDef = asObj(toolDef ? toolDef.parameters : null);
+          var result = {};
+          if (!paramsDef) return result;
 
-          if (!parameters) return result;
-
-          const names = Object.keys(parameters);
-          for (let i = 0; i < names.length; i += 1) {
-            const paramName = names[i];
-            const paramDef = asObj(parameters[paramName]) || {};
-            const type = typeof paramDef.type === 'string' ? paramDef.type : 'string';
-            const optional = Boolean(paramDef.optional);
-            const raw = toolParamValues[paramName];
+          var names = Object.keys(paramsDef);
+          for (var i = 0; i < names.length; i += 1) {
+            var paramName = names[i];
+            var paramDef = asObj(paramsDef[paramName]) || {};
+            var type = typeof paramDef.type === 'string' ? paramDef.type : 'string';
+            var optional = Boolean(paramDef.optional);
+            var raw = modParamValues[paramName];
 
             if ((raw === undefined || raw === '') && !optional) {
               throw new Error('Missing required parameter: ' + paramName);
@@ -754,11 +875,11 @@ export const PANEL_HTML = `<!doctype html>
             if (raw === undefined || raw === '') continue;
 
             if (type === 'number') {
-              const parsedNumber = Number(raw);
-              if (Number.isNaN(parsedNumber)) {
+              var parsedNum = Number(raw);
+              if (Number.isNaN(parsedNum)) {
                 throw new Error('Invalid number for parameter: ' + paramName);
               }
-              result[paramName] = parsedNumber;
+              result[paramName] = parsedNum;
               continue;
             }
 
@@ -787,44 +908,47 @@ export const PANEL_HTML = `<!doctype html>
           return result;
         }
 
-        function setActionResult(payload, isError) {
-          actionResultEl.classList.toggle('error', Boolean(isError));
-          actionResultEl.textContent = toJson(payload);
-        }
+        function renderAction() {
+          var hasNext = hasTool('next');
+          var hasPrev = hasTool('prev');
+          var hasSelect = hasTool('select');
+          var hasSetQuantity = hasTool('setQuantity');
+          var hasPostMessage = hasTool('postMessage');
 
-        function sendControl(type, payload, channel) {
-          if (!ws || ws.readyState !== WebSocket.OPEN) {
-            throw new Error('control ws is not connected');
+          interactionRowNextPrevEl.classList.toggle('hidden', !(hasNext || hasPrev));
+          btnToolNextEl.classList.toggle('hidden', !hasNext);
+          btnToolPrevEl.classList.toggle('hidden', !hasPrev);
+
+          interactionSelectSectionEl.classList.toggle('hidden', !hasSelect);
+          interactionSetQtySectionEl.classList.toggle('hidden', !hasSetQuantity);
+          interactionEmptyEl.classList.toggle('hidden', hasNext || hasPrev || hasSelect || hasSetQuantity);
+
+          var modTools = getAvailableModificationTools();
+          var hasClear = hasTool('clearModification');
+
+          modMainEl.classList.toggle('hidden', modTools.length === 0);
+          clearModSectionEl.classList.toggle('hidden', !hasClear);
+          modEmptyEl.classList.toggle('hidden', modTools.length > 0 || hasClear);
+
+          actionTabMessageEl.classList.toggle('hidden', !hasPostMessage);
+          messageUnavailableHintEl.classList.toggle('hidden', hasPostMessage);
+          btnSendMessageEl.disabled = !hasPostMessage;
+          agentMessageTextEl.disabled = !hasPostMessage;
+          if (!hasPostMessage && document.getElementById('a-panel-message').classList.contains('active')) {
+            setActiveActionTab('interaction');
           }
 
-          const id = nextId('c');
-          if (channel) pendingReplies.set(id, channel);
-          ws.send(JSON.stringify({ type: type, id: id, payload: payload || {} }));
-          return id;
-        }
-
-        function handleControlResponse(message, isError) {
-          const replyTo = message.replyTo;
-          if (replyTo) pendingReplies.delete(replyTo);
-
-          setActionResult(
-            {
-              type: message.type,
-              replyTo: replyTo || null,
-              payload: message.payload || {},
-            },
-            isError
-          );
+          renderQuickSelect();
+          renderModToolSelector();
         }
 
         function refreshAllViews() {
-          renderRawViews();
-          renderRecognizedState();
-          refreshToolSelector();
+          renderPerception();
+          renderAction();
         }
 
         function connect() {
-          const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+          var protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
           ws = new WebSocket(protocol + '://' + window.location.host + '/control/ws');
 
           ws.onopen = function () {
@@ -841,7 +965,7 @@ export const PANEL_HTML = `<!doctype html>
           };
 
           ws.onmessage = function (event) {
-            let message;
+            var message;
             try {
               message = JSON.parse(event.data);
             } catch (_) {
@@ -858,10 +982,7 @@ export const PANEL_HTML = `<!doctype html>
 
             if (message.type === 'control.state') {
               status = message.payload && message.payload.status ? message.payload.status : status;
-              if (
-                message.payload &&
-                Object.prototype.hasOwnProperty.call(message.payload, 'snapshot')
-              ) {
+              if (message.payload && Object.prototype.hasOwnProperty.call(message.payload, 'snapshot')) {
                 snapshot = message.payload.snapshot;
               }
               refreshAllViews();
@@ -875,174 +996,184 @@ export const PANEL_HTML = `<!doctype html>
             }
 
             if (message.type === 'control.event') {
-              const eventItem = message.payload ? message.payload.event : null;
-              if (eventItem) {
-                events.push(eventItem);
-                if (events.length > 300) events = events.slice(-300);
+              var item = message.payload ? message.payload.event : null;
+              if (item) {
+                events.push(item);
+                if (events.length > 500) {
+                  events = events.slice(-500);
+                }
               }
-              renderRawViews();
-              renderRecognizedState();
+              renderPerception();
               return;
             }
 
             if (message.type === 'control.result') {
-              handleControlResponse(message, false);
+              setActionResult(
+                {
+                  type: message.type,
+                  replyTo: message.replyTo || null,
+                  payload: message.payload || {},
+                },
+                false
+              );
+              refreshAllViews();
               return;
             }
 
             if (message.type === 'control.error') {
-              handleControlResponse(message, true);
+              setActionResult(
+                {
+                  type: message.type,
+                  replyTo: message.replyTo || null,
+                  payload: message.payload || {},
+                },
+                true
+              );
+              refreshAllViews();
             }
           };
         }
 
-        document.querySelectorAll('[data-tab]').forEach(function (button) {
+        document.querySelectorAll('[data-p-tab]').forEach(function (button) {
           button.addEventListener('click', function () {
-            const tab = button.getAttribute('data-tab');
+            var tab = button.getAttribute('data-p-tab');
             if (!tab) return;
-            setActiveTab(tab);
+            setActivePerceptionTab(tab);
           });
         });
 
-        document.querySelectorAll('[data-action-mode]').forEach(function (button) {
+        document.querySelectorAll('[data-a-tab]').forEach(function (button) {
           button.addEventListener('click', function () {
-            const mode = button.getAttribute('data-action-mode');
-            if (!mode) return;
-            setActiveActionMode(mode);
+            var tab = button.getAttribute('data-a-tab');
+            if (!tab) return;
+            setActiveActionTab(tab);
           });
-        });
-
-        toolNameEl.addEventListener('change', function () {
-          toolParamValues = {};
-          renderToolParams();
         });
 
         quickSelectEl.addEventListener('click', function (event) {
-          const target = event.target;
+          var target = event.target;
           if (!target || !target.getAttribute) return;
 
-          const itemId = target.getAttribute('data-select-id');
+          var itemId = target.getAttribute('data-select-id');
           if (!itemId) return;
 
           try {
-            sendControl(
-              'tool.call',
-              {
-                toolName: 'select',
-                reason: 'Quick select from recognized visibleItems',
-                params: { itemId: itemId },
-              },
-              'quick-select'
-            );
+            if (!hasTool('select')) {
+              throw new Error('Tool select is not currently available.');
+            }
+            sendToolCall('select', { itemId: itemId }, 'Quick select from UI Spec visibleItems');
           } catch (error) {
             setActionResult({ error: String(error) }, true);
           }
         });
 
-        $('btnReconnect').addEventListener('click', function () {
+        modToolNameEl.addEventListener('change', function () {
+          modParamValues = {};
+          renderModParams();
+        });
+
+        btnToolNextEl.addEventListener('click', function () {
           try {
-            sendControl('relay.reconnect', {}, 'relay');
+            if (!hasTool('next')) {
+              throw new Error('Tool next is not currently available.');
+            }
+            sendToolCall('next', {}, 'Quick interaction: next');
           } catch (error) {
             setActionResult({ error: String(error) }, true);
           }
         });
 
-        $('btnSnapshot').addEventListener('click', function () {
+        btnToolPrevEl.addEventListener('click', function () {
           try {
-            sendControl('snapshot.get', {}, 'snapshot');
+            if (!hasTool('prev')) {
+              throw new Error('Tool prev is not currently available.');
+            }
+            sendToolCall('prev', {}, 'Quick interaction: prev');
           } catch (error) {
             setActionResult({ error: String(error) }, true);
           }
         });
 
-        $('btnSessionStart').addEventListener('click', function () {
+        btnSetQuantityEl.addEventListener('click', function () {
           try {
-            sendControl('session.start', { studyId: 'manual', participantId: 'manual' }, 'session-start');
-          } catch (error) {
-            setActionResult({ error: String(error) }, true);
-          }
-        });
-
-        $('btnSessionEnd').addEventListener('click', function () {
-          try {
-            sendControl('session.end', { reason: 'manual-stop' }, 'session-end');
-          } catch (error) {
-            setActionResult({ error: String(error) }, true);
-          }
-        });
-
-        $('btnToolNext').addEventListener('click', function () {
-          try {
-            sendControl(
-              'tool.call',
-              {
-                toolName: 'next',
-                reason: 'Quick action next from agent-test console',
-                params: {},
-              },
-              'quick-next'
-            );
-          } catch (error) {
-            setActionResult({ error: String(error) }, true);
-          }
-        });
-
-        $('btnToolPrev').addEventListener('click', function () {
-          try {
-            sendControl(
-              'tool.call',
-              {
-                toolName: 'prev',
-                reason: 'Quick action prev from agent-test console',
-                params: {},
-              },
-              'quick-prev'
-            );
-          } catch (error) {
-            setActionResult({ error: String(error) }, true);
-          }
-        });
-
-        $('btnToolApply').addEventListener('click', function () {
-          try {
-            const toolName = toolNameEl.value;
-            if (!toolName) {
-              throw new Error('No tool selected');
+            if (!hasTool('setQuantity')) {
+              throw new Error('Tool setQuantity is not currently available.');
             }
 
-            const params = collectToolParams();
-            const reason =
-              toolReasonEl.value && toolReasonEl.value.trim()
-                ? toolReasonEl.value.trim()
-                : 'Manual tool call from agent-test console';
+            var typeId = setQuantityTypeIdEl.value && setQuantityTypeIdEl.value.trim();
+            if (!typeId) throw new Error('typeId is required');
 
-            sendControl(
-              'tool.call',
-              {
-                toolName: toolName,
-                reason: reason,
-                params: params,
-              },
-              'tool-apply'
-            );
+            var quantity = Number(setQuantityQtyEl.value);
+            if (!Number.isInteger(quantity) || quantity < 0) {
+              throw new Error('quantity must be an integer >= 0');
+            }
+
+            sendToolCall('setQuantity', { typeId: typeId, quantity: quantity }, 'GUI interaction: setQuantity');
           } catch (error) {
             setActionResult({ error: String(error) }, true);
           }
         });
 
-        $('btnSendMessage').addEventListener('click', function () {
+        btnApplyModificationEl.addEventListener('click', function () {
           try {
-            const text = agentMessageTextEl.value && agentMessageTextEl.value.trim();
+            var toolName = modToolNameEl.value;
+            if (!toolName) {
+              throw new Error('No modification tool selected.');
+            }
+            if (!hasTool(toolName)) {
+              throw new Error('Tool ' + toolName + ' is not currently available.');
+            }
+
+            var params = collectModParams();
+            var reason = modReasonEl.value && modReasonEl.value.trim()
+              ? modReasonEl.value.trim()
+              : 'Manual GUI modification from agent-test console';
+
+            sendToolCall(toolName, params, reason);
+          } catch (error) {
+            setActionResult({ error: String(error) }, true);
+          }
+        });
+
+        btnClearModificationEl.addEventListener('click', function () {
+          try {
+            if (!hasTool('clearModification')) {
+              throw new Error('Tool clearModification is not currently available.');
+            }
+
+            var type = clearModTypeEl.value || 'all';
+            sendToolCall('clearModification', { type: type }, 'Clear GUI modification');
+          } catch (error) {
+            setActionResult({ error: String(error) }, true);
+          }
+        });
+
+        btnSendMessageEl.addEventListener('click', function () {
+          try {
+            if (!hasTool('postMessage')) {
+              throw new Error('Tool postMessage is not currently available.');
+            }
+            var text = agentMessageTextEl.value && agentMessageTextEl.value.trim();
             if (!text) {
               throw new Error('Message text is empty');
             }
 
-            sendControl('agent.message', { text: text }, 'agent-message');
+            sendToolCall('postMessage', { text: text }, 'Post message to chat timeline');
           } catch (error) {
             setActionResult({ error: String(error) }, true);
           }
         });
 
+        btnSessionEndEl.addEventListener('click', function () {
+          try {
+            sendControl('session.end', { reason: 'manual-stop' });
+          } catch (error) {
+            setActionResult({ error: String(error) }, true);
+          }
+        });
+
+        setActivePerceptionTab('uiSpec');
+        setActiveActionTab('interaction');
         refreshAllViews();
         connect();
       })();

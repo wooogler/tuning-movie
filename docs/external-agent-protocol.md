@@ -172,6 +172,7 @@ Ends the session, flushes logs, resets UI state.
 
 #### `snapshot.state`
 Contains only allowed read surfaces.
+`toolSchema` is stage-aware and contains only currently available tools.
 
 ```json
 {
@@ -300,7 +301,9 @@ Required fields:
 ## 7. Implementation Mapping
 
 Current host integration points:
-- Tool schema source: `apps/frontend/src/agent/tools.ts`
+- Tool schema definition source: `apps/frontend/src/agent/tools.ts`
+- Tool schema stage filter source: `apps/frontend/src/pages/ChatPage.tsx`
+- Tool schema enforcement source: `apps/frontend/src/hooks/useAgentBridge.ts`
 - Tool execution entry: `apps/frontend/src/hooks/useToolHandler.ts`
 - Visible state source (`uiSpec`): `apps/frontend/src/components/DevToolsContext.tsx`
 - Chat state source (`messageHistory`): `apps/frontend/src/store/chatStore.ts`

@@ -226,7 +226,7 @@ To change the API URL for the frontend, create a `.env` file:
 ```bash
 # apps/frontend/.env
 VITE_API_URL=http://localhost:3000
-VITE_AGENT_WS_URL=/agent/ws
+VITE_AGENT_WS_URL=ws://localhost:3000/agent/ws
 VITE_AGENT_SESSION_ID=default
 ```
 
@@ -263,6 +263,7 @@ The prototype supports an external agent server through a WebSocket protocol.
 - Transport: single WebSocket endpoint (`/agent/ws`)
 - Read scope: `uiSpec`, `messageHistory`, `toolSchema`
 - Write scope: `tool.call`, `agent.message`
+- `toolSchema` is filtered by current stage/state (e.g. no `prev` at first stage)
 - User chat input is forwarded to the agent via `user.message`
 - Excluded from external snapshots: `backendData`
 - Session end behavior: reset state (study logs are optional and off by default)
