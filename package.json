@@ -6,12 +6,16 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=apps/backend & npm run dev --workspace=apps/frontend",
+    "dev": "npm run dev:system",
+    "dev:system": "node scripts/dev-orchestrator.mjs system",
     "dev:backend": "npm run dev --workspace=apps/backend",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "dev:agent-test": "npm run dev --workspace=apps/agent-test",
+    "dev:all": "node scripts/dev-orchestrator.mjs all",
     "build": "npm run build --workspaces",
     "build:backend": "npm run build --workspace=apps/backend",
     "build:frontend": "npm run build --workspace=apps/frontend",
+    "build:agent-test": "npm run build --workspace=apps/agent-test",
     "db:seed": "npm run db:seed --workspace=apps/backend"
   },
   "devDependencies": {

@@ -55,7 +55,7 @@ cd tuning-movie
 npm install
 ```
 
-This command will automatically install all dependencies for the root, frontend, and backend.
+This command will automatically install all dependencies for the root and app workspaces (frontend, backend, agent-test).
 
 #### 3. Initialize the Database
 
@@ -78,15 +78,24 @@ cd ../..
 
 #### 4. Start Development Servers
 
-##### Option 1: Run Both Servers (Recommended)
+##### Option 1: Run System Only (Recommended for normal app dev)
 
 ```bash
 npm run dev
 ```
 
-This command runs both frontend and backend simultaneously.
+This runs backend + frontend together (`dev:system`).
 
-##### Option 2: Run Individually
+##### Option 2: Run System + External Agent Test Remote
+
+```bash
+npm run dev:all
+```
+
+This runs backend + frontend + `agent-test` together.
+Logs are prefixed with service labels (`[backend]`, `[frontend]`, `[agent-test]`) for easier tracing.
+
+##### Option 3: Run Individually
 
 **Backend only**
 ```bash
@@ -102,6 +111,7 @@ npm run dev:frontend
 
 Frontend: http://localhost:5173
 Backend API: http://localhost:3000
+Agent Test Remote: http://localhost:3400 (when running `dev:all` or `dev:agent-test`)
 
 ## 📁 Project Structure
 
@@ -118,12 +128,13 @@ tuning-movie/
 │   │   │   ├── store/     # Chat message store
 │   │   │   └── types/     # TypeScript types
 │   │   └── package.json
-│   └── backend/           # Fastify backend
+│   ├── backend/           # Fastify backend
 │       ├── src/
 │       │   ├── db/        # Database setup and schema
 │       │   ├── routes/    # API routes
 │       │   └── types/     # TypeScript types
 │       └── package.json
+│   └── agent-test/        # External agent test remote server
 ├── docs/                  # Project documentation
 ├── package.json           # Root package.json (monorepo setup)
 └── README.md
@@ -135,12 +146,16 @@ tuning-movie/
 
 **Root Level**
 ```bash
-npm run dev              # Run frontend + backend simultaneously
+npm run dev              # Alias of dev:system
+npm run dev:system       # Run frontend + backend together
+npm run dev:all          # Run frontend + backend + agent-test together
 npm run dev:frontend     # Run frontend only
 npm run dev:backend      # Run backend only
+npm run dev:agent-test   # Run external agent test remote
 npm run build            # Build entire project
 npm run build:frontend   # Build frontend only
 npm run build:backend    # Build backend only
+npm run build:agent-test # Build agent-test only
 ```
 
 **Backend (apps/backend)**
@@ -230,6 +245,15 @@ The backend loads `apps/backend/.env` automatically at startup and maps keys int
 PORT=3000 DATABASE_URL=tuning-movie.db npm run dev:backend
 ```
 
+### Agent Test Server
+
+```bash
+# apps/agent-test/.env (optional)
+AGENT_TEST_PORT=3400
+AGENT_RELAY_URL=ws://localhost:3000/agent/ws
+AGENT_SESSION_ID=default
+```
+
 ## 🤖 External Agent (Study MVP)
 
 The prototype supports an external agent server through a WebSocket protocol.
@@ -242,6 +266,14 @@ The prototype supports an external agent server through a WebSocket protocol.
 - Session end behavior: flush study logs and reset state
 
 See the canonical spec: [`docs/external-agent-protocol.md`](./docs/external-agent-protocol.md)
+
+For manual relay testing without frontend DevTool, run:
+
+```bash
+npm run dev:agent-test
+```
+
+Then open `http://localhost:3400`.
 
 ## 📚 Additional Documentation
 
