@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import http from 'node:http';
+import https from 'node:https';
 import process from 'node:process';
 
 const mode = process.argv[2] ?? 'all';
@@ -21,6 +23,11 @@ if (!Object.prototype.hasOwnProperty.call(COMMANDS_BY_MODE, mode)) {
   process.exit(1);
 }
 
+const BACKEND_HEALTH_URL = process.env.BACKEND_HEALTH_URL || 'http://localhost:3000/health';
+const BACKEND_HEALTH_TIMEOUT_MS = Number(process.env.BACKEND_HEALTH_TIMEOUT_MS || 30000);
+const BACKEND_HEALTH_INTERVAL_MS = Number(process.env.BACKEND_HEALTH_INTERVAL_MS || 400);
+const SINGLE_CHECK_TIMEOUT_MS = 1500;
+
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const definitions = COMMANDS_BY_MODE[mode];
 const children = [];
@@ -37,6 +44,46 @@ function prefixWrite(label, chunk, stream) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function checkHealthOnce(urlString, timeoutMs) {
+  return new Promise((resolve) => {
+    let url;
+    try {
+      url = new URL(urlString);
+    } catch {
+      resolve(false);
+      return;
+    }
+
+    const client = url.protocol === 'https:' ? https : http;
+    const req = client.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port,
+        path: `${url.pathname}${url.search}`,
+        method: 'GET',
+      },
+      (res) => {
+        const ok = (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300;
+        res.resume();
+        resolve(ok);
+      }
+    );
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      resolve(false);
+    });
+
+    req.on('error', () => resolve(false));
+    req.end();
+  });
+}
+
 function terminateAll(signal = 'SIGTERM') {
   if (isShuttingDown) return;
   isShuttingDown = true;
@@ -48,7 +95,9 @@ function terminateAll(signal = 'SIGTERM') {
   }
 }
 
-for (const { label, script } of definitions) {
+function spawnService(definition) {
+  const { label, script } = definition;
+
   const child = spawn(npmCmd, ['run', script], {
     stdio: ['inherit', 'pipe', 'pipe'],
     env: process.env,
@@ -85,8 +134,68 @@ for (const { label, script } of definitions) {
   });
 
   children.push(child);
+  return child;
+}
+
+async function waitForBackendReady(backendChild) {
+  const startedAt = Date.now();
+
+  while (!isShuttingDown) {
+    if (backendChild.exitCode !== null || backendChild.signalCode !== null) {
+      return false;
+    }
+
+    const isHealthy = await checkHealthOnce(BACKEND_HEALTH_URL, SINGLE_CHECK_TIMEOUT_MS);
+    if (isHealthy) {
+      return true;
+    }
+
+    if (Date.now() - startedAt >= BACKEND_HEALTH_TIMEOUT_MS) {
+      return false;
+    }
+
+    await sleep(BACKEND_HEALTH_INTERVAL_MS);
+  }
+
+  return false;
+}
+
+async function main() {
+  const [backendDefinition, ...rest] = definitions;
+
+  if (!backendDefinition || backendDefinition.label !== 'backend') {
+    console.error('[orchestrator] Backend definition must be first.');
+    process.exit(1);
+  }
+
+  const backendChild = spawnService(backendDefinition);
+
+  console.log(`[orchestrator] Waiting for backend health: ${BACKEND_HEALTH_URL}`);
+  const backendReady = await waitForBackendReady(backendChild);
+
+  if (!backendReady) {
+    if (!isShuttingDown) {
+      console.error(
+        `[orchestrator] Backend health check failed or timed out after ${BACKEND_HEALTH_TIMEOUT_MS}ms`
+      );
+      if (firstErrorCode === 0) firstErrorCode = 1;
+      terminateAll();
+    }
+    return;
+  }
+
+  console.log('[orchestrator] Backend is healthy. Starting remaining services...');
+
+  for (const definition of rest) {
+    spawnService(definition);
+  }
 }
 
 process.on('SIGINT', () => terminateAll('SIGINT'));
 process.on('SIGTERM', () => terminateAll('SIGTERM'));
 
+main().catch((error) => {
+  console.error(`[orchestrator] Fatal error: ${error instanceof Error ? error.message : String(error)}`);
+  if (firstErrorCode === 0) firstErrorCode = 1;
+  terminateAll();
+});

@@ -38,6 +38,7 @@ interface SessionState {
 const RELAY_VERSION = 'mvp-0.2';
 const DEFAULT_SESSION_ID = 'default';
 const LOG_DIR = path.resolve(process.cwd(), 'logs/study');
+const ENABLE_RELAY_LOGS = process.env.AGENT_RELAY_LOG_ENABLED === 'true';
 
 const AGENT_TO_HOST_TYPES = new Set([
   'session.start',
@@ -128,6 +129,8 @@ function appendSessionLog(
   type: string,
   payload: unknown
 ): void {
+  if (!ENABLE_RELAY_LOGS) return;
+
   const session = getOrCreateSession(sessionId);
   const entry = {
     sessionId,

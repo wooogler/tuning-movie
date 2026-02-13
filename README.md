@@ -94,6 +94,7 @@ npm run dev:all
 
 This runs backend + frontend + `agent-test` together.
 Logs are prefixed with service labels (`[backend]`, `[frontend]`, `[agent-test]`) for easier tracing.
+Startup is sequenced: backend launches first, then frontend/agent-test start only after backend health is ready.
 
 ##### Option 3: Run Individually
 
@@ -237,6 +238,7 @@ To configure backend runtime settings:
 # apps/backend/.env
 PORT=3000
 DATABASE_URL=tuning-movie.db
+AGENT_RELAY_LOG_ENABLED=false
 ```
 
 The backend loads `apps/backend/.env` automatically at startup and maps keys into `process.env`.
@@ -263,7 +265,7 @@ The prototype supports an external agent server through a WebSocket protocol.
 - Write scope: `tool.call`, `agent.message`
 - User chat input is forwarded to the agent via `user.message`
 - Excluded from external snapshots: `backendData`
-- Session end behavior: flush study logs and reset state
+- Session end behavior: reset state (study logs are optional and off by default)
 
 See the canonical spec: [`docs/external-agent-protocol.md`](./docs/external-agent-protocol.md)
 
