@@ -22,7 +22,12 @@ export interface UserMessage extends BaseMessage {
   label: string;
 }
 
-export type ChatMessage = SystemMessage | UserMessage;
+export interface AgentMessage extends BaseMessage {
+  type: 'agent';
+  text: string;
+}
+
+export type ChatMessage = SystemMessage | UserMessage | AgentMessage;
 
 // =============================================================================
 // Store State & Actions
@@ -40,6 +45,9 @@ interface ChatActions {
 
   /** Add user action message (selection or back) */
   addUserMessage: (stage: Stage, action: 'select' | 'back', label: string) => void;
+
+  /** Add agent explanation message */
+  addAgentMessage: (stage: Stage, text: string) => void;
 
   /** Update the active spec (for selections/modifications) */
   updateActiveSpec: (spec: UISpec) => void;
@@ -114,6 +122,20 @@ export const useChatStore = create<ChatState & ChatActions>((set) => ({
       stage,
       action,
       label,
+    };
+
+    set((state) => ({
+      messages: [...state.messages, message],
+    }));
+  },
+
+  addAgentMessage: (stage, text) => {
+    const message: AgentMessage = {
+      id: `agt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      type: 'agent',
+      timestamp: Date.now(),
+      stage,
+      text,
     };
 
     set((state) => ({

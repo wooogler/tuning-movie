@@ -122,6 +122,7 @@ export function ChatPage() {
   const activeSpec = useChatStore((s) => s.activeSpec);
   const addSystemMessage = useChatStore((s) => s.addSystemMessage);
   const addUserMessage = useChatStore((s) => s.addUserMessage);
+  const addAgentMessage = useChatStore((s) => s.addAgentMessage);
   const updateActiveSpec = useChatStore((s) => s.updateActiveSpec);
   const resetChat = useChatStore((s) => s.reset);
 
@@ -581,6 +582,10 @@ export function ChatPage() {
     setSpec: handleSetSpec,
     onNext: handleNext,
     onBack: handleBack,
+    onPostMessage: (text: string) => {
+      const stage = activeSpec?.stage ?? currentStage;
+      addAgentMessage(stage, text);
+    },
     multiSelect: currentStage === 'seat',
   });
 

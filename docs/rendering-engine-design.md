@@ -80,6 +80,7 @@ Behavior:
 - validates params (for example, augment payload shape, quantity constraints)
 - applies deterministic state updates
 - invokes stage navigation handlers for `next` / `prev`
+- supports `postMessage` for agent-side explanation messages in the chat timeline
 - updates active spec in both chat store and devtools context
 
 ## 7. Rendering Pipeline

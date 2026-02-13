@@ -140,6 +140,16 @@ export const interactionTools: ToolDefinition[] = [
     description: 'Go back to previous stage (current state is discarded)',
     parameters: {},
   },
+  {
+    name: 'postMessage',
+    description: 'Post an agent message to the chat timeline',
+    parameters: {
+      text: {
+        type: 'string',
+        description: 'Message content to display',
+      },
+    },
+  },
 ];
 
 /**
@@ -163,6 +173,7 @@ export const toolCategories: Record<string, 'modification' | 'interaction'> = {
   setQuantity: 'interaction',
   next: 'interaction',
   prev: 'interaction',
+  postMessage: 'interaction',
 };
 
 /**

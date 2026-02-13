@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useDevTools } from './devToolsContextShared';
-import { agentTools } from '../agent/tools';
+import { agentTools, toolCategories } from '../agent/tools';
 import type { ToolDefinition } from '../agent/tools';
 import type { UISpec } from '../spec';
 
@@ -18,7 +18,7 @@ export function DevTools() {
       <button
         onClick={() => setIsOpen(true)}
         className="fixed right-4 top-1/2 -translate-y-1/2 bg-dark-lighter text-white px-2 py-4 rounded-lg shadow-lg hover:bg-dark-border transition-colors z-50"
-        title="Open DevTools"
+        title="Open Agent Console"
       >
         &lt;
       </button>
@@ -33,7 +33,7 @@ export function DevTools() {
     >
       {/* Header */}
       <div className="bg-dark border-b border-dark-border p-3 flex items-center justify-between">
-        <h2 className="text-white font-semibold">DevTools</h2>
+        <h2 className="text-white font-semibold">Agent Console</h2>
         <div className="flex gap-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -93,7 +93,7 @@ export function DevTools() {
       {/* Agent Tools - Always visible at bottom */}
       <div className="border-t border-dark-border bg-dark">
         <div className="p-3 border-b border-dark-border">
-          <h3 className="text-white font-semibold text-sm">Agent Tools</h3>
+          <h3 className="text-white font-semibold text-sm">Agent Actions</h3>
         </div>
         <div className="p-4 max-h-80 overflow-auto">
           <AgentToolsPanel
@@ -307,7 +307,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
         >
           <optgroup label="Modification Tools">
             {tools
-              .filter((t) => ['filter', 'sort', 'highlight', 'augment', 'clearModification'].includes(t.name))
+              .filter((t) => toolCategories[t.name] === 'modification')
               .map((tool) => (
                 <option key={tool.name} value={tool.name}>
                   {tool.name}
@@ -316,7 +316,16 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
           </optgroup>
           <optgroup label="Interaction Tools">
             {tools
-              .filter((t) => ['select', 'setQuantity', 'next', 'prev'].includes(t.name))
+              .filter((t) => toolCategories[t.name] === 'interaction' && t.name !== 'postMessage')
+              .map((tool) => (
+                <option key={tool.name} value={tool.name}>
+                  {tool.name}
+                </option>
+              ))}
+          </optgroup>
+          <optgroup label="Message Actions">
+            {tools
+              .filter((t) => t.name === 'postMessage')
               .map((tool) => (
                 <option key={tool.name} value={tool.name}>
                   {tool.name}
@@ -361,6 +370,8 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
                       ? exampleIds.length > 0
                         ? JSON.stringify(exampleIds)
                         : '["id1", "id2"]'
+                      : currentTool.name === 'postMessage' && paramName === 'text'
+                      ? 'I will select a date next to narrow the options.'
                       : paramDef.type === 'array'
                       ? '["id1", "id2"]'
                       : '{ "key": "value" }'

@@ -3,6 +3,7 @@ import type { ChatMessage } from '../../store/chatStore';
 import type { UISpec } from '../../spec';
 import { SystemMessage } from './SystemMessage';
 import { UserMessage } from './UserMessage';
+import { AgentMessage } from './AgentMessage';
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -58,9 +59,13 @@ export function MessageList({
                 onConfirm={onConfirm}
               />
             );
-          } else {
+          }
+
+          if (message.type === 'user') {
             return <UserMessage key={message.id} message={message} />;
           }
+
+          return <AgentMessage key={message.id} message={message} />;
         })}
 
         {/* Empty state */}

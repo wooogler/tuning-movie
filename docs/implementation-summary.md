@@ -69,7 +69,7 @@ Tools are split into two classes:
 - Modification tools: transform data shown in the current stage
   - `filter`, `sort`, `highlight`, `augment`, `clearModification`
 - Interaction tools: drive stage progress
-  - `select`, `setQuantity`, `next`, `prev`
+  - `select`, `setQuantity`, `next`, `prev`, `postMessage`
 
 Source: `apps/frontend/src/agent/tools.ts`
 

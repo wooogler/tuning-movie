@@ -21,6 +21,7 @@ interface UseToolHandlerOptions<T extends DataItem> {
   setSpec: (spec: UISpec<T>) => void;
   onNext?: () => void;
   onBack?: () => void;
+  onPostMessage?: (text: string) => void;
   multiSelect?: boolean;
 }
 
@@ -29,6 +30,7 @@ export function useToolHandler<T extends DataItem>({
   setSpec,
   onNext,
   onBack,
+  onPostMessage,
   multiSelect = false,
 }: UseToolHandlerOptions<T>) {
   const { setUiSpec, setOnToolApply } = useDevTools();
@@ -106,6 +108,14 @@ export function useToolHandler<T extends DataItem>({
           case 'prev':
             onBack?.();
             return;
+          case 'postMessage': {
+            const text = params.text as string;
+            if (typeof text !== 'string' || !text.trim()) {
+              throw new Error('postMessage requires a non-empty "text" string');
+            }
+            onPostMessage?.(text.trim());
+            return;
+          }
           default:
             console.warn(`Unknown tool: ${toolName}`);
             return;
@@ -118,7 +128,7 @@ export function useToolHandler<T extends DataItem>({
         throw error; // Re-throw to let DevTools display the error
       }
     },
-    [spec, setSpec, setUiSpec, onNext, onBack, multiSelect]
+    [spec, setSpec, setUiSpec, onNext, onBack, onPostMessage, multiSelect]
   );
 
   // Register tool handler
