@@ -13,6 +13,10 @@ export default defineConfig({
       '/seats': 'http://localhost:3000',
       '/ticket-types': 'http://localhost:3000',
       '/bookings': 'http://localhost:3000',
+      '/agent/ws': {
+        target: 'ws://localhost:3000',
+        ws: true,
+      },
     },
   },
 })

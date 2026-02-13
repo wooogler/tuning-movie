@@ -6,6 +6,7 @@ interface UserMessageProps {
 
 export function UserMessage({ message }: UserMessageProps) {
   const isBack = message.action === 'back';
+  const isInput = message.action === 'input';
 
   return (
     <div className="flex gap-3 py-4 justify-end">
@@ -16,11 +17,13 @@ export function UserMessage({ message }: UserMessageProps) {
           className={`rounded-2xl px-4 py-2 ${
             isBack
               ? 'bg-gray-700 text-gray-300'
+              : isInput
+              ? 'bg-blue-600 text-white'
               : 'bg-primary text-dark'
           }`}
         >
           <span className="font-medium">{message.label}</span>
-          {!isBack && (
+          {message.action === 'select' && (
             <span className="ml-2">✓</span>
           )}
         </div>

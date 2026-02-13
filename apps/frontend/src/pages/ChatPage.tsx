@@ -27,7 +27,8 @@ import {
 } from '../spec';
 import { MessageList, ChatInput } from '../components/chat';
 import { StageRenderer } from '../renderer';
-import { useToolHandler } from '../hooks';
+import { useToolHandler, useAgentBridge } from '../hooks';
+import { agentTools } from '../agent/tools';
 import type { Movie, Theater, Showing, TicketType, Booking } from '../types';
 
 interface StageContext {
@@ -126,7 +127,7 @@ export function ChatPage() {
   const updateActiveSpec = useChatStore((s) => s.updateActiveSpec);
   const resetChat = useChatStore((s) => s.reset);
 
-  const { setBackendData, setUiSpec } = useDevTools();
+  const { setBackendData, setUiSpec, onToolApply } = useDevTools();
 
   const [movies, setMovies] = useState<Movie[]>([]);
   const [theaters, setTheaters] = useState<Theater[]>([]);
@@ -589,6 +590,37 @@ export function ChatPage() {
     multiSelect: currentStage === 'seat',
   });
 
+  const handleSessionReset = useCallback(() => {
+    resetChat();
+    setBooking(null);
+    initialized.current = false;
+    loadStageData('movie', { booking: {} });
+  }, [resetChat, loadStageData]);
+
+  const {
+    sendUserMessageToAgent,
+    isConnected: isAgentBridgeConnected,
+    isJoined: isAgentBridgeJoined,
+  } = useAgentBridge({
+    uiSpec: activeSpec,
+    messageHistory: messages,
+    toolSchema: agentTools,
+    onToolCall: onToolApply,
+    onAgentMessage: (text: string) => {
+      const stage = activeSpec?.stage ?? currentStage;
+      addAgentMessage(stage, text);
+    },
+    onSessionEnd: handleSessionReset,
+  });
+
+  const handleChatInputSubmit = useCallback(
+    (text: string) => {
+      addUserMessage(currentStage, 'input', text);
+      sendUserMessageToAgent(text, currentStage);
+    },
+    [addUserMessage, currentStage, sendUserMessageToAgent]
+  );
+
   const currentStep = STAGE_ORDER.indexOf(currentStage) + 1;
   const previousStage = getPrevStage(currentStage);
   const nextStage = getNextStage(currentStage);
@@ -823,10 +855,15 @@ export function ChatPage() {
       )}
 
       <ChatInput
-        disabled
+        disabled={!isAgentBridgeJoined}
+        onSubmit={handleChatInputSubmit}
         placeholder={
-          viewMode === 'chat'
-            ? 'Text input coming soon...'
+          !isAgentBridgeConnected
+            ? 'Waiting for agent relay connection...'
+            : !isAgentBridgeJoined
+            ? 'Joining agent session...'
+            : viewMode === 'chat'
+            ? 'Send a message to the external agent...'
             : 'Carousel mode: input is available here as well'
         }
       />

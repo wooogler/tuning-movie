@@ -113,6 +113,7 @@ MVP principles:
 - no concurrency/revision lock
 - external reads only: `uiSpec`, `messageHistory`, `toolSchema`
 - external writes: `tool.call` and `agent.message`
+- host forwards participant chat input to external agent via `user.message`
 - session end triggers log flush + state reset
 
 ## 10. Known Constraints

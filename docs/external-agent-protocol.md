@@ -15,6 +15,7 @@ This document defines how an external agent server connects to the host UI syste
 - External agent can perform:
   - `tool.call`
   - `agent.message` (display/log only)
+- External agent receives participant input through `user.message`.
 - Host saves session logs, then resets state when the session ends.
 
 ### Out of scope
@@ -48,6 +49,38 @@ Fields:
 - `payload` (object): type-specific body.
 
 ## 4. Message Types
+
+### 4.0 Connection Handshake
+
+Both host (frontend) and external agent must join a relay session first.
+
+#### `relay.join`
+
+```json
+{
+  "v": "mvp-0.2",
+  "type": "relay.join",
+  "id": "join-001",
+  "payload": {
+    "role": "agent",
+    "sessionId": "default"
+  }
+}
+```
+
+#### `relay.joined`
+
+```json
+{
+  "v": "mvp-0.2",
+  "type": "relay.joined",
+  "replyTo": "join-001",
+  "payload": {
+    "role": "agent",
+    "sessionId": "default"
+  }
+}
+```
 
 ### 4.1 Client -> Host
 
@@ -185,6 +218,20 @@ Push event when the host state changes (user action, stage load, tool applicatio
 }
 ```
 
+#### `user.message`
+Forwarded user text input from the host chat input to the external agent.
+
+```json
+{
+  "v": "mvp-0.2",
+  "type": "user.message",
+  "payload": {
+    "text": "I prefer evening showtimes.",
+    "stage": "time"
+  }
+}
+```
+
 #### `session.ended`
 
 ```json
@@ -257,5 +304,6 @@ Current host integration points:
 - Tool execution entry: `apps/frontend/src/hooks/useToolHandler.ts`
 - Visible state source (`uiSpec`): `apps/frontend/src/components/DevToolsContext.tsx`
 - Chat state source (`messageHistory`): `apps/frontend/src/store/chatStore.ts`
+- User input source (`user.message`): `apps/frontend/src/components/chat/ChatInput.tsx`
 
 `backendData` from the devtools context must not be serialized to external snapshots in this MVP.

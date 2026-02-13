@@ -3,12 +3,14 @@ import path from 'path';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import websocket from '@fastify/websocket';
 import { movieRoutes } from './routes/movies';
 import { theaterRoutes } from './routes/theaters';
 import { showingRoutes } from './routes/showings';
 import { seatRoutes } from './routes/seats';
 import { ticketRoutes } from './routes/tickets';
 import { bookingRoutes } from './routes/bookings';
+import { agentRelayRoutes } from './routes/agentRelay';
 
 const fastify = Fastify({
   logger: true,
@@ -19,6 +21,7 @@ const start = async () => {
     await fastify.register(cors, {
       origin: true,
     });
+    await fastify.register(websocket);
 
     // Register API routes
     await fastify.register(movieRoutes);
@@ -27,6 +30,7 @@ const start = async () => {
     await fastify.register(seatRoutes);
     await fastify.register(ticketRoutes);
     await fastify.register(bookingRoutes);
+    await fastify.register(agentRelayRoutes);
 
     // Health check
     fastify.get('/health', async () => {

@@ -1,0 +1,295 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ToolDefinition } from '../agent/tools';
+import { PROTOCOL_VERSION, type RelayEnvelope, type SnapshotPayload } from '../agent/protocol';
+import type { UISpec, Stage } from '../spec';
+import type { ChatMessage } from '../store/chatStore';
+
+interface UseAgentBridgeOptions {
+  uiSpec: UISpec | null;
+  messageHistory: ChatMessage[];
+  toolSchema: ToolDefinition[];
+  onToolCall: (toolName: string, params: Record<string, unknown>) => void;
+  onAgentMessage: (text: string) => void;
+  onSessionEnd: () => void;
+}
+
+interface UseAgentBridgeResult {
+  sendUserMessageToAgent: (text: string, stage: Stage) => void;
+  isConnected: boolean;
+  isJoined: boolean;
+}
+
+function buildWsUrl(): string {
+  const configured = import.meta.env.VITE_AGENT_WS_URL as string | undefined;
+  const endpoint = configured && configured.trim() ? configured.trim() : '/agent/ws';
+
+  if (/^wss?:\/\//.test(endpoint)) {
+    return endpoint;
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const basePath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${protocol}://${window.location.host}${basePath}`;
+}
+
+function parseEnvelope(raw: unknown): RelayEnvelope | null {
+  if (!(raw instanceof MessageEvent)) return null;
+  if (typeof raw.data !== 'string') return null;
+
+  try {
+    const parsed = JSON.parse(raw.data) as RelayEnvelope;
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function useAgentBridge({
+  uiSpec,
+  messageHistory,
+  toolSchema,
+  onToolCall,
+  onAgentMessage,
+  onSessionEnd,
+}: UseAgentBridgeOptions): UseAgentBridgeResult {
+  const [isConnected, setIsConnected] = useState(false);
+  const [isJoined, setIsJoined] = useState(false);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const sessionIdRef = useRef<string>((import.meta.env.VITE_AGENT_SESSION_ID as string) || 'default');
+  const latestRef = useRef({
+    uiSpec,
+    messageHistory,
+    toolSchema,
+    onToolCall,
+    onAgentMessage,
+    onSessionEnd,
+  });
+
+  latestRef.current = {
+    uiSpec,
+    messageHistory,
+    toolSchema,
+    onToolCall,
+    onAgentMessage,
+    onSessionEnd,
+  };
+
+  const wsUrl = useMemo(() => buildWsUrl(), []);
+
+  const sendEnvelope = useCallback((envelope: RelayEnvelope) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify({ v: PROTOCOL_VERSION, ...envelope }));
+    return true;
+  }, []);
+
+  const getSnapshotPayload = useCallback((): SnapshotPayload => {
+    const current = latestRef.current;
+    return {
+      sessionId: sessionIdRef.current,
+      uiSpec: current.uiSpec,
+      messageHistory: current.messageHistory,
+      toolSchema: current.toolSchema,
+    };
+  }, []);
+
+  const handleEnvelope = useCallback((message: RelayEnvelope) => {
+    const { onToolCall: applyTool, onAgentMessage: postAgentMessage, onSessionEnd: handleSessionEnd } = latestRef.current;
+
+    switch (message.type) {
+      case 'relay.joined':
+        setIsJoined(true);
+        return;
+
+      case 'session.start':
+        sendEnvelope({
+          type: 'session.started',
+          replyTo: message.id,
+          payload: {
+            sessionId: sessionIdRef.current,
+          },
+        });
+        return;
+
+      case 'snapshot.get':
+        sendEnvelope({
+          type: 'snapshot.state',
+          replyTo: message.id,
+          payload: getSnapshotPayload() as unknown as Record<string, unknown>,
+        });
+        return;
+
+      case 'tool.call': {
+        const toolName = message.payload?.toolName;
+        const params = message.payload?.params;
+
+        if (typeof toolName !== 'string') {
+          sendEnvelope({
+            type: 'error',
+            replyTo: message.id,
+            payload: {
+              code: 'INVALID_PARAMS',
+              message: 'tool.call requires payload.toolName',
+            },
+          });
+          return;
+        }
+
+        try {
+          applyTool(toolName, (params as Record<string, unknown>) ?? {});
+          const snapshot = getSnapshotPayload();
+          sendEnvelope({
+            type: 'tool.result',
+            replyTo: message.id,
+            payload: {
+              ok: true,
+              toolName,
+              uiSpec: snapshot.uiSpec,
+              messageHistory: snapshot.messageHistory,
+            },
+          });
+        } catch (error) {
+          sendEnvelope({
+            type: 'error',
+            replyTo: message.id,
+            payload: {
+              code: 'TOOL_EXECUTION_FAILED',
+              message: error instanceof Error ? error.message : 'Tool execution failed',
+            },
+          });
+        }
+        return;
+      }
+
+      case 'agent.message': {
+        const text = message.payload?.text;
+        if (typeof text !== 'string' || !text.trim()) {
+          sendEnvelope({
+            type: 'error',
+            replyTo: message.id,
+            payload: {
+              code: 'INVALID_PARAMS',
+              message: 'agent.message requires a non-empty payload.text',
+            },
+          });
+          return;
+        }
+        postAgentMessage(text.trim());
+        return;
+      }
+
+      case 'session.end':
+        handleSessionEnd();
+        sendEnvelope({
+          type: 'session.ended',
+          replyTo: message.id,
+          payload: {
+            sessionId: sessionIdRef.current,
+            logFile: `logs/study/${sessionIdRef.current}.jsonl`,
+            stateReset: true,
+          },
+        });
+        return;
+
+      default:
+        return;
+    }
+  }, [getSnapshotPayload, sendEnvelope]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    const connect = () => {
+      if (disposed) return;
+
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      setIsJoined(false);
+
+      ws.onopen = () => {
+        if (disposed) return;
+        setIsConnected(true);
+        ws.send(
+          JSON.stringify({
+            v: PROTOCOL_VERSION,
+            type: 'relay.join',
+            payload: {
+              role: 'host',
+              sessionId: sessionIdRef.current,
+            },
+          })
+        );
+      };
+
+      ws.onmessage = (event) => {
+        const envelope = parseEnvelope(event);
+        if (!envelope) return;
+        handleEnvelope(envelope);
+      };
+
+      ws.onclose = () => {
+        setIsConnected(false);
+        setIsJoined(false);
+        wsRef.current = null;
+
+        if (!disposed) {
+          reconnectTimerRef.current = window.setTimeout(connect, 1200);
+        }
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      disposed = true;
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+      }
+      wsRef.current?.close();
+    };
+  }, [handleEnvelope, wsUrl]);
+
+  useEffect(() => {
+    if (!isJoined) return;
+
+    sendEnvelope({
+      type: 'state.updated',
+      payload: {
+        source: 'host',
+        uiSpec: latestRef.current.uiSpec,
+        messageHistory: latestRef.current.messageHistory,
+      },
+    });
+  }, [isJoined, uiSpec, messageHistory, sendEnvelope]);
+
+  const sendUserMessageToAgent = useCallback(
+    (text: string, stage: Stage) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      sendEnvelope({
+        type: 'user.message',
+        payload: {
+          text: trimmed,
+          stage,
+        },
+      });
+    },
+    [sendEnvelope]
+  );
+
+  return {
+    sendUserMessageToAgent,
+    isConnected,
+    isJoined,
+  };
+}

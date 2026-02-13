@@ -18,7 +18,7 @@ export interface SystemMessage extends BaseMessage {
 
 export interface UserMessage extends BaseMessage {
   type: 'user';
-  action: 'select' | 'back';
+  action: 'select' | 'back' | 'input';
   label: string;
 }
 
@@ -43,8 +43,8 @@ interface ChatActions {
   /** Add a new system message with stage spec */
   addSystemMessage: (stage: Stage, spec: UISpec) => void;
 
-  /** Add user action message (selection or back) */
-  addUserMessage: (stage: Stage, action: 'select' | 'back', label: string) => void;
+  /** Add user message (selection/back/input) */
+  addUserMessage: (stage: Stage, action: 'select' | 'back' | 'input', label: string) => void;
 
   /** Add agent explanation message */
   addAgentMessage: (stage: Stage, text: string) => void;

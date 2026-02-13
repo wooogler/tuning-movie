@@ -102,6 +102,7 @@ For external-agent MVP:
 - expose `uiSpec`, `messageHistory`, `toolSchema`
 - do not expose `backendData`
 - process external actions through the same tool pipeline
+- forward user chat input to agent as `user.message`
 
 Protocol reference:
 - `./external-agent-protocol.md`
