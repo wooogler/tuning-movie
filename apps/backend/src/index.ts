@@ -1,3 +1,4 @@
+import './env';
 import path from 'path';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';

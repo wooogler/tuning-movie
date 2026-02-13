@@ -22,7 +22,7 @@ Tuning Movie is a full-stack web application for booking movie tickets.
 - TypeScript
 - Vite
 - Tailwind CSS 4
-- Zustand (상태 관리)
+- Zustand (state management)
 - React Router DOM
 
 **Backend**
@@ -187,7 +187,7 @@ Drizzle Studio will automatically open in your browser.
 ### Showings
 - `GET /showings?movieId=&theaterId=&date=` - Get showings
 - `GET /showings/dates?movieId=&theaterId=` - Get available dates for showings
-- `GET /showings/movie/:movieId/theater/:theaterId` - Get showings for specific movie and theater
+- `GET /showings/times?movieId=&theaterId=&date=` - Get showings for a specific movie, theater, and date
 - `GET /showings/:id` - Get a specific showing
 
 ### Seats
@@ -214,12 +214,31 @@ VITE_API_URL=http://localhost:3000
 
 ### Backend
 
-To change the backend port:
+To configure backend runtime settings:
 
 ```bash
 # apps/backend/.env
 PORT=3000
+DATABASE_URL=tuning-movie.db
 ```
+
+The backend loads `apps/backend/.env` automatically at startup and maps keys into `process.env`.
+
+```bash
+PORT=3000 DATABASE_URL=tuning-movie.db npm run dev:backend
+```
+
+## 🤖 External Agent (Study MVP)
+
+The prototype supports an external agent server through a WebSocket protocol.
+
+- Transport: single WebSocket endpoint (`/agent/ws`)
+- Read scope: `uiSpec`, `messageHistory`, `toolSchema`
+- Write scope: `tool.call`, `agent.message`
+- Excluded from external snapshots: `backendData`
+- Session end behavior: flush study logs and reset state
+
+See the canonical spec: [`docs/external-agent-protocol.md`](./docs/external-agent-protocol.md)
 
 ## 📚 Additional Documentation
 
@@ -227,6 +246,7 @@ For detailed implementation information, see the [docs](./docs/) directory:
 
 - [Implementation Summary](./docs/implementation-summary.md)
 - [Rendering Engine Design](./docs/rendering-engine-design.md)
+- [External Agent Protocol (MVP)](./docs/external-agent-protocol.md)
 
 ## 🐛 Troubleshooting
 
@@ -259,7 +279,7 @@ To completely reset the database:
 ```bash
 cd apps/backend
 rm -rf drizzle
-rm movie-booking.db
+rm tuning-movie.db
 npm run db:push
 npm run db:seed
 ```
