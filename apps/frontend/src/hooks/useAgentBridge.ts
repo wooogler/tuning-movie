@@ -8,7 +8,7 @@ interface UseAgentBridgeOptions {
   uiSpec: UISpec | null;
   messageHistory: ChatMessage[];
   toolSchema: ToolDefinition[];
-  onToolCall: (toolName: string, params: Record<string, unknown>) => void;
+  onToolCall: (toolName: string, params: Record<string, unknown>) => UISpec | null | void;
   onAgentMessage: (text: string) => void;
   onSessionEnd: () => void;
 }
@@ -50,6 +50,12 @@ function parseEnvelope(raw: unknown): RelayEnvelope | null {
   } catch {
     return null;
   }
+}
+
+function isUiSpec(value: unknown): value is UISpec {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<UISpec>;
+  return typeof candidate.stage === 'string' && typeof candidate.state === 'object';
 }
 
 export function useAgentBridge({
@@ -146,17 +152,15 @@ export function useAgentBridge({
         }
 
         try {
-          applyTool(toolName, (params as Record<string, unknown>) ?? {});
-          const snapshot = getSnapshotPayload();
+          const result = applyTool(toolName, (params as Record<string, unknown>) ?? {});
+          const immediateUiSpec = isUiSpec(result) ? result : undefined;
           sendEnvelope({
             type: 'tool.result',
             replyTo: message.id,
             payload: {
               ok: true,
               toolName,
-              uiSpec: snapshot.uiSpec,
-              messageHistory: snapshot.messageHistory,
-              toolSchema: snapshot.toolSchema,
+              ...(immediateUiSpec ? { uiSpec: immediateUiSpec } : {}),
             },
           });
         } catch (error) {
@@ -209,11 +213,13 @@ export function useAgentBridge({
 
   useEffect(() => {
     let disposed = false;
+    let currentWs: WebSocket | null = null;
 
     const connect = () => {
       if (disposed) return;
 
       const ws = new WebSocket(wsUrl);
+      currentWs = ws;
       wsRef.current = ws;
       setIsJoined(false);
 
@@ -241,7 +247,9 @@ export function useAgentBridge({
       ws.onclose = () => {
         setIsConnected(false);
         setIsJoined(false);
-        wsRef.current = null;
+        if (wsRef.current === ws) {
+          wsRef.current = null;
+        }
 
         if (!disposed) {
           reconnectTimerRef.current = window.setTimeout(connect, 1200);
@@ -260,7 +268,9 @@ export function useAgentBridge({
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
       }
-      wsRef.current?.close();
+      if (currentWs && currentWs.readyState < WebSocket.CLOSING) {
+        currentWs.close();
+      }
     };
   }, [handleEnvelope, wsUrl]);
 

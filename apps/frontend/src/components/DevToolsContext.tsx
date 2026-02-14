@@ -15,7 +15,7 @@ export function DevToolsProvider({ children }: { children: ReactNode }) {
   // Stable wrapper that reads the ref at call time, not at render time
   const onToolApply = useCallback(
     (toolName: string, params: Record<string, unknown>) => {
-      onToolApplyRef.current?.(toolName, params);
+      return onToolApplyRef.current?.(toolName, params);
     },
     []
   );

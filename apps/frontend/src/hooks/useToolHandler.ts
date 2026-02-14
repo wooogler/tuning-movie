@@ -104,25 +104,26 @@ export function useToolHandler<T extends DataItem>({
           }
           case 'next':
             onNext?.();
-            return;
+            return null;
           case 'prev':
             onBack?.();
-            return;
+            return null;
           case 'postMessage': {
             const text = params.text as string;
             if (typeof text !== 'string' || !text.trim()) {
               throw new Error('postMessage requires a non-empty "text" string');
             }
             onPostMessage?.(text.trim());
-            return;
+            return null;
           }
           default:
             console.warn(`Unknown tool: ${toolName}`);
-            return;
+            return null;
         }
 
         setSpec(newSpec as UISpec<T>);
         setUiSpec(newSpec);
+        return newSpec as UISpec<T>;
       } catch (error) {
         console.error(`Tool application failed for ${toolName}:`, error);
         throw error; // Re-throw to let DevTools display the error

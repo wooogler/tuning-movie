@@ -1,7 +1,10 @@
 import { createContext, useContext } from 'react';
 import type { UISpec } from '../spec';
 
-export type ToolApplyHandler = (toolName: string, params: Record<string, unknown>) => void;
+export type ToolApplyHandler = (
+  toolName: string,
+  params: Record<string, unknown>
+) => UISpec | null | void;
 
 export interface DevToolsContextValue {
   backendData: Record<string, unknown>;

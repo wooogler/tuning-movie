@@ -103,6 +103,8 @@ For external-agent MVP:
 - do not expose `backendData`
 - process external actions through the same tool pipeline
 - forward user chat input to agent as `user.message`
+- treat `state.updated` as canonical sync signal
+- use `tool.result` as acknowledgement (optionally carrying immediate `uiSpec`)
 
 Protocol reference:
 - `./external-agent-protocol.md`

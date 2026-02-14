@@ -190,6 +190,10 @@ Contains only allowed read surfaces.
 
 #### `tool.result`
 
+Acknowledges tool execution.
+For state-changing tools, host may include an immediate `uiSpec`.
+Authoritative state sync still comes from `state.updated`.
+
 ```json
 {
   "v": "mvp-0.2",
@@ -198,11 +202,14 @@ Contains only allowed read surfaces.
   "payload": {
     "ok": true,
     "toolName": "select",
-    "uiSpec": {},
-    "messageHistory": []
+    "uiSpec": {}
   }
 }
 ```
+
+Notes:
+- `payload.uiSpec` is optional.
+- `next`, `prev`, `postMessage` may return `ok` without `uiSpec`; consume upcoming `state.updated`.
 
 #### `state.updated`
 Push event when the host state changes (user action, stage load, tool application).
@@ -212,9 +219,10 @@ Push event when the host state changes (user action, stage load, tool applicatio
   "v": "mvp-0.2",
   "type": "state.updated",
   "payload": {
-    "source": "user",
+    "source": "host",
     "uiSpec": {},
-    "messageHistory": []
+    "messageHistory": [],
+    "toolSchema": []
   }
 }
 ```
@@ -262,6 +270,12 @@ Forwarded user text input from the host chat input to the external agent.
 }
 ```
 
+### 4.3 Synchronization Rules
+
+- Treat `state.updated` as the canonical external sync event.
+- Use `tool.result` as an execution acknowledgement (`ok` / `error`) and optional fast-path `uiSpec`.
+- Use `snapshot.get` / `snapshot.state` for explicit resync (for example on reconnect or if local view is stale).
+
 ## 5. Error Codes
 
 - `INVALID_MESSAGE`
@@ -305,6 +319,8 @@ Current host integration points:
 - Tool schema stage filter source: `apps/frontend/src/pages/ChatPage.tsx`
 - Tool schema enforcement source: `apps/frontend/src/hooks/useAgentBridge.ts`
 - Tool execution entry: `apps/frontend/src/hooks/useToolHandler.ts`
+- Immediate tool result spec return: `apps/frontend/src/hooks/useToolHandler.ts` -> `apps/frontend/src/hooks/useAgentBridge.ts`
+- WebSocket lifecycle guard for React dev StrictMode: `apps/frontend/src/hooks/useAgentBridge.ts`
 - Visible state source (`uiSpec`): `apps/frontend/src/components/DevToolsContext.tsx`
 - Chat state source (`messageHistory`): `apps/frontend/src/store/chatStore.ts`
 - User input source (`user.message`): `apps/frontend/src/components/chat/ChatInput.tsx`

@@ -80,6 +80,8 @@ Source: `apps/frontend/src/agent/tools.ts`
 - validates tool parameters
 - calls spec modifier functions or navigation handlers
 - updates active spec in store/context
+- returns immediate `UISpec` for state-changing tools (`select`, `setQuantity`, modification tools)
+- returns `null` for non-spec actions (`next`, `prev`, `postMessage`)
 
 Source: `apps/frontend/src/hooks/useToolHandler.ts`
 
@@ -116,9 +118,16 @@ MVP principles:
 - external writes: `tool.call` and `agent.message`
 - host forwards participant chat input to external agent via `user.message`
 - session end triggers log flush + state reset
+- sync baseline is `state.updated`; `tool.result` is acknowledgement plus optional immediate `uiSpec`
+
+Bridge behavior details:
+- `snapshot.get` returns full allowed surfaces (`uiSpec`, `messageHistory`, `toolSchema`)
+- `tool.call` response uses the immediate returned spec (when available) to reduce stale snapshot windows
+- WebSocket cleanup in `useAgentBridge` closes only the effect-owned socket to avoid dev StrictMode race side effects
 
 ## 10. Known Constraints
 
 - The flow is stage-driven and intentionally constrained.
 - Tool calls are deterministic, but backend data loading is asynchronous.
 - This prototype optimizes study reliability over multi-user production concerns.
+- Session-id mismatch or multiple active frontend hosts in the same session can cause external timeouts/desync.

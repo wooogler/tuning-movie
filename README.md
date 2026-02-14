@@ -230,6 +230,9 @@ VITE_AGENT_WS_URL=ws://localhost:3000/agent/ws
 VITE_AGENT_SESSION_ID=default
 ```
 
+Use the same session id as `apps/agent-test/.env` (`AGENT_SESSION_ID`).
+For isolated runs, use a unique value (example: `sync-dev-1`) instead of `default`.
+
 ### Backend
 
 To configure backend runtime settings:
@@ -256,6 +259,8 @@ AGENT_RELAY_URL=ws://localhost:3000/agent/ws
 AGENT_SESSION_ID=default
 ```
 
+`AGENT_SESSION_ID` must match frontend `VITE_AGENT_SESSION_ID`.
+
 ## 🤖 External Agent (Study MVP)
 
 The prototype supports an external agent server through a WebSocket protocol.
@@ -277,6 +282,26 @@ npm run dev:agent-test
 ```
 
 Then open `http://localhost:3400`.
+
+### Agent Test Console Usage (Recommended Flow)
+
+1. Start all services:
+```bash
+npm run dev:all
+```
+2. Open frontend (`http://localhost:5173`) and agent test console (`http://localhost:3400`).
+3. In frontend, wait until a stage UI is visible (movie list).
+4. In agent test console, verify:
+   - `Relay Connected = yes`
+   - `Relay Joined = yes`
+   - `UISpec = detected`
+5. Run `select` from Interaction tab (for movie stage, use `itemId: "m1"` etc.).
+6. Confirm `UI Spec.state.selected` appears in agent test console.
+
+Sync behavior:
+- `state.updated` is the authoritative push update for external sync.
+- `tool.result` may include an immediate `uiSpec` for state-changing tools.
+- For tools that do not immediately return a spec (for example `next`, `prev`, `postMessage`), rely on the next `state.updated`.
 
 ## 📚 Additional Documentation
 
@@ -308,6 +333,26 @@ lsof -ti:5173 | xargs kill -9
 # Windows
 netstat -ano | findstr :5173
 taskkill /PID <PID> /F
+```
+
+### External Agent Timeout / Desync
+
+If agent-test shows `Request timeout (tool.call, id=...)`:
+
+1. Ensure only one backend/frontend/agent-test set is running.
+2. Ensure only one active frontend tab is connected to `/agent/ws`.
+3. Verify session ids match:
+   - `apps/frontend/.env` -> `VITE_AGENT_SESSION_ID`
+   - `apps/agent-test/.env` -> `AGENT_SESSION_ID`
+4. Check relay status in agent-test (`connected`, `joined`, `hasSnapshot`).
+5. Enable relay logs for diagnosis:
+```bash
+# apps/backend/.env
+AGENT_RELAY_LOG_ENABLED=true
+```
+Then inspect:
+```bash
+tail -n 120 logs/study/<sessionId>.jsonl
 ```
 
 ### Reset Database

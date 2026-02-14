@@ -1,230 +1,129 @@
-# 渲染引擎实现摘要
+# 实现摘要
 
-## 架构概览
+本文档是当前基于 React 的、可由 Agent 操作的电影订票 UI 实现快照。
 
+外部服务集成细节请参见 `./external-agent-protocol.md`。
+
+## 1. 系统目标
+
+系统目标是：Agent 通过确定性工具操作 UI，同时用户可见布局仍由固定阶段驱动。
+
+核心思路：
+
+```text
+Backend API -> 阶段数据加载 -> UISpec 生成 -> Modifier 函数 -> 阶段渲染器 -> DOM
+                                  ^                                  |
+                                  |----------------------------------|
+                                      Agent 读取 UISpec 并调用工具
 ```
-Backend API → Page(数据获取) → Converter(数据 → UISpec) → SpecRenderer(UISpec → React) → DOM
-```
 
-在之前的方法中，每个页面直接将API数据渲染为JSX，但现在我们使用**声明式UI Spec**作为中间表示（IR）。
+## 2. 前端架构
 
-## 目录结构
+主要目录：
 
-```
+```text
 apps/frontend/src/
-├── converter/                    # API数据 → UI Spec 转换
-│   ├── types.ts                  # UISpec、Component、DataBinding 类型
-│   ├── index.ts                  # 统一导出
-│   ├── movieStage.ts             # 电影选择规范
-│   ├── theaterStage.ts           # 影院选择规范
-│   ├── dateStage.ts              # 日期选择规范
-│   ├── timeStage.ts              # 时间选择规范
-│   ├── seatStage.ts              # 座位选择规范
-│   ├── ticketStage.ts            # 票券选择规范
-│   └── confirmStage.ts           # 预订确认规范
-│
-├── renderer/                     # UI Spec → React 渲染
-│   ├── index.ts                  # 统一导出
-│   ├── SpecRenderer.tsx          # 主渲染器
-│   ├── registry.ts               # 组件注册表
-│   ├── resolveData.ts            # JSON Pointer 数据绑定
-│   └── components/
-│       ├── layout/               # 布局组件
-│       │   ├── Column.tsx
-│       │   ├── Row.tsx
-│       │   ├── Grid.tsx
-│       │   └── Card.tsx
-│       ├── base/                 # 基础组件
-│       │   ├── Text.tsx
-│       │   ├── Image.tsx
-│       │   ├── Button.tsx
-│       │   └── TextField.tsx
-│       └── domain/               # 领域组件
-│           ├── MovieCard.tsx
-│           ├── TheaterCard.tsx
-│           ├── DatePicker.tsx
-│           ├── TimePicker.tsx
-│           ├── SeatMap.tsx
-│           ├── SeatLegend.tsx
-│           ├── ScreenIndicator.tsx
-│           ├── TicketCounter.tsx
-│           ├── ActionBar.tsx
-│           ├── ConfirmForm.tsx
-│           ├── BookingResult.tsx
-│           └── BookingSummary.tsx
-│
-└── pages/                        # 各页面（已修改）
-    ├── MovieStagePage.tsx
-    ├── TheaterStagePage.tsx
-    ├── DateStagePage.tsx
-    ├── TimeStagePage.tsx
-    ├── SeatStagePage.tsx
-    ├── TicketStagePage.tsx
-    └── ConfirmPage.tsx
+  agent/        工具定义（schema）
+  hooks/        工具分发与 relay bridge
+  spec/         UISpec 类型、生成器、修改器
+  renderer/     阶段渲染器与阶段组件
+  pages/        ChatPage 编排与阶段切换
+  store/        聊天/消息状态（Zustand）
+  components/   DevTools 上下文与面板
 ```
 
-## 核心类型定义
+## 3. UISpec 模型
 
-### UISpec (converter/types.ts)
+`UISpec` 是面向 Agent 的状态对象。
 
-```typescript
-interface UISpec {
-  surface: string;                        // 屏幕标识符
-  components: Component[];                // 扁平组件列表
-  dataModel: Record<string, unknown>;     // 服务器数据（只读）
-  state?: StateModel;                     // UI状态（读/写）
-  actions?: Record<string, Action>;       // 操作定义
-}
+关键字段：
+- `stage`：当前阶段（`movie`, `theater`, `date`, `time`, `seat`, `ticket`, `confirm`）
+- `items`：源数据
+- `visibleItems`：派生显示列表
+- `state`：已选项、数量、订票上下文
+- `modification`：filter/sort/highlight/augment 状态
+- `display`：渲染提示（`valueField`、组件类型）
+- `meta`：阶段特定元数据
 
-interface Component {
-  id: string;                             // 唯一ID
-  type: string;                           // 组件类型（注册表键）
-  children?: string[] | IteratorBinding;  // 子组件
-  props?: Record<string, unknown>;        // 组件属性
-  data?: DataBinding;                     // 数据绑定
-  when?: StateBinding;                    // 条件渲染
-}
+来源：`apps/frontend/src/spec/types.ts`
 
-interface DataBinding {
-  path: string;                           // JSON Pointer（例如："/movies/0/title"）
-}
+## 4. 确定性工具应用
 
-interface IteratorBinding {
-  each: string;                           // 要迭代的数组路径
-  template: string;                       // 模板组件ID
-}
-```
+所有工具效果都通过纯函数完成。
 
-## 数据流
+示例：
+- `applyFilter`, `applySort`, `applyHighlight`, `applyAugment`
+- `selectItem`, `toggleItem`, `setQuantity`, `clearModification`
 
-### 1. 从页面调用API
-```typescript
-// MovieStagePage.tsx
-const [spec, setSpec] = useState<UISpec | null>(null);
+来源：`apps/frontend/src/spec/modifiers.ts`
 
-useEffect(() => {
-  api.getMovies()
-    .then((data) => setSpec(convertMovieStage(data.movies)));
-}, []);
-```
+重要行为：
+- `visibleItems` 由 `items + modification` 重新计算
+- 选择逻辑会忽略禁用项
+- 数量更新会校验（`整数且 >= 0`）
 
-### 2. Converter生成UISpec
-```typescript
-// converter/movieStage.ts
-export function convertMovieStage(movies: Movie[]): UISpec {
-  return {
-    surface: 'movie_select',
-    components: [
-      {
-        id: 'root',
-        type: 'Grid',
-        children: { each: '/movies', template: 'movie_card_tpl' },
-        props: { columns: { sm: 3, md: 4, lg: 5 }, gap: 6 },
-      },
-      {
-        id: 'movie_card_tpl',
-        type: 'MovieCard',
-        data: { path: '.' },
-        props: {
-          action: { type: 'navigate', event: 'selectMovie' },
-        },
-      },
-    ],
-    dataModel: { movies },
-    actions: {
-      selectMovie: { type: 'navigate', payload: { to: '/theater' } },
-    },
-  };
-}
-```
+## 5. 工具面
 
-### 3. SpecRenderer渲染为React
-```typescript
-// 在页面中使用
-<SpecRenderer spec={spec} onAction={handleAction} />
-```
+工具分为两类：
 
-### 4. 操作处理
-```typescript
-const handleAction = (actionName: string, data?: unknown) => {
-  if (actionName === 'selectMovie') {
-    setMovie(data as Movie);
-    navigate('/theater');
-  }
-};
-```
+- 修改类工具：变换当前阶段显示数据
+  - `filter`, `sort`, `highlight`, `augment`, `clearModification`
+- 交互类工具：驱动阶段流转
+  - `select`, `setQuantity`, `next`, `prev`, `postMessage`
 
-## 组件注册表
+来源：`apps/frontend/src/agent/tools.ts`
 
-```typescript
-// renderer/registry.ts
-const registry = new Map<string, RendererComponent>();
+## 6. 运行时工具分发
 
-// 布局
-registry.set('Column', Column);
-registry.set('Row', Row);
-registry.set('Grid', Grid);
-registry.set('Card', Card);
+`useToolHandler` 是工具调用执行入口：
 
-// 基础
-registry.set('Text', Text);
-registry.set('Image', Image);
-registry.set('Button', Button);
-registry.set('TextField', TextField);
+- 校验工具参数
+- 调用 spec 修改函数或导航处理器
+- 更新 store/context 中的 active spec
+- 对会改变状态的工具返回即时 `UISpec`（`select`、`setQuantity`、修改类工具）
+- 对不直接返回 spec 的动作返回 `null`（`next`、`prev`、`postMessage`）
 
-// 领域
-registry.set('MovieCard', MovieCard);
-registry.set('TheaterCard', TheaterCard);
-// ... 等等
-```
+来源：`apps/frontend/src/hooks/useToolHandler.ts`
 
-## SpecRenderer工作原理
+## 7. 阶段编排
 
-1. **构建组件映射**：将扁平列表转换为 ID → Component 映射
-2. **从root开始递归渲染**：调用 `renderComponent('root')`
-3. **解析数据绑定**：使用 `resolveData()` 解析JSON Pointer路径
-4. **处理子组件**：
-   - 静态子组件：`["child1", "child2"]` → 对每个调用 `renderComponent()`
-   - 迭代子组件：`{ each: "/movies", template: "card_tpl" }` → 遍历数组并渲染模板
-5. **在注册表中查找组件**：`getComponent(comp.type)`
-6. **创建React元素**：传递props、data、onAction
+`ChatPage` 负责：
+- 每个阶段的数据请求
+- 每个阶段的 spec 生成
+- 阶段间 booking context 投影
+- next/back/confirm 流转
 
-## 与A2UI的区别
+来源：`apps/frontend/src/pages/ChatPage.tsx`
 
-| 项目 | A2UI | 我们的实现 |
-|------|------|----------|
-| 框架 | Lit Web Components | React |
-| 状态管理 | 仅dataModel | dataModel + state 分离 |
-| 组件 | 18个标准 + 自定义 | 4个布局 + 4个基础 + 12个领域 |
-| 数据源 | LLM流式传输 | REST API |
-| 绑定 | `/` 前缀 | `/`（dataModel）、`$state/`（state） |
+## 8. DevTools Bridge 与同步规则
 
-## 优势
+`useAgentBridge` 负责外部 relay 消息与同步。
 
-1. **关注点分离**：数据转换（Converter）与渲染（Renderer）分离
-2. **声明式UI**：通过JSON格式的UI规范抽象渲染逻辑
-3. **可扩展性**：新组件只需添加到注册表
-4. **可测试性**：UISpec是纯数据，易于验证
-5. **可调试性**：可以在控制台中检查中间表示（UISpec）
+Bridge 行为：
+- `snapshot.get` 返回完整允许读取面：`uiSpec`、`messageHistory`、`toolSchema`
+- `tool.call` 返回 `tool.result`，可选携带即时 `uiSpec`
+- `state.updated` 是外部同步的权威事件
+- 对 `next`、`prev`、`postMessage`，消费者应依赖后续 `state.updated`
+- websocket 清理仅关闭当前 effect 创建的连接，降低开发态 StrictMode 的竞争影响
 
-## 使用示例
+来源：`apps/frontend/src/hooks/useAgentBridge.ts`
 
-```typescript
-// 添加新页面
-// 1. 编写转换器函数
-export function convertNewStage(data: SomeData): UISpec {
-  return {
-    surface: 'new_stage',
-    components: [...],
-    dataModel: { data },
-  };
-}
+## 9. 外部 Agent MVP 协议边界
 
-// 2. 如需要，添加领域组件
-export function NewComponent({ data, onAction }: Props) { ... }
-registry.set('NewComponent', NewComponent);
+规范文档：`./external-agent-protocol.md`
 
-// 3. 在页面中使用
-const spec = convertNewStage(apiData);
-return <SpecRenderer spec={spec} onAction={handleAction} />;
-```
+MVP 原则：
+- 单一 WebSocket 通道
+- 无并发/修订锁
+- 外部只读：`uiSpec`、`messageHistory`、`toolSchema`
+- `toolSchema` 按阶段生成，并在 host 侧执行时强制
+- 外部可写：`tool.call` 与 `agent.message`
+- host 将用户输入通过 `user.message` 转发给外部 agent
+- session 结束触发日志落盘与状态重置
+
+## 10. 已知约束
+
+- 流程由阶段驱动，且刻意受限。
+- 工具调用是确定性的，但后端加载是异步的。
+- 原型优先保证研究稳定性，而非多用户生产能力。
+- session-id 不一致，或同一 session 中有多个 frontend host，会导致超时/不同步。
