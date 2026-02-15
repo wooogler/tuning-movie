@@ -32,6 +32,30 @@ src/
 npm run dev --workspace=apps/tuning-agent-typescript
 ```
 
+recommended (auto-loads repo-root `.env`):
+
+```bash
+npm run dev:tuning-agent-typescript
+```
+
+run backend+frontend+agent together:
+
+```bash
+npm run dev:system+tuning-agent-typescript
+```
+
+Important:
+- The relay `host` is created when the frontend page is actually open in a browser.
+- If the agent starts first, it now waits and retries until the host is connected.
+- Monitor dashboard: `http://localhost:3500` (or your `AGENT_MONITOR_PORT`).
+
+start mode (non-watch, uses compiled `dist`):
+
+```bash
+npm run build:tuning-agent-typescript
+npm run start:tuning-agent-typescript
+```
+
 or
 
 ```bash
@@ -41,7 +65,10 @@ npm run start --workspace=apps/tuning-agent-typescript
 
 ## Environment
 
+Use a single repo-root `.env` file (recommended for this monorepo).
+
 ```bash
+# /Users/sangwooklee/dev/tuning-movie/.env
 AGENT_RELAY_URL=ws://localhost:3000/agent/ws
 AGENT_SESSION_ID=default
 AGENT_STUDY_ID=pilot-01
@@ -49,6 +76,7 @@ AGENT_PARTICIPANT_ID=P01
 OPENAI_API_KEY=<your_api_key>
 AGENT_OPENAI_MODEL=gpt-5.2
 AGENT_ENABLE_OPENAI=true
+AGENT_MONITOR_PORT=3500
 ```
 
 ## Protocol
@@ -61,9 +89,12 @@ This runtime follows:
 
 - Connects to relay and starts a session automatically.
 - Requests snapshot and keeps planning on `snapshot.state`, `state.updated`, and `user.message`.
-- Runs end-to-end flow with one action at a time:
-  - `movie/theater/date/time`: select then next
-  - `seat`: select at least one available seat then next
-  - `ticket`: set quantity to match selected seat count then next
-  - `confirm`: next (submit), then `session.end` after confirmation message
-- Uses OpenAI Responses API (`/v1/responses`) for item selection when available; otherwise falls back to deterministic rules.
+- Runs with strict turn policy:
+  - one user message -> one actionable tool execution (`select`, `next`, `setQuantity`, etc.)
+  - `postMessage` can run multiple times to explain what the agent is doing
+  - only one tool call is in flight at any time
+- LLM-first planning for tool choice:
+  - chooses one next tool from current `toolSchema` based on user intent and GUI state
+  - prioritizes GUI adaptation tools (`filter/sort/highlight/augment/postMessage`) first to reconfirm intent
+  - GUI execution tools (`select/setQuantity/next/prev`) require explicit user confirmation
+- Deterministic fallback is used only when LLM is unavailable or planner output fails validation.

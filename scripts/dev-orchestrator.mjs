@@ -10,6 +10,11 @@ const COMMANDS_BY_MODE = {
     { label: 'backend', script: 'dev:backend' },
     { label: 'frontend', script: 'dev:frontend' },
   ],
+  system_agent: [
+    { label: 'backend', script: 'dev:backend' },
+    { label: 'frontend', script: 'dev:frontend' },
+    { label: 'tuning-agent-typescript', script: 'dev:tuning-agent-typescript' },
+  ],
   all: [
     { label: 'backend', script: 'dev:backend' },
     { label: 'frontend', script: 'dev:frontend' },
@@ -19,7 +24,7 @@ const COMMANDS_BY_MODE = {
 
 if (!Object.prototype.hasOwnProperty.call(COMMANDS_BY_MODE, mode)) {
   console.error(`[orchestrator] Unknown mode: ${mode}`);
-  console.error('[orchestrator] Allowed modes: system, all');
+  console.error('[orchestrator] Allowed modes: system, system_agent, all');
   process.exit(1);
 }
 

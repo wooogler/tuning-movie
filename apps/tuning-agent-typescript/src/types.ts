@@ -10,6 +10,8 @@ export interface RelayEnvelope {
 
 export interface ToolSchemaItem {
   name: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
   params?: unknown;
 }
 
@@ -48,6 +50,12 @@ export interface PlannedAction {
   type: PlannedActionType;
   reason: string;
   payload: Record<string, unknown>;
+}
+
+export interface PlanDecision {
+  action: PlannedAction | null;
+  explainText?: string;
+  source: 'llm' | 'rule';
 }
 
 export interface ActionOutcome {

@@ -43,6 +43,16 @@ export class RelayClient {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        resolve();
+        return;
+      }
+
+      if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+        reject(new Error('relay socket is already connecting'));
+        return;
+      }
+
       const ws = new WebSocket(this.relayUrl);
       this.ws = ws;
 
@@ -82,6 +92,9 @@ export class RelayClient {
       });
 
       ws.on('close', () => {
+        if (this.ws === ws) {
+          this.ws = null;
+        }
         for (const [id, entry] of this.pending.entries()) {
           clearTimeout(entry.timer);
           entry.reject(new Error(`socket closed while waiting for ${id}`));
@@ -90,6 +103,9 @@ export class RelayClient {
       });
 
       ws.on('error', (error: Error) => {
+        if (this.ws === ws && ws.readyState === WebSocket.CLOSED) {
+          this.ws = null;
+        }
         reject(error);
       });
     });

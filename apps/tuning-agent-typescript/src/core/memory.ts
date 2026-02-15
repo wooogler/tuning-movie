@@ -1,6 +1,7 @@
 import type { EpisodicRecord, PerceivedContext } from '../types';
 
 const MAX_EPISODIC_RECORDS = 200;
+const INFRA_ERROR_CODES = new Set(['SESSION_NOT_ACTIVE', 'RELAY_ERROR']);
 
 export class AgentMemory {
   private context: PerceivedContext | null = null;
@@ -24,6 +25,7 @@ export class AgentMemory {
   countRecentFailures(stage: string | null, windowSize = 8): number {
     return this.episodic
       .slice(-windowSize)
-      .filter((entry) => entry.stage === stage && !entry.ok).length;
+      .filter((entry) => entry.stage === stage && !entry.ok && !INFRA_ERROR_CODES.has(entry.code ?? ''))
+      .length;
   }
 }

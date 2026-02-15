@@ -8,6 +8,21 @@ function payloadCodeAndMessage(payload: Record<string, unknown> | undefined): Pi
   return { code, message };
 }
 
+function classifyExecutionError(error: unknown): Pick<ActionOutcome, 'code' | 'message'> {
+  const message = error instanceof Error ? error.message : String(error);
+  const codeMatch = message.match(/^([A-Z_]+):\s*(.+)$/);
+  if (codeMatch) {
+    return {
+      code: codeMatch[1],
+      message: codeMatch[2],
+    };
+  }
+  return {
+    code: 'EXECUTION_FAILED',
+    message,
+  };
+}
+
 export async function executePlannedAction(
   relay: RelayClient,
   action: PlannedAction
@@ -33,10 +48,11 @@ export async function executePlannedAction(
 
     return outcomeBase;
   } catch (error) {
+    const classified = classifyExecutionError(error);
     return {
       ok: false,
-      code: 'EXECUTION_FAILED',
-      message: error instanceof Error ? error.message : 'unknown execution error',
+      code: classified.code,
+      message: classified.message,
       replan: true,
     };
   }
