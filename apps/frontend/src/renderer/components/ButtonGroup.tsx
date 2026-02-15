@@ -5,14 +5,13 @@
  * DisplayItem의 value를 직접 렌더링
  */
 
-import type { DisplayItem, HighlightStyle } from '../../spec';
+import type { DisplayItem } from '../../spec';
 
 interface ButtonGroupProps {
   items: DisplayItem[];
   onSelect: (id: string) => void;
   selectedId?: string;
   highlightedIds?: string[];
-  highlightStyle?: HighlightStyle;
   disabled?: boolean;
 }
 
@@ -21,7 +20,6 @@ export function ButtonGroup({
   onSelect,
   selectedId,
   highlightedIds = [],
-  highlightStyle = 'border',
   disabled = false,
 }: ButtonGroupProps) {
   const highlightSet = new Set(highlightedIds);
@@ -32,22 +30,7 @@ export function ButtonGroup({
         const isSelected = item.id === selectedId;
         const isHighlighted = highlightSet.has(item.id);
 
-        // Highlight 스타일
-        let highlightClass = '';
-        if (isHighlighted) {
-          switch (highlightStyle) {
-            case 'glow':
-              highlightClass = 'shadow-lg shadow-primary/50';
-              break;
-            case 'badge':
-              highlightClass = 'ring-2 ring-yellow-400';
-              break;
-            case 'border':
-            default:
-              highlightClass = 'ring-2 ring-primary';
-              break;
-          }
-        }
+        const highlightClass = isHighlighted ? 'ring-2 ring-primary' : '';
 
         const isDisabled = disabled || item.isDisabled;
 

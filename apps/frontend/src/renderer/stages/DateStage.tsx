@@ -5,7 +5,7 @@
  */
 
 import { useState, useMemo } from 'react';
-import type { DateItem, HighlightStyle } from '../../spec';
+import type { DateItem } from '../../spec';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
 
@@ -17,7 +17,6 @@ interface CalendarDay {
   isAvailable: boolean;
   isSelected: boolean;
   isHighlighted: boolean;
-  highlightStyle?: HighlightStyle;
 }
 
 function generateCalendarDays(
@@ -25,8 +24,7 @@ function generateCalendarDays(
   month: number,
   items: DateItem[],
   selectedId?: string,
-  highlightedIds?: string[],
-  highlightStyle?: HighlightStyle
+  highlightedIds?: string[]
 ): CalendarDay[] {
   const days: CalendarDay[] = [];
   const today = new Date();
@@ -76,7 +74,6 @@ function generateCalendarDays(
       isAvailable: item?.available ?? false,
       isSelected: dateStr === selectedId,
       isHighlighted,
-      highlightStyle: isHighlighted ? highlightStyle : undefined,
     });
   }
 
@@ -121,8 +118,7 @@ export function DateStage({
       viewMonth,
       spec.items,
       spec.state.selected?.id,
-      spec.modification.highlight?.itemIds,
-      spec.modification.highlight?.style
+      spec.modification.highlight?.itemIds
     ),
     [viewYear, viewMonth, spec.items, spec.state.selected?.id, spec.modification.highlight]
   );
@@ -198,22 +194,7 @@ export function DateStage({
 
         {/* Calendar days */}
         {calendarDays.map((day, index) => {
-          // Highlight 스타일
-          let highlightClass = '';
-          if (day.isHighlighted) {
-            switch (day.highlightStyle) {
-              case 'glow':
-                highlightClass = 'shadow-lg shadow-primary/50';
-                break;
-              case 'badge':
-                highlightClass = 'ring-2 ring-yellow-400';
-                break;
-              case 'border':
-              default:
-                highlightClass = 'ring-2 ring-primary';
-                break;
-            }
-          }
+          const highlightClass = day.isHighlighted ? 'ring-2 ring-primary' : '';
 
           return (
             <button

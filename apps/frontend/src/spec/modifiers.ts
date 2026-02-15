@@ -284,9 +284,10 @@ export function applyHighlight<T extends DataItem>(
   spec: UISpec<T>,
   params: HighlightState
 ): UISpec<T> {
+  const highlight: HighlightState = { itemIds: params.itemIds };
   const newSpec = {
     ...spec,
-    modification: { ...spec.modification, highlight: params },
+    modification: { ...spec.modification, highlight },
   };
   return refreshSpec(newSpec);
 }

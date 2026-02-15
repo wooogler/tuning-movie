@@ -4,7 +4,7 @@
  * 티켓 종류별 수량 선택 Stage - TicketCounter 사용
  */
 
-import type { TicketItem, HighlightStyle } from '../../spec';
+import type { TicketItem } from '../../spec';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
 
@@ -26,7 +26,6 @@ export function TicketStage({
 
   // Highlight 정보
   const highlightedIds = new Set(spec.modification.highlight?.itemIds ?? []);
-  const highlightStyle: HighlightStyle = spec.modification.highlight?.style ?? 'border';
 
   // 현재 총 수량
   const currentTotal = quantities.reduce((sum, q) => sum + q.count, 0);
@@ -41,22 +40,7 @@ export function TicketStage({
           const canDecrease = quantity > 0;
           const isHighlighted = highlightedIds.has(ticket.id);
 
-          // Highlight 스타일
-          let highlightClass = '';
-          if (isHighlighted) {
-            switch (highlightStyle) {
-              case 'glow':
-                highlightClass = 'shadow-lg shadow-primary/50';
-                break;
-              case 'badge':
-                highlightClass = 'ring-2 ring-yellow-400';
-                break;
-              case 'border':
-              default:
-                highlightClass = 'ring-2 ring-primary';
-                break;
-            }
-          }
+          const highlightClass = isHighlighted ? 'ring-2 ring-primary' : '';
 
           return (
             <div

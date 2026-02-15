@@ -4,7 +4,7 @@
  * 좌석 선택 Stage - SeatMap 사용
  */
 
-import type { SeatItem, HighlightStyle } from '../../spec';
+import type { SeatItem } from '../../spec';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
 
@@ -27,7 +27,6 @@ export function SeatStage({
 
   // Highlight 정보
   const highlightedIds = new Set(spec.modification.highlight?.itemIds ?? []);
-  const highlightStyle: HighlightStyle = spec.modification.highlight?.style ?? 'border';
 
   // 좌석을 행별로 그룹화 (원본 items 사용)
   const seatsByRow = rows.map((row) =>
@@ -60,22 +59,7 @@ export function SeatStage({
                 const isOccupied = seat.status === 'occupied';
                 const isHighlighted = highlightedIds.has(seat.id);
 
-                // Highlight 스타일
-                let highlightClass = '';
-                if (isHighlighted) {
-                  switch (highlightStyle) {
-                    case 'glow':
-                      highlightClass = 'shadow-md shadow-primary/70';
-                      break;
-                    case 'badge':
-                      highlightClass = 'ring-2 ring-yellow-400';
-                      break;
-                    case 'border':
-                    default:
-                      highlightClass = 'ring-2 ring-primary';
-                      break;
-                  }
-                }
+                const highlightClass = isHighlighted ? 'ring-2 ring-primary' : '';
 
                 return (
                   <button

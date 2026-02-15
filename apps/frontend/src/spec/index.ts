@@ -11,7 +11,7 @@
  *
  * // 2. Modification 적용 (Agent Tool Call) - visibleItems 자동 갱신
  * const filtered = applyFilter(spec, { field: 'genre', operator: 'contains', value: 'Sci-Fi' });
- * const highlighted = applyHighlight(filtered, { itemIds: ['m1'], style: 'badge' });
+ * const highlighted = applyHighlight(filtered, { itemIds: ['m1'] });
  *
  * // 3. Agent는 visibleItems를 직접 읽어 화면 상태 파악
  * // highlighted.visibleItems = [{ id: 'm1', value: 'Dune: Part Two', isHighlighted: true }]
@@ -34,7 +34,6 @@ export type {
   FilterOperator,
   SortState,
   HighlightState,
-  HighlightStyle,
   AugmentState,
   // deprecated
   VisibleItem,

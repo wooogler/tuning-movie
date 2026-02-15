@@ -24,7 +24,6 @@ export function TimeStage({
         onSelect={onSelect}
         selectedId={spec.state.selected?.id}
         highlightedIds={spec.modification.highlight?.itemIds}
-        highlightStyle={spec.modification.highlight?.style}
       />
 
       <ActionBar

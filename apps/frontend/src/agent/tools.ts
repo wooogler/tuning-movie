@@ -67,12 +67,6 @@ export const modificationTools: ToolDefinition[] = [
         type: 'array',
         description: 'Array of item IDs to highlight',
       },
-      style: {
-        type: 'string',
-        description: 'Highlight style',
-        enum: ['border', 'glow', 'badge'],
-        optional: true,
-      },
     },
   },
   {

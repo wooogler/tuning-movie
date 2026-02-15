@@ -184,10 +184,7 @@ export interface SortState {
 
 export interface HighlightState {
   itemIds: string[];
-  style?: HighlightStyle;
 }
-
-export type HighlightStyle = 'border' | 'glow' | 'badge';
 
 export interface AugmentState {
   itemId: string;
@@ -203,7 +200,6 @@ export interface AugmentState {
  */
 export interface VisibleItem extends DataItem {
   _highlighted?: boolean;
-  _highlightStyle?: HighlightStyle;
   _augmented?: Record<string, unknown>;
 }
 

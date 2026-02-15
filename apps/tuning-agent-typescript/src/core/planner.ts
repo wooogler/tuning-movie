@@ -208,7 +208,7 @@ function fallbackDecision(
       return {
         action: toolCall(
           'highlight',
-          { itemIds, style: 'glow' },
+          { itemIds },
           'Adapt GUI first to make choices clearer before confirmation.'
         ),
         explainText:
