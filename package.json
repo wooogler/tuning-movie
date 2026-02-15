@@ -11,11 +11,13 @@
     "dev:backend": "npm run dev --workspace=apps/backend",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "dev:agent-test": "npm run dev --workspace=apps/agent-test",
+    "dev:tuning-agent-typescript": "npm run dev --workspace=apps/tuning-agent-typescript",
     "dev:all": "node scripts/dev-orchestrator.mjs all",
     "build": "npm run build --workspaces",
     "build:backend": "npm run build --workspace=apps/backend",
     "build:frontend": "npm run build --workspace=apps/frontend",
     "build:agent-test": "npm run build --workspace=apps/agent-test",
+    "build:tuning-agent-typescript": "npm run build --workspace=apps/tuning-agent-typescript",
     "db:seed": "npm run db:seed --workspace=apps/backend"
   },
   "devDependencies": {
