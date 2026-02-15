@@ -199,7 +199,8 @@ function fallbackDecision(
   context: PerceivedContext,
   stage: Stage,
   spec: UISpecLike,
-  options: PlannerOptions
+  options: PlannerOptions,
+  fallbackReason: string
 ): PlanDecision {
   if (!options.executionAllowed) {
     const candidates = getEnabledVisibleItems(spec);
@@ -214,6 +215,7 @@ function fallbackDecision(
         explainText:
           'I highlighted relevant options first. If this looks right, please confirm and I will execute the next booking action.',
         source: 'rule',
+        fallbackReason,
       };
     }
 
@@ -222,6 +224,7 @@ function fallbackDecision(
       explainText:
         'I can proceed, but I need your confirmation before running execution actions such as select or next.',
       source: 'rule',
+      fallbackReason,
     };
   }
 
@@ -240,6 +243,7 @@ function fallbackDecision(
         },
         explainText: 'Booking appears to be complete, so I will end this session.',
         source: 'rule',
+        fallbackReason,
       };
     }
     if (canNext) {
@@ -247,6 +251,7 @@ function fallbackDecision(
         action: toolCall('next', {}, 'Submit confirmation at final stage.'),
         explainText: 'I will submit the confirmation step to complete the booking.',
         source: 'rule',
+        fallbackReason,
       };
     }
   }
@@ -267,6 +272,7 @@ function fallbackDecision(
           ),
           explainText: `I will adjust ticket quantity to match the selected seats (${maxTotal}).`,
           source: 'rule',
+          fallbackReason,
         };
       }
     }
@@ -275,6 +281,7 @@ function fallbackDecision(
         action: toolCall('next', {}, 'Proceed after ticket quantities satisfy seat count.'),
         explainText: 'Ticket quantity is valid, so I will proceed to the next step.',
         source: 'rule',
+        fallbackReason,
       };
     }
   }
@@ -289,6 +296,7 @@ function fallbackDecision(
           action: toolCall('select', { itemId: chosen.id }, `Select seat "${chosen.value}" to continue.`),
           explainText: `I will first select seat "${chosen.value}".`,
           source: 'rule',
+          fallbackReason,
         };
       }
     }
@@ -297,6 +305,7 @@ function fallbackDecision(
         action: toolCall('next', {}, 'Proceed after selecting at least one seat.'),
         explainText: 'Seat selection is complete, so I will continue.',
         source: 'rule',
+        fallbackReason,
       };
     }
   }
@@ -310,6 +319,7 @@ function fallbackDecision(
         action: toolCall('select', { itemId: chosen.id }, `Select "${chosen.value}" to progress at ${stage} stage.`),
         explainText: `I will select "${chosen.value}" to prepare the next step.`,
         source: 'rule',
+        fallbackReason,
       };
     }
   }
@@ -319,6 +329,7 @@ function fallbackDecision(
       action: toolCall('next', {}, `Proceed to next stage after ${stage} selection.`),
       explainText: 'Selection is complete, so I will move to the next stage.',
       source: 'rule',
+      fallbackReason,
     };
   }
 
@@ -326,6 +337,7 @@ function fallbackDecision(
     action: null,
     explainText: 'I could not find a valid action in the current state. Please share a bit more detail about your preference.',
     source: 'rule',
+    fallbackReason,
   };
 }
 
@@ -335,7 +347,7 @@ export async function planNextAction(
   options: PlannerOptions
 ): Promise<PlanDecision> {
   if (!context.sessionId) {
-    return { action: null, source: 'rule' };
+    return { action: null, source: 'rule', fallbackReason: 'NO_SESSION' };
   }
 
   if (context.lastUserMessage && containsEndIntent(context.lastUserMessage.text)) {
@@ -347,6 +359,7 @@ export async function planNextAction(
       },
       explainText: 'I will end the session as requested.',
       source: 'rule',
+      fallbackReason: 'USER_REQUESTED_END',
     };
   }
 
@@ -357,41 +370,60 @@ export async function planNextAction(
       explainText:
         'I am seeing repeated failures at this stage. Please provide more specific preferences and I will try again.',
       source: 'rule',
+      fallbackReason: 'REPEATED_FAILURES_GUARD',
     };
   }
 
   const stage = toStage(context.stage);
   const spec = toUISpecLike(context.uiSpec);
   if (!stage || !spec) {
-    return { action: null, source: 'rule' };
+    return { action: null, source: 'rule', fallbackReason: 'INVALID_STAGE_OR_SPEC' };
   }
 
+  let fallbackReason = 'RULE_FALLBACK';
   const userRequest = context.lastUserMessage?.text ?? '';
   if (userRequest) {
+    if (process.env.AGENT_ENABLE_OPENAI === 'false') {
+      fallbackReason = 'LLM_DISABLED_BY_FLAG';
+    } else if (!process.env.OPENAI_API_KEY) {
+      fallbackReason = 'LLM_DISABLED_NO_API_KEY';
+    }
+
     try {
-      const llm = await planActionWithOpenAI({
-        userRequest,
-        stage,
-        executionAllowed: options.executionAllowed,
-        pendingExecutionAction: options.pendingExecutionAction
-          ? {
-              type: options.pendingExecutionAction.type,
-              reason: options.pendingExecutionAction.reason,
-              payload: options.pendingExecutionAction.payload,
-            }
-          : null,
-        uiSummary: buildUiSummary(stage, spec),
-        availableTools: context.toolSchema,
-        messageHistoryTail: context.messageHistoryTail.slice(-12),
-      });
-      if (llm) {
-        const validated = validateLlmAction(context, spec, options, llm);
-        if (validated) return validated;
+      if (fallbackReason !== 'LLM_DISABLED_BY_FLAG' && fallbackReason !== 'LLM_DISABLED_NO_API_KEY') {
+        const llm = await planActionWithOpenAI({
+          userRequest,
+          stage,
+          executionAllowed: options.executionAllowed,
+          pendingExecutionAction: options.pendingExecutionAction
+            ? {
+                type: options.pendingExecutionAction.type,
+                reason: options.pendingExecutionAction.reason,
+                payload: options.pendingExecutionAction.payload,
+              }
+            : null,
+          uiSummary: buildUiSummary(stage, spec),
+          availableTools: context.toolSchema,
+          messageHistoryTail: context.messageHistoryTail.slice(-12),
+        });
+        if (!llm) {
+          fallbackReason = 'LLM_EMPTY_OR_UNPARSEABLE_OUTPUT';
+        } else {
+          const validated = validateLlmAction(context, spec, options, llm);
+          if (validated) return validated;
+          fallbackReason = options.executionAllowed
+            ? 'LLM_VALIDATION_REJECTED'
+            : 'LLM_VALIDATION_REJECTED_OR_EXECUTION_NOT_ALLOWED';
+        }
       }
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      fallbackReason = `LLM_REQUEST_FAILED:${message}`;
       // Fail open to deterministic fallback for runtime resilience.
     }
+  } else {
+    fallbackReason = 'EMPTY_USER_REQUEST';
   }
 
-  return fallbackDecision(context, stage, spec, options);
+  return fallbackDecision(context, stage, spec, options, fallbackReason);
 }

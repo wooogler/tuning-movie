@@ -28,6 +28,7 @@ export interface PlannerOutput {
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const DEFAULT_MODEL = process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
+const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
 
 function isEnabled(): boolean {
   if (process.env.AGENT_ENABLE_OPENAI === 'false') return false;
@@ -148,7 +149,8 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
       format: {
         type: 'json_schema',
         name: 'planner_decision',
-        strict: true,
+        // Keep strict mode off because params are tool-dependent and may include dynamic keys.
+        strict: false,
         schema: {
           type: 'object',
           properties: {
@@ -172,6 +174,10 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
     },
   };
 
+  if (DEBUG_LLM) {
+    console.log('[tuning-agent-typescript][llm] planner request input:', JSON.stringify(input));
+  }
+
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     headers: {
@@ -183,13 +189,22 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (DEBUG_LLM) {
+      console.error('[tuning-agent-typescript][llm] planner error response:', errorText);
+    }
     throw new Error(`OpenAI planner failed (${response.status}): ${errorText}`);
   }
 
   const payload = (await response.json()) as unknown;
   const outputText = parseOutputText(payload);
+  if (DEBUG_LLM) {
+    console.log('[tuning-agent-typescript][llm] planner raw output_text:', outputText);
+  }
   if (!outputText) return null;
   const parsed = parseJsonObject(outputText);
+  if (DEBUG_LLM) {
+    console.log('[tuning-agent-typescript][llm] planner parsed output:', JSON.stringify(parsed));
+  }
   if (!parsed) return null;
 
   return toPlannerOutput(parsed);

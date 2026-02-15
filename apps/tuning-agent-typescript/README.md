@@ -48,6 +48,8 @@ Important:
 - The relay `host` is created when the frontend page is actually open in a browser.
 - If the agent starts first, it now waits and retries until the host is connected.
 - Monitor dashboard: `http://localhost:3500` (or your `AGENT_MONITOR_PORT`).
+- Monitor `planner.decision` / `planner.no_action` events include `source` and `fallbackReason` for debugging.
+- Set `AGENT_LLM_DEBUG=true` to print raw LLM request/response and error payloads in agent logs.
 
 start mode (non-watch, uses compiled `dist`):
 
@@ -76,6 +78,7 @@ AGENT_PARTICIPANT_ID=P01
 OPENAI_API_KEY=<your_api_key>
 AGENT_OPENAI_MODEL=gpt-5.2
 AGENT_ENABLE_OPENAI=true
+AGENT_LLM_DEBUG=false
 AGENT_MONITOR_PORT=3500
 ```
 

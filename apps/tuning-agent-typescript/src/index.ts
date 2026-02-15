@@ -270,7 +270,10 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         decision.explainText ??
           'I could not find a single valid next action from the current state. Please share your preference in a bit more detail.'
       );
-      monitor.pushEvent('planner.no_action', { source: decision.source });
+      monitor.pushEvent('planner.no_action', {
+        source: decision.source,
+        fallbackReason: decision.fallbackReason ?? null,
+      });
       userMessageQueue.shift();
       monitor.updateState({ pendingUserMessages: userMessageQueue.length });
       return;
@@ -280,6 +283,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     monitor.pushEvent('planner.decision', {
       source: decision.source,
       explainText: decision.explainText ?? null,
+      fallbackReason: decision.fallbackReason ?? null,
       action,
     });
 
@@ -303,6 +307,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     monitor.pushEvent('planner.decision', {
       source: decisionSource,
       explainText: decisionExplainText || null,
+      fallbackReason: null,
       action,
     });
   }

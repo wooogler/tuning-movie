@@ -56,6 +56,7 @@ export interface PlanDecision {
   action: PlannedAction | null;
   explainText?: string;
   source: 'llm' | 'rule';
+  fallbackReason?: string;
 }
 
 export interface ActionOutcome {
