@@ -22,6 +22,10 @@ export class AgentMemory {
     }
   }
 
+  getRecentRecords(windowSize = 10): EpisodicRecord[] {
+    return this.episodic.slice(-windowSize);
+  }
+
   countRecentFailures(stage: string | null, windowSize = 8): number {
     return this.episodic
       .slice(-windowSize)

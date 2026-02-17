@@ -1,17 +1,8 @@
 import type { ToolSchemaItem } from '../types';
 
 interface PlannerInput {
-  userRequest: string;
-  stage: string | null;
-  executionAllowed: boolean;
-  pendingExecutionAction: {
-    type: string;
-    reason: string;
-    payload: Record<string, unknown>;
-  } | null;
-  uiSummary: Record<string, unknown>;
+  history: unknown[];
   availableTools: ToolSchemaItem[];
-  messageHistoryTail: unknown[];
 }
 
 interface PlannerAction {
@@ -26,9 +17,32 @@ export interface PlannerOutput {
   action: PlannerAction;
 }
 
+interface LlmTraceEvent {
+  type: 'request' | 'response.raw' | 'response.parsed' | 'error';
+  payload: unknown;
+}
+
+type LlmTraceListener = (event: LlmTraceEvent) => void;
+
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const DEFAULT_MODEL = process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
 const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
+const llmTraceListeners = new Set<LlmTraceListener>();
+
+function emitLlmTrace(type: LlmTraceEvent['type'], payload: unknown): void {
+  if (!DEBUG_LLM) return;
+  const event: LlmTraceEvent = { type, payload };
+  for (const listener of llmTraceListeners) {
+    listener(event);
+  }
+}
+
+export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
+  llmTraceListeners.add(listener);
+  return () => {
+    llmTraceListeners.delete(listener);
+  };
+}
 
 function isEnabled(): boolean {
   if (process.env.AGENT_ENABLE_OPENAI === 'false') return false;
@@ -129,11 +143,12 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
           'You are a UI agent for movie booking. Pick exactly one next step that best reflects user intent and current GUI state.\n' +
           'Constraints:\n' +
           '- Return JSON only via schema.\n' +
+          '- Use only the provided history stream as context. Infer intent from the most recent user message in history.\n' +
           '- You may choose action.type="none" if clarification is needed.\n' +
           '- If action.type="tool.call", toolName must be one of available tools.\n' +
-          '- Priority: use GUI adaptation first (filter/sort/highlight/augment/postMessage) to reconfirm intent.\n' +
-          '- Never execute select/next/prev/setQuantity without explicit user confirmation.\n' +
-          '- If executionAllowed is false, do not choose select/next/prev/setQuantity.\n' +
+          '- Prefer GUI adaptation first (filter/sort/highlight/augment/postMessage) when user intent is broad or ambiguous.\n' +
+          '- If the user explicitly asks to choose/select/proceed, prefer execution tools (select/next/prev/setQuantity).\n' +
+          '- Choose exactly one action for this turn.\n' +
           '- select requires params.itemId from visible item ids.\n' +
           '- setQuantity requires integer quantity >= 0.\n' +
           '- postMessage should be used for concise, user-friendly explanation when helpful.\n' +
@@ -177,6 +192,7 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   if (DEBUG_LLM) {
     console.log('[tuning-agent-typescript][llm] planner request input:', JSON.stringify(input));
   }
+  emitLlmTrace('request', { model: DEFAULT_MODEL, input });
 
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
@@ -192,6 +208,7 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
     if (DEBUG_LLM) {
       console.error('[tuning-agent-typescript][llm] planner error response:', errorText);
     }
+    emitLlmTrace('error', { status: response.status, errorText });
     throw new Error(`OpenAI planner failed (${response.status}): ${errorText}`);
   }
 
@@ -200,11 +217,13 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   if (DEBUG_LLM) {
     console.log('[tuning-agent-typescript][llm] planner raw output_text:', outputText);
   }
+  emitLlmTrace('response.raw', { outputText });
   if (!outputText) return null;
   const parsed = parseJsonObject(outputText);
   if (DEBUG_LLM) {
     console.log('[tuning-agent-typescript][llm] planner parsed output:', JSON.stringify(parsed));
   }
+  emitLlmTrace('response.parsed', { parsed });
   if (!parsed) return null;
 
   return toPlannerOutput(parsed);

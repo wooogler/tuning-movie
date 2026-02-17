@@ -2,6 +2,7 @@ import { executePlannedAction } from './core/executor';
 import { AgentMemory } from './core/memory';
 import { applyStateUpdated, applyUserMessage, fromSnapshot } from './core/perception';
 import { planNextAction } from './core/planner';
+import { subscribeLlmTrace } from './llm/openaiPlanner';
 import { shouldResync } from './core/verifier';
 import { isActionSafe } from './policies/safetyPolicy';
 import { RelayClient } from './runtime/relayClient';
@@ -25,14 +26,18 @@ const monitorPort = Number(process.env.AGENT_MONITOR_PORT || 3500);
 const memory = new AgentMemory();
 const relay = new RelayClient({ relayUrl, sessionId, agentName, requestTimeoutMs: 12000 });
 const monitor = new AgentMonitorServer({ port: monitorPort, relayUrl, sessionId });
+const unsubscribeLlmTrace = subscribeLlmTrace((event) => {
+  monitor.pushEvent(`llm.${event.type}`, event.payload);
+});
 
 let actionInFlight = false;
 let lastActionFingerprint = '';
 let lastActionAt = 0;
 let ensureSessionReadyInFlight: Promise<void> | null = null;
 let connectedOnce = false;
-const userMessageQueue: UserMessagePayload[] = [];
-let pendingExecutionAction: import('./types').PlannedAction | null = null;
+let planningInFlight = false;
+let deferredReplanRequested = false;
+let deferredReplanTrigger: string | null = null;
 
 const RETRY_DELAY_MS = 1200;
 
@@ -76,28 +81,11 @@ function getToolName(action: import('./types').PlannedAction): string {
   return typeof action.payload.toolName === 'string' ? action.payload.toolName : 'tool.call';
 }
 
-function isExecutionToolName(toolName: string): boolean {
-  return toolName === 'select' || toolName === 'next' || toolName === 'prev' || toolName === 'setQuantity';
-}
-
-function isExecutionAction(action: import('./types').PlannedAction): boolean {
-  if (action.type !== 'tool.call') return false;
-  const toolName = getToolName(action);
-  return isExecutionToolName(toolName);
-}
-
-function isConfirmationIntent(text: string): boolean {
-  const normalized = text.trim().toLowerCase();
-  if (!normalized) return false;
-  const phrases = ['yes', 'confirm', 'go ahead', 'proceed', 'do it', 'looks good', 'ok', 'okay', 'sure'];
-  return phrases.some((phrase) => normalized === phrase || normalized.includes(phrase));
-}
-
-function isRejectIntent(text: string): boolean {
-  const normalized = text.trim().toLowerCase();
-  if (!normalized) return false;
-  const phrases = ['no', 'cancel', 'stop', 'not now', "don't", 'do not'];
-  return phrases.some((phrase) => normalized === phrase || normalized.includes(phrase));
+function requestDeferredReplan(trigger: string): void {
+  deferredReplanRequested = true;
+  deferredReplanTrigger = trigger;
+  monitor.updateState({ pendingUserMessages: 1 });
+  monitor.pushEvent('planner.deferred_replan', { trigger });
 }
 
 function buildPostMessageAction(text: string): import('./types').PlannedAction {
@@ -214,69 +202,36 @@ async function ensureSessionReady(reason: string): Promise<void> {
 }
 
 async function maybePlanAndExecute(trigger: string): Promise<void> {
-  if (actionInFlight) return;
-  if (userMessageQueue.length === 0) return;
+  if (actionInFlight || planningInFlight) {
+    requestDeferredReplan(trigger);
+    return;
+  }
 
   const context = memory.getContext();
   if (!context) return;
 
-  const messageForTurn = userMessageQueue[0] ?? null;
-  const planningContext = messageForTurn
-    ? { ...context, lastUserMessage: messageForTurn }
-    : context;
-  const userText = messageForTurn?.text ?? '';
+  planningInFlight = true;
+  monitor.updateContext(context);
+  monitor.updateState({ pendingUserMessages: deferredReplanRequested ? 1 : 0 });
 
-  monitor.updateContext(planningContext);
-  monitor.updateState({ pendingUserMessages: userMessageQueue.length });
-  let action: import('./types').PlannedAction | null = null;
-  let decisionSource: PlanDecision['source'] = 'rule';
-  let decisionExplainText = '';
-
-  if (pendingExecutionAction && isRejectIntent(userText)) {
-    const canceledTool = getToolName(pendingExecutionAction);
-    pendingExecutionAction = null;
-    await maybePostMessage(
-      planningContext,
-      `Okay, I canceled the pending ${canceledTool} action. Tell me what you want to do next.`
-    );
-    monitor.pushEvent('pending.execution_rejected', { toolName: canceledTool });
-    userMessageQueue.shift();
-    monitor.updateState({ pendingUserMessages: userMessageQueue.length });
-    return;
-  }
-
-  if (pendingExecutionAction && isConfirmationIntent(userText)) {
-    action = pendingExecutionAction;
-    pendingExecutionAction = null;
-    decisionSource = 'rule';
-    decisionExplainText = `Thanks for confirming. I will now execute ${getToolName(action)}.`;
-    monitor.pushEvent('pending.execution_confirmed', {
-      toolName: getToolName(action),
-      trigger,
-    });
-  }
-
-  if (!action) {
-    const decision: PlanDecision = await planNextAction(planningContext, memory, {
-      executionAllowed: false,
-      pendingExecutionAction,
-    });
-    action = decision.action;
-    decisionSource = decision.source;
-    decisionExplainText = decision.explainText ?? '';
+  try {
+    const planningContext = memory.getContext() ?? context;
+    const decision: PlanDecision = await planNextAction(planningContext, memory);
+    const action = decision.action;
+    const decisionExplainText = decision.explainText ?? '';
 
     if (!action) {
-      await maybePostMessage(
-        planningContext,
-        decision.explainText ??
-          'I could not find a single valid next action from the current state. Please share your preference in a bit more detail.'
-      );
+      if (trigger === 'user.message') {
+        await maybePostMessage(
+          planningContext,
+          decision.explainText ??
+            'I could not find a single valid next action from the current state. Please share your preference in a bit more detail.'
+        );
+      }
       monitor.pushEvent('planner.no_action', {
         source: decision.source,
         fallbackReason: decision.fallbackReason ?? null,
       });
-      userMessageQueue.shift();
-      monitor.updateState({ pendingUserMessages: userMessageQueue.length });
       return;
     }
 
@@ -288,65 +243,35 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       action,
     });
 
-    // Hard safety gate: no execution without explicit user confirmation.
-    if (isExecutionAction(action)) {
-      pendingExecutionAction = action;
-      await maybePostMessage(
-        planningContext,
-        `${decision.explainText ?? `I can execute ${getToolName(action)} next.`} Please confirm to proceed.`
-      );
-      monitor.pushEvent('pending.execution_proposed', {
-        toolName: getToolName(action),
-        reason: action.reason,
-      });
-      userMessageQueue.shift();
-      monitor.updateState({ pendingUserMessages: userMessageQueue.length });
+    const actionFingerprint = JSON.stringify({
+      stage: planningContext.stage,
+      type: action.type,
+      payload: action.payload,
+    });
+    const now = Date.now();
+    if (actionFingerprint === lastActionFingerprint && now - lastActionAt < 700) {
       return;
     }
-  } else {
-    monitor.setLastPlan(action, trigger);
-    monitor.pushEvent('planner.decision', {
-      source: decisionSource,
-      explainText: decisionExplainText || null,
-      fallbackReason: null,
-      action,
-    });
-  }
 
-  const actionFingerprint = JSON.stringify({
-    stage: planningContext.stage,
-    type: action.type,
-    payload: action.payload,
-  });
-  const now = Date.now();
-  if (actionFingerprint === lastActionFingerprint && now - lastActionAt < 700) {
-    userMessageQueue.shift();
-    monitor.updateState({ pendingUserMessages: userMessageQueue.length });
-    return;
-  }
+    if (!isActionSafe(planningContext, action)) {
+      memory.addRecord({
+        timestamp: new Date().toISOString(),
+        stage: planningContext.stage,
+        actionType: action.type,
+        ok: false,
+        code: 'SAFETY_BLOCKED',
+        reason: action.reason,
+      });
+      monitor.pushEvent('action.blocked', { trigger, action });
+      console.warn(`[tuning-agent-typescript] action blocked by safety policy (${trigger})`);
+      return;
+    }
 
-  if (!isActionSafe(planningContext, action)) {
-    memory.addRecord({
-      timestamp: new Date().toISOString(),
-      stage: planningContext.stage,
-      actionType: action.type,
-      ok: false,
-      code: 'SAFETY_BLOCKED',
-      reason: action.reason,
-    });
-    monitor.pushEvent('action.blocked', { trigger, action });
-    console.warn(`[tuning-agent-typescript] action blocked by safety policy (${trigger})`);
-    userMessageQueue.shift();
-    monitor.updateState({ pendingUserMessages: userMessageQueue.length });
-    return;
-  }
+    actionInFlight = true;
+    monitor.updateState({ actionInFlight: true, phase: 'executing-action' });
+    lastActionFingerprint = actionFingerprint;
+    lastActionAt = now;
 
-  actionInFlight = true;
-  monitor.updateState({ actionInFlight: true, phase: 'executing-action' });
-  lastActionFingerprint = actionFingerprint;
-  lastActionAt = now;
-  let consumedTurn = false;
-  try {
     if (action.type !== 'tool.call' || getToolName(action) !== 'postMessage') {
       await maybePostMessage(
         planningContext,
@@ -365,9 +290,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         'The host connection is not ready yet. I will retry once the host is available.'
       );
       await ensureSessionReady('runtime-action');
-      userMessageQueue.shift();
-      consumedTurn = true;
-      monitor.updateState({ pendingUserMessages: userMessageQueue.length });
+      requestDeferredReplan('runtime-action');
       return;
     }
 
@@ -387,9 +310,12 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       );
     }
 
-    if (shouldResync(action, outcome)) {
+    const shouldResyncNow =
+      shouldResync(action, outcome) ||
+      (outcome.ok && action.type === 'tool.call' && getToolName(action) !== 'postMessage');
+    if (shouldResyncNow) {
       monitor.pushEvent('state.resync_requested', {
-        reason: outcome.ok ? 'policy' : 'error',
+        reason: outcome.ok ? 'post-action' : 'error',
         code: outcome.code,
       });
       await relay.request('snapshot.get', {});
@@ -401,11 +327,6 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       monitor.close();
       process.exit(0);
     }
-
-    // Core policy: one actionable step per user message.
-    userMessageQueue.shift();
-    consumedTurn = true;
-    monitor.updateState({ pendingUserMessages: userMessageQueue.length });
   } catch (error) {
     monitor.pushEvent('action.exception', {
       message: error instanceof Error ? error.message : String(error),
@@ -414,12 +335,18 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       `[tuning-agent-typescript] execute failed: ${error instanceof Error ? error.message : String(error)}`
     );
   } finally {
-    if (!consumedTurn && userMessageQueue[0] === messageForTurn) {
-      userMessageQueue.shift();
-      monitor.updateState({ pendingUserMessages: userMessageQueue.length });
-    }
     actionInFlight = false;
+    planningInFlight = false;
     monitor.updateState({ actionInFlight: false, phase: 'ready' });
+    if (deferredReplanRequested) {
+      const deferredTrigger = deferredReplanTrigger ?? trigger;
+      deferredReplanRequested = false;
+      deferredReplanTrigger = null;
+      monitor.updateState({ pendingUserMessages: 0 });
+      queueMicrotask(() => {
+        void maybePlanAndExecute(`deferred:${deferredTrigger}`);
+      });
+    }
   }
 }
 
@@ -435,8 +362,13 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
 
   switch (envelope.type) {
     case 'snapshot.state': {
+      const previous = memory.getContext();
       const snapshot = toSnapshotPayload(envelope.payload);
-      upsertContext(fromSnapshot(snapshot));
+      const next = fromSnapshot(snapshot);
+      if (previous?.lastUserMessage) {
+        next.lastUserMessage = previous.lastUserMessage;
+      }
+      upsertContext(next);
       monitor.updateContext(memory.getContext());
       await maybePlanAndExecute('snapshot.state');
       return;
@@ -454,10 +386,9 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       if (!current) return;
       const userMessage = toUserMessagePayload(envelope.payload);
       if (!userMessage.text) return;
-      userMessageQueue.push(userMessage);
       upsertContext(applyUserMessage(current, userMessage));
       monitor.updateContext(memory.getContext());
-      monitor.updateState({ pendingUserMessages: userMessageQueue.length });
+      monitor.updateState({ pendingUserMessages: 0 });
       await maybePlanAndExecute('user.message');
       return;
     }
@@ -487,12 +418,14 @@ async function main(): Promise<void> {
 
 process.on('SIGINT', () => {
   monitor.pushEvent('runtime.signal', { signal: 'SIGINT' });
+  unsubscribeLlmTrace();
   relay.close();
   monitor.close();
   process.exit(0);
 });
 process.on('SIGTERM', () => {
   monitor.pushEvent('runtime.signal', { signal: 'SIGTERM' });
+  unsubscribeLlmTrace();
   relay.close();
   monitor.close();
   process.exit(0);
@@ -502,6 +435,7 @@ void main().catch((error) => {
   monitor.pushEvent('runtime.fatal', {
     message: error instanceof Error ? error.message : String(error),
   });
+  unsubscribeLlmTrace();
   monitor.close();
   console.error(`[tuning-agent-typescript] fatal: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);

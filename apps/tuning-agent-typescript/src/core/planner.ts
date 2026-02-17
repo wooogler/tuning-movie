@@ -14,11 +14,6 @@ import type { PerceivedContext, PlanDecision, PlannedAction, ToolSchemaItem } fr
 
 type Stage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'ticket' | 'confirm';
 
-interface PlannerOptions {
-  executionAllowed: boolean;
-  pendingExecutionAction?: PlannedAction | null;
-}
-
 function containsEndIntent(text: string): boolean {
   const normalized = text.toLowerCase();
   return normalized.includes('end') || normalized.includes('finish') || normalized.includes('종료');
@@ -26,10 +21,6 @@ function containsEndIntent(text: string): boolean {
 
 function hasTool(toolSchema: ToolSchemaItem[], toolName: string): boolean {
   return toolSchema.some((tool) => tool.name === toolName);
-}
-
-function isExecutionToolName(toolName: string): boolean {
-  return toolName === 'select' || toolName === 'next' || toolName === 'prev' || toolName === 'setQuantity';
 }
 
 function toStage(raw: string | null): Stage | null {
@@ -139,10 +130,51 @@ function buildUiSummary(stage: Stage, spec: UISpecLike): Record<string, unknown>
   };
 }
 
+function buildPlannerHistory(
+  context: PerceivedContext,
+  memory: AgentMemory,
+  stage: Stage,
+  spec: UISpecLike
+): unknown[] {
+  const history: unknown[] = [];
+  history.push({
+    type: 'context.snapshot',
+    stage,
+    uiSummary: buildUiSummary(stage, spec),
+    toolNames: context.toolSchema.map((tool) => tool.name),
+    timestamp: context.lastUpdatedAt,
+  });
+
+  for (const item of context.messageHistoryTail.slice(-20)) {
+    history.push({ type: 'timeline.message', item });
+  }
+
+  if (context.lastUserMessage?.text?.trim()) {
+    history.push({
+      type: 'intent.latest',
+      text: context.lastUserMessage.text,
+      stage: context.lastUserMessage.stage ?? null,
+    });
+  }
+
+  for (const record of memory.getRecentRecords(12)) {
+    history.push({
+      type: 'agent.action_outcome',
+      timestamp: record.timestamp,
+      stage: record.stage,
+      actionType: record.actionType,
+      ok: record.ok,
+      code: record.code ?? null,
+      reason: record.reason,
+    });
+  }
+
+  return history;
+}
+
 function validateLlmAction(
   context: PerceivedContext,
   spec: UISpecLike,
-  options: PlannerOptions,
   decision: {
     assistantMessage: string;
     action: {
@@ -164,7 +196,6 @@ function validateLlmAction(
 
   const toolName = decision.action.toolName;
   if (!toolName || !hasTool(context.toolSchema, toolName)) return null;
-  if (!options.executionAllowed && isExecutionToolName(toolName)) return null;
 
   const params = decision.action.params ?? {};
 
@@ -199,35 +230,8 @@ function fallbackDecision(
   context: PerceivedContext,
   stage: Stage,
   spec: UISpecLike,
-  options: PlannerOptions,
   fallbackReason: string
 ): PlanDecision {
-  if (!options.executionAllowed) {
-    const candidates = getEnabledVisibleItems(spec);
-    if (hasTool(context.toolSchema, 'highlight') && candidates.length > 0) {
-      const itemIds = candidates.slice(0, 5).map((item) => item.id);
-      return {
-        action: toolCall(
-          'highlight',
-          { itemIds },
-          'Adapt GUI first to make choices clearer before confirmation.'
-        ),
-        explainText:
-          'I highlighted relevant options first. If this looks right, please confirm and I will execute the next booking action.',
-        source: 'rule',
-        fallbackReason,
-      };
-    }
-
-    return {
-      action: null,
-      explainText:
-        'I can proceed, but I need your confirmation before running execution actions such as select or next.',
-      source: 'rule',
-      fallbackReason,
-    };
-  }
-
   const canSelect = hasTool(context.toolSchema, 'select');
   const canSetQuantity = hasTool(context.toolSchema, 'setQuantity');
   const canNext = hasTool(context.toolSchema, 'next');
@@ -343,8 +347,7 @@ function fallbackDecision(
 
 export async function planNextAction(
   context: PerceivedContext,
-  memory: AgentMemory,
-  options: PlannerOptions
+  memory: AgentMemory
 ): Promise<PlanDecision> {
   if (!context.sessionId) {
     return { action: null, source: 'rule', fallbackReason: 'NO_SESSION' };
@@ -382,48 +385,40 @@ export async function planNextAction(
 
   let fallbackReason = 'RULE_FALLBACK';
   const userRequest = context.lastUserMessage?.text ?? '';
-  if (userRequest) {
-    if (process.env.AGENT_ENABLE_OPENAI === 'false') {
-      fallbackReason = 'LLM_DISABLED_BY_FLAG';
-    } else if (!process.env.OPENAI_API_KEY) {
-      fallbackReason = 'LLM_DISABLED_NO_API_KEY';
-    }
-
-    try {
-      if (fallbackReason !== 'LLM_DISABLED_BY_FLAG' && fallbackReason !== 'LLM_DISABLED_NO_API_KEY') {
-        const llm = await planActionWithOpenAI({
-          userRequest,
-          stage,
-          executionAllowed: options.executionAllowed,
-          pendingExecutionAction: options.pendingExecutionAction
-            ? {
-                type: options.pendingExecutionAction.type,
-                reason: options.pendingExecutionAction.reason,
-                payload: options.pendingExecutionAction.payload,
-              }
-            : null,
-          uiSummary: buildUiSummary(stage, spec),
-          availableTools: context.toolSchema,
-          messageHistoryTail: context.messageHistoryTail.slice(-12),
-        });
-        if (!llm) {
-          fallbackReason = 'LLM_EMPTY_OR_UNPARSEABLE_OUTPUT';
-        } else {
-          const validated = validateLlmAction(context, spec, options, llm);
-          if (validated) return validated;
-          fallbackReason = options.executionAllowed
-            ? 'LLM_VALIDATION_REJECTED'
-            : 'LLM_VALIDATION_REJECTED_OR_EXECUTION_NOT_ALLOWED';
-        }
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      fallbackReason = `LLM_REQUEST_FAILED:${message}`;
-      // Fail open to deterministic fallback for runtime resilience.
-    }
-  } else {
-    fallbackReason = 'EMPTY_USER_REQUEST';
+  if (!userRequest.trim()) {
+    return {
+      action: null,
+      explainText: 'Please tell me what you want to do, and I will proceed step by step.',
+      source: 'rule',
+      fallbackReason: 'EMPTY_USER_REQUEST',
+    };
   }
 
-  return fallbackDecision(context, stage, spec, options, fallbackReason);
+  if (process.env.AGENT_ENABLE_OPENAI === 'false') {
+    fallbackReason = 'LLM_DISABLED_BY_FLAG';
+  } else if (!process.env.OPENAI_API_KEY) {
+    fallbackReason = 'LLM_DISABLED_NO_API_KEY';
+  }
+
+  try {
+    if (fallbackReason !== 'LLM_DISABLED_BY_FLAG' && fallbackReason !== 'LLM_DISABLED_NO_API_KEY') {
+      const llm = await planActionWithOpenAI({
+        history: buildPlannerHistory(context, memory, stage, spec),
+        availableTools: context.toolSchema,
+      });
+      if (!llm) {
+        fallbackReason = 'LLM_EMPTY_OR_UNPARSEABLE_OUTPUT';
+      } else {
+        const validated = validateLlmAction(context, spec, llm);
+        if (validated) return validated;
+        fallbackReason = 'LLM_VALIDATION_REJECTED';
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    fallbackReason = `LLM_REQUEST_FAILED:${message}`;
+    // Fail open to deterministic fallback for runtime resilience.
+  }
+
+  return fallbackDecision(context, stage, spec, fallbackReason);
 }
