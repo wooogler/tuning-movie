@@ -3,12 +3,17 @@ import type { ToolDefinition } from '../agent/tools';
 import { PROTOCOL_VERSION, type RelayEnvelope, type SnapshotPayload } from '../agent/protocol';
 import type { UISpec, Stage } from '../spec';
 import type { ChatMessage } from '../store/chatStore';
+import type { ToolApplyContext } from '../components/devToolsContextShared';
 
 interface UseAgentBridgeOptions {
   uiSpec: UISpec | null;
   messageHistory: ChatMessage[];
   toolSchema: ToolDefinition[];
-  onToolCall: (toolName: string, params: Record<string, unknown>) => UISpec | null | void;
+  onToolCall: (
+    toolName: string,
+    params: Record<string, unknown>,
+    context?: ToolApplyContext
+  ) => UISpec | null | void;
   onAgentMessage: (text: string) => void;
   onSessionEnd: () => void;
 }
@@ -17,6 +22,8 @@ interface UseAgentBridgeResult {
   sendUserMessageToAgent: (text: string, stage: Stage) => void;
   isConnected: boolean;
   isJoined: boolean;
+  joinedSessionId: string | null;
+  connectedAgents: Array<{ id: string; name: string }>;
 }
 
 function buildWsUrl(): string {
@@ -68,6 +75,8 @@ export function useAgentBridge({
 }: UseAgentBridgeOptions): UseAgentBridgeResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
+  const [joinedSessionId, setJoinedSessionId] = useState<string | null>(null);
+  const [connectedAgents, setConnectedAgents] = useState<Array<{ id: string; name: string }>>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -115,7 +124,34 @@ export function useAgentBridge({
     switch (message.type) {
       case 'relay.joined':
         setIsJoined(true);
+        setJoinedSessionId(
+          typeof message.payload?.sessionId === 'string' && message.payload.sessionId.trim()
+            ? message.payload.sessionId.trim()
+            : sessionIdRef.current
+        );
         return;
+
+      case 'relay.presence': {
+        const agentsRaw = Array.isArray(message.payload?.agents) ? message.payload?.agents : [];
+        const agents = agentsRaw
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const id = typeof (entry as Record<string, unknown>).id === 'string'
+              ? (entry as Record<string, unknown>).id
+              : '';
+            const name = typeof (entry as Record<string, unknown>).name === 'string'
+              ? (entry as Record<string, unknown>).name
+              : '';
+            if (!id || !name) return null;
+            return { id, name };
+          })
+          .filter((entry): entry is { id: string; name: string } => entry !== null);
+        setConnectedAgents(agents);
+        if (typeof message.payload?.sessionId === 'string' && message.payload.sessionId.trim()) {
+          setJoinedSessionId(message.payload.sessionId.trim());
+        }
+        return;
+      }
 
       case 'session.start':
         sendEnvelope({
@@ -138,6 +174,10 @@ export function useAgentBridge({
       case 'tool.call': {
         const toolName = message.payload?.toolName;
         const params = message.payload?.params;
+        const reason =
+          typeof message.payload?.reason === 'string' && message.payload.reason.trim()
+            ? message.payload.reason.trim()
+            : undefined;
 
         if (typeof toolName !== 'string') {
           sendEnvelope({
@@ -152,7 +192,10 @@ export function useAgentBridge({
         }
 
         try {
-          const result = applyTool(toolName, (params as Record<string, unknown>) ?? {});
+          const result = applyTool(toolName, (params as Record<string, unknown>) ?? {}, {
+            source: 'agent',
+            reason,
+          });
           const immediateUiSpec = isUiSpec(result) ? result : undefined;
           sendEnvelope({
             type: 'tool.result',
@@ -247,6 +290,8 @@ export function useAgentBridge({
       ws.onclose = () => {
         setIsConnected(false);
         setIsJoined(false);
+        setJoinedSessionId(null);
+        setConnectedAgents([]);
         if (wsRef.current === ws) {
           wsRef.current = null;
         }
@@ -308,5 +353,7 @@ export function useAgentBridge({
     sendUserMessageToAgent,
     isConnected,
     isJoined,
+    joinedSessionId,
+    connectedAgents,
   };
 }

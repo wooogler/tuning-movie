@@ -28,6 +28,10 @@ export function SystemMessage({
 }: SystemMessageProps) {
   // Use activeSpec for the active message, otherwise use message's spec
   const spec = isActive && activeSpec ? activeSpec : message.spec;
+  const annotation = message.annotation;
+  const isToolModification = annotation?.kind === 'tool-modification';
+  const titleClass = isActive ? 'text-white font-medium mb-1' : 'text-gray-500 font-medium mb-1';
+  const descriptionClass = isActive ? 'text-gray-400 text-sm mb-3' : 'text-gray-600 text-sm mb-3';
 
   return (
     <div className="flex gap-3 py-4 justify-start">
@@ -50,31 +54,65 @@ export function SystemMessage({
 
       {/* Message Content */}
       <div className="max-w-[85%]">
-        {/* Message Bubble */}
-        <div className="bg-dark-light rounded-2xl rounded-tl-sm px-4 py-3">
-          {/* Stage Title */}
-          <div className="text-white font-medium mb-1">{spec.title}</div>
-          {spec.description && (
-            <div className="text-gray-400 text-sm mb-3">{spec.description}</div>
-          )}
+        {isToolModification ? (
+          <div className="rounded-2xl rounded-tl-sm p-3 bg-blue-500/15 border border-blue-500/40">
+            <div className="text-blue-300 text-xs font-semibold mb-1">
+              {annotation.source === 'devtools'
+                ? `DevTools applied ${annotation.toolName}`
+                : `Agent applied ${annotation.toolName}`}
+            </div>
+            <div className="text-blue-100 text-sm mb-3 whitespace-pre-wrap">{annotation.reason}</div>
+            <div className="bg-dark-light rounded-xl px-4 py-3">
+              {/* Stage Title */}
+              <div className={titleClass}>{spec.title}</div>
+              {spec.description && (
+                <div className={descriptionClass}>{spec.description}</div>
+              )}
 
-          {/* Stage Component */}
-          <div
-            className={`transition-opacity ${
-              !isActive ? 'opacity-50 pointer-events-none' : ''
-            }`}
-          >
-            <StageRenderer
-              spec={spec}
-              onSelect={isActive && onSelect ? onSelect : () => {}}
-              onToggle={isActive && onToggle ? onToggle : () => {}}
-              onQuantityChange={isActive && onQuantityChange ? onQuantityChange : () => {}}
-              onNext={isActive && onNext ? onNext : () => {}}
-              onBack={isActive && onBack ? onBack : undefined}
-              onConfirm={isActive && onConfirm ? onConfirm : () => {}}
-            />
+              {/* Stage Component */}
+              <div
+                className={`transition-opacity ${
+                  !isActive ? 'opacity-50 pointer-events-none' : ''
+                }`}
+              >
+                <StageRenderer
+                  spec={spec}
+                  onSelect={isActive && onSelect ? onSelect : () => {}}
+                  onToggle={isActive && onToggle ? onToggle : () => {}}
+                  onQuantityChange={isActive && onQuantityChange ? onQuantityChange : () => {}}
+                  onNext={isActive && onNext ? onNext : () => {}}
+                  onBack={isActive && onBack ? onBack : undefined}
+                  onConfirm={isActive && onConfirm ? onConfirm : () => {}}
+                />
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-dark-light rounded-2xl rounded-tl-sm px-4 py-3">
+            {/* Stage Title */}
+            <div className={titleClass}>{spec.title}</div>
+            {spec.description && (
+              <div className={descriptionClass}>{spec.description}</div>
+            )}
+
+            {/* Stage Component */}
+            <div
+              className={`transition-opacity ${
+                !isActive ? 'opacity-50 pointer-events-none' : ''
+              }`}
+            >
+              <StageRenderer
+                spec={spec}
+                onSelect={isActive && onSelect ? onSelect : () => {}}
+                onToggle={isActive && onToggle ? onToggle : () => {}}
+                onQuantityChange={isActive && onQuantityChange ? onQuantityChange : () => {}}
+                onNext={isActive && onNext ? onNext : () => {}}
+                onBack={isActive && onBack ? onBack : undefined}
+                onConfirm={isActive && onConfirm ? onConfirm : () => {}}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

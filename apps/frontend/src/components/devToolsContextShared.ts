@@ -1,9 +1,15 @@
 import { createContext, useContext } from 'react';
 import type { UISpec } from '../spec';
 
+export interface ToolApplyContext {
+  source?: 'agent' | 'devtools';
+  reason?: string;
+}
+
 export type ToolApplyHandler = (
   toolName: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  context?: ToolApplyContext
 ) => UISpec | null | void;
 
 export interface DevToolsContextValue {

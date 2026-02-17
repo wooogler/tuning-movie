@@ -630,12 +630,31 @@ export function ChatPage() {
   }, [resetChat, loadStageData]);
 
   const handleSetSpec = useCallback(
-    (newSpec: typeof activeSpec) => {
+    (
+      newSpec: typeof activeSpec,
+      options?: {
+        appendAsSystemMessage?: boolean;
+        modificationMeta?: {
+          toolName: string;
+          reason: string;
+          source: 'agent' | 'devtools';
+        };
+      }
+    ) => {
       if (!newSpec) return;
-      updateActiveSpec(newSpec);
+      if (options?.appendAsSystemMessage) {
+        addSystemMessage(newSpec.stage, newSpec, options.modificationMeta
+          ? {
+              kind: 'tool-modification',
+              ...options.modificationMeta,
+            }
+          : undefined);
+      } else {
+        updateActiveSpec(newSpec);
+      }
       setUiSpec(newSpec);
     },
-    [updateActiveSpec, setUiSpec]
+    [addSystemMessage, updateActiveSpec, setUiSpec]
   );
 
   useToolHandler({
@@ -666,6 +685,8 @@ export function ChatPage() {
     sendUserMessageToAgent,
     isConnected: isAgentBridgeConnected,
     isJoined: isAgentBridgeJoined,
+    joinedSessionId: agentSessionId,
+    connectedAgents,
   } = useAgentBridge({
     uiSpec: activeSpec,
     messageHistory: messages,
@@ -689,6 +710,26 @@ export function ChatPage() {
   const currentStep = STAGE_ORDER.indexOf(currentStage) + 1;
   const previousStage = getPrevStage(currentStage);
   const nextStage = getNextStage(currentStage);
+  const hasConnectedAgent = connectedAgents.length > 0;
+  const connectedAgentNames = connectedAgents.map((agent) => agent.name).join(', ');
+  const inputDisabled = !isAgentBridgeConnected || !isAgentBridgeJoined || !hasConnectedAgent;
+  const inputStatusLabel = !isAgentBridgeConnected
+    ? 'Relay disconnected'
+    : !isAgentBridgeJoined
+    ? 'Joining agent session...'
+    : !hasConnectedAgent
+    ? 'No external agent connected'
+    : 'External agent connected';
+  const inputStatusTone: 'default' | 'warning' | 'success' = !isAgentBridgeConnected ||
+    !isAgentBridgeJoined ||
+    !hasConnectedAgent
+    ? 'warning'
+    : 'success';
+  const inputStatusDetail = isAgentBridgeJoined
+    ? `session: ${agentSessionId ?? 'unknown'}${
+        hasConnectedAgent ? ` · agent: ${connectedAgentNames}` : ''
+      }`
+    : undefined;
 
   const stageSpecMap = useMemo(() => {
     const map = new Map<Stage, UISpec>();
@@ -920,13 +961,18 @@ export function ChatPage() {
       )}
 
       <ChatInput
-        disabled={!isAgentBridgeJoined}
+        disabled={inputDisabled}
         onSubmit={handleChatInputSubmit}
+        statusLabel={inputStatusLabel}
+        statusDetail={inputStatusDetail}
+        statusTone={inputStatusTone}
         placeholder={
           !isAgentBridgeConnected
             ? 'Waiting for agent relay connection...'
             : !isAgentBridgeJoined
             ? 'Joining agent session...'
+            : !hasConnectedAgent
+            ? 'Waiting for an external agent to connect...'
             : viewMode === 'chat'
             ? 'Send a message to the external agent...'
             : 'Carousel mode: input is available here as well'

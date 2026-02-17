@@ -17,12 +17,13 @@ import type {
 
 const relayUrl = process.env.AGENT_RELAY_URL || 'ws://localhost:3000/agent/ws';
 const sessionId = process.env.AGENT_SESSION_ID || 'default';
+const agentName = process.env.AGENT_NAME || 'tuning-agent-typescript';
 const studyId = process.env.AGENT_STUDY_ID || 'pilot-01';
 const participantId = process.env.AGENT_PARTICIPANT_ID || 'P01';
 const monitorPort = Number(process.env.AGENT_MONITOR_PORT || 3500);
 
 const memory = new AgentMemory();
-const relay = new RelayClient({ relayUrl, sessionId, requestTimeoutMs: 12000 });
+const relay = new RelayClient({ relayUrl, sessionId, agentName, requestTimeoutMs: 12000 });
 const monitor = new AgentMonitorServer({ port: monitorPort, relayUrl, sessionId });
 
 let actionInFlight = false;

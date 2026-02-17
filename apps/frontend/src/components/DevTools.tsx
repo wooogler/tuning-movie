@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useDevTools } from './devToolsContextShared';
+import type { ToolApplyContext } from './devToolsContextShared';
 import { agentTools, toolCategories } from '../agent/tools';
 import type { ToolDefinition } from '../agent/tools';
 import type { UISpec } from '../spec';
@@ -201,7 +202,7 @@ function JsonViewer({ data }: { data: unknown }) {
 // Agent Tools Panel
 interface AgentToolsPanelProps {
   tools: ToolDefinition[];
-  onApply: (toolName: string, params: Record<string, unknown>) => void;
+  onApply: (toolName: string, params: Record<string, unknown>, context?: ToolApplyContext) => void;
   hasSpec: boolean;
   uiSpec: UISpec | null;
 }
@@ -228,14 +229,17 @@ function parseArrayInput(value: string): unknown[] {
 function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelProps) {
   const [selectedTool, setSelectedTool] = useState<string>(tools[0]?.name || '');
   const [params, setParams] = useState<Record<string, string>>({});
+  const [reason, setReason] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
 
   const currentTool = tools.find((t) => t.name === selectedTool);
+  const isModificationSelected = toolCategories[selectedTool] === 'modification';
   const exampleIds = (uiSpec?.visibleItems ?? []).slice(0, 2).map((item) => item.id);
 
   const handleToolChange = (toolName: string) => {
     setSelectedTool(toolName);
     setParams({});
+    setReason('');
     setLastResult(null);
   };
 
@@ -281,7 +285,11 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
     }
 
     try {
-      onApply(selectedTool, typedParams);
+      const trimmedReason = reason.trim();
+      onApply(selectedTool, typedParams, {
+        source: 'devtools',
+        reason: trimmedReason || undefined,
+      });
       setLastResult(`✓ Applied ${selectedTool}`);
     } catch (e) {
       setLastResult(`Error: ${(e as Error).message}`);
@@ -389,6 +397,22 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Reason (for modification tools) */}
+      {isModificationSelected && (
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-white text-xs">reason</span>
+            <span className="text-gray-500 text-xs">(optional)</span>
+          </div>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder='e.g. Filter to evening-friendly options as requested by user.'
+            className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary h-14 resize-none"
+          />
         </div>
       )}
 

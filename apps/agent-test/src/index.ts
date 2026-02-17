@@ -104,6 +104,7 @@ class AgentTestServer {
   private readonly app = Fastify({ logger: true });
   private readonly relayUrl: string;
   private readonly sessionId: string;
+  private readonly agentName: string;
   private readonly httpPort: number;
 
   private relayWs: WebSocket | null = null;
@@ -127,6 +128,7 @@ class AgentTestServer {
   constructor() {
     this.relayUrl = process.env.AGENT_RELAY_URL || DEFAULT_RELAY_URL;
     this.sessionId = process.env.AGENT_SESSION_ID || DEFAULT_SESSION_ID;
+    this.agentName = process.env.AGENT_NAME || 'agent-test';
     this.httpPort = Number(process.env.AGENT_TEST_PORT || DEFAULT_HTTP_PORT);
   }
 
@@ -512,6 +514,7 @@ class AgentTestServer {
         payload: {
           role: 'agent',
           sessionId: this.sessionId,
+          agentName: this.agentName,
         },
       });
     });

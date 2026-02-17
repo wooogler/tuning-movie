@@ -1,5 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useDevTools } from '../components/devToolsContextShared';
+import { isModificationTool } from '../agent/tools';
+import type { ToolApplyContext } from '../components/devToolsContextShared';
 import {
   selectItem,
   toggleItem,
@@ -16,9 +18,18 @@ import {
   type HighlightState,
 } from '../spec';
 
+interface SetSpecOptions {
+  appendAsSystemMessage?: boolean;
+  modificationMeta?: {
+    toolName: string;
+    reason: string;
+    source: 'agent' | 'devtools';
+  };
+}
+
 interface UseToolHandlerOptions<T extends DataItem> {
   spec: UISpec<T> | null;
-  setSpec: (spec: UISpec<T>) => void;
+  setSpec: (spec: UISpec<T>, options?: SetSpecOptions) => void;
   onNext?: () => void;
   onBack?: () => void;
   onPostMessage?: (text: string) => void;
@@ -36,7 +47,7 @@ export function useToolHandler<T extends DataItem>({
   const { setUiSpec, setOnToolApply } = useDevTools();
 
   const handleToolApply = useCallback(
-    (toolName: string, params: Record<string, unknown>) => {
+    (toolName: string, params: Record<string, unknown>, context?: ToolApplyContext) => {
       if (!spec) return;
 
       try {
@@ -121,7 +132,24 @@ export function useToolHandler<T extends DataItem>({
             return null;
         }
 
-        setSpec(newSpec as UISpec<T>);
+        const isModification = isModificationTool(toolName);
+        const source = context?.source === 'devtools' ? 'devtools' : 'agent';
+        const reason = typeof context?.reason === 'string' && context.reason.trim()
+          ? context.reason.trim()
+          : source === 'devtools'
+          ? 'Manual GUI modification from DevTools.'
+          : `Apply ${toolName} to reflect user intent in the current UI.`;
+
+        setSpec(newSpec as UISpec<T>, {
+          appendAsSystemMessage: isModification,
+          modificationMeta: isModification
+            ? {
+                toolName,
+                reason,
+                source,
+              }
+            : undefined,
+        });
         setUiSpec(newSpec);
         return newSpec as UISpec<T>;
       } catch (error) {

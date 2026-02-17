@@ -11,6 +11,7 @@ interface PendingRequest {
 interface RelayClientOptions {
   relayUrl: string;
   sessionId: string;
+  agentName?: string;
   requestTimeoutMs?: number;
 }
 
@@ -31,6 +32,7 @@ export class RelayClient {
   private ws: WebSocket | null = null;
   private readonly relayUrl: string;
   private readonly sessionId: string;
+  private readonly agentName: string;
   private readonly requestTimeoutMs: number;
   private requestSeq = 0;
   private readonly pending = new Map<string, PendingRequest>();
@@ -38,6 +40,7 @@ export class RelayClient {
   constructor(options: RelayClientOptions) {
     this.relayUrl = options.relayUrl;
     this.sessionId = options.sessionId;
+    this.agentName = options.agentName?.trim() || 'tuning-agent-typescript';
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10000;
   }
 
@@ -115,6 +118,7 @@ export class RelayClient {
     return this.request('relay.join', {
       role: 'agent',
       sessionId: this.sessionId,
+      agentName: this.agentName,
     });
   }
 

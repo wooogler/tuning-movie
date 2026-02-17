@@ -11,9 +11,17 @@ interface BaseMessage {
   stage: Stage;
 }
 
+export interface SystemMessageAnnotation {
+  kind: 'tool-modification';
+  toolName: string;
+  reason: string;
+  source: 'agent' | 'devtools';
+}
+
 export interface SystemMessage extends BaseMessage {
   type: 'system';
   spec: UISpec;
+  annotation?: SystemMessageAnnotation;
 }
 
 export interface UserMessage extends BaseMessage {
@@ -41,7 +49,7 @@ interface ChatState {
 
 interface ChatActions {
   /** Add a new system message with stage spec */
-  addSystemMessage: (stage: Stage, spec: UISpec) => void;
+  addSystemMessage: (stage: Stage, spec: UISpec, annotation?: SystemMessageAnnotation) => void;
 
   /** Add user message (selection/back/input) */
   addUserMessage: (stage: Stage, action: 'select' | 'back' | 'input', label: string) => void;
@@ -98,13 +106,14 @@ const initialState: ChatState = {
 export const useChatStore = create<ChatState & ChatActions>((set) => ({
   ...initialState,
 
-  addSystemMessage: (stage, spec) => {
+  addSystemMessage: (stage, spec, annotation) => {
     const message: SystemMessage = {
       id: `sys-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type: 'system',
       timestamp: Date.now(),
       stage,
       spec,
+      annotation,
     };
 
     set((state) => ({

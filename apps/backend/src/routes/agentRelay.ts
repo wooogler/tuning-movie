@@ -17,6 +17,7 @@ interface RelayClient {
   id: string;
   role: Role | null;
   sessionId: string | null;
+  clientName: string | null;
   socket: RelaySocket;
 }
 
@@ -166,6 +167,51 @@ function removeClient(client: RelayClient): void {
   }
 }
 
+function defaultAgentName(clientId: string): string {
+  return `agent-${clientId.slice(-6)}`;
+}
+
+function resolveAgentName(payload: Record<string, unknown> | undefined, fallbackClientId: string): string {
+  const raw = payload?.agentName ?? payload?.clientName ?? payload?.name;
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  return defaultAgentName(fallbackClientId);
+}
+
+function buildPresencePayload(sessionId: string): Record<string, unknown> {
+  const session = sessions.get(sessionId);
+  if (!session) {
+    return {
+      sessionId,
+      agentCount: 0,
+      agents: [],
+    };
+  }
+
+  const agents = Array.from(session.agents)
+    .filter((agent) => isSocketOpen(agent.socket))
+    .map((agent) => ({
+      id: agent.id,
+      name: agent.clientName ?? defaultAgentName(agent.id),
+    }));
+
+  return {
+    sessionId,
+    agentCount: agents.length,
+    agents,
+  };
+}
+
+function notifyHostPresence(sessionId: string): void {
+  const session = sessions.get(sessionId);
+  if (!session?.host || !isSocketOpen(session.host.socket)) return;
+  const payload = buildPresencePayload(sessionId);
+  sendEnvelope(session.host.socket, {
+    type: 'relay.presence',
+    payload,
+  });
+  appendSessionLog(sessionId, 'internal', 'relay.presence', payload);
+}
+
 function relayToHost(client: RelayClient, message: RelayEnvelope): void {
   const sessionId = client.sessionId;
   if (!sessionId) return;
@@ -209,6 +255,7 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
       id: `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role: null,
       sessionId: null,
+      clientName: null,
       socket,
     };
 
@@ -229,6 +276,7 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
       if (message.type === 'relay.join') {
         const role = message.payload?.role;
         const requestedSessionId = message.payload?.sessionId;
+        const payload = message.payload;
         const sessionId =
           typeof requestedSessionId === 'string' && requestedSessionId.trim()
             ? requestedSessionId.trim()
@@ -240,11 +288,17 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
         }
 
         if (client.sessionId) {
+          const previousSessionId = client.sessionId;
+          const previousRole = client.role;
           removeClient(client);
+          if (previousRole === 'agent') {
+            notifyHostPresence(previousSessionId);
+          }
         }
 
         client.role = role;
         client.sessionId = sessionId;
+        client.clientName = role === 'agent' ? resolveAgentName(payload, client.id) : null;
 
         const session = getOrCreateSession(sessionId);
 
@@ -261,6 +315,7 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
         appendSessionLog(sessionId, 'internal', 'relay.join', {
           clientId: client.id,
           role,
+          clientName: client.clientName,
         });
 
         sendEnvelope(client.socket, {
@@ -269,8 +324,10 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
           payload: {
             role,
             sessionId,
+            ...(role === 'agent' ? { clientName: client.clientName } : {}),
           },
         });
+        notifyHostPresence(sessionId);
         return;
       }
 
@@ -296,13 +353,19 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
     });
 
     client.socket.on('close', () => {
+      const previousSessionId = client.sessionId;
+      const previousRole = client.role;
       if (client.sessionId) {
         appendSessionLog(client.sessionId, 'internal', 'relay.disconnect', {
           clientId: client.id,
           role: client.role,
+          clientName: client.clientName,
         });
       }
       removeClient(client);
+      if (previousSessionId && previousRole === 'agent') {
+        notifyHostPresence(previousSessionId);
+      }
     });
 
     client.socket.on('error', (error: unknown) => {

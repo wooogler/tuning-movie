@@ -3,12 +3,18 @@ import { useState } from 'react';
 interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
+  statusLabel?: string;
+  statusDetail?: string;
+  statusTone?: 'default' | 'warning' | 'success';
   onSubmit?: (text: string) => void;
 }
 
 export function ChatInput({
   disabled = true,
   placeholder = 'Type a message...',
+  statusLabel,
+  statusDetail,
+  statusTone = 'default',
   onSubmit,
 }: ChatInputProps) {
   const [text, setText] = useState('');
@@ -23,6 +29,24 @@ export function ChatInput({
   return (
     <div className="border-t border-gray-700 bg-dark p-4">
       <div className="max-w-3xl mx-auto">
+        {(statusLabel || statusDetail) && (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            {statusLabel && (
+              <span
+                className={
+                  statusTone === 'warning'
+                    ? 'text-yellow-400'
+                    : statusTone === 'success'
+                    ? 'text-blue-300'
+                    : 'text-gray-500'
+                }
+              >
+                {statusLabel}
+              </span>
+            )}
+            {statusDetail && <span className="text-gray-500">{statusDetail}</span>}
+          </div>
+        )}
         <div className="flex gap-3 items-center">
           <input
             type="text"
