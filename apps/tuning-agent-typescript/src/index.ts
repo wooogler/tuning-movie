@@ -243,7 +243,11 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     const decisionExplainText = decision.explainText ?? '';
 
     if (!action) {
-      if (trigger === 'user.message' || trigger === 'state.updated:user-message') {
+      const shouldSendNoActionMessage =
+        trigger === 'user.message' ||
+        trigger === 'state.updated:user-message' ||
+        trigger === 'state.updated:stage-change';
+      if (shouldSendNoActionMessage) {
         await maybeSendAssistantMessage(
           planningContext,
           decision.explainText ??
@@ -388,6 +392,27 @@ function upsertContext(next: PerceivedContext): void {
   memory.setContext(next);
 }
 
+function resetRuntimeState(): void {
+  memory.reset();
+  actionInFlight = false;
+  planningInFlight = false;
+  deferredReplanRequested = false;
+  deferredReplanTrigger = null;
+  userTurnAwaitingStateUpdate = false;
+  lastActionFingerprint = '';
+  lastActionAt = 0;
+  monitor.updateState({
+    phase: 'ready',
+    actionInFlight: false,
+    contextStage: null,
+    lastUserMessage: null,
+    lastTrigger: null,
+    lastPlan: null,
+    lastOutcome: null,
+    pendingUserMessages: 0,
+  });
+}
+
 async function handleInbound(envelope: RelayEnvelope): Promise<void> {
   monitor.pushEvent('relay.inbound', {
     type: envelope.type,
@@ -446,6 +471,21 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       monitor.pushEvent('planner.waiting_state_updated_after_user_message', {
         stage: userMessage.stage ?? null,
       });
+      return;
+    }
+    case 'session.reset': {
+      resetRuntimeState();
+      monitor.pushEvent('session.reset', {
+        source: 'host',
+        payload: envelope.payload ?? null,
+      });
+      try {
+        await relay.request('snapshot.get', {});
+      } catch (error) {
+        monitor.pushEvent('session.reset_snapshot_failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
       return;
     }
     case 'session.ended': {

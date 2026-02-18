@@ -655,12 +655,19 @@ export function ChatPage() {
     });
   }, [activeSpec, currentStage, addUserMessage, annotateLastAgentMessage, loadStageData]);
 
-  const handleBookAnother = useCallback(() => {
+  const handleBookAnotherLocal = useCallback(() => {
     resetChat();
     setBooking(null);
-    initialized.current = false;
+    setError(null);
+    initialized.current = true;
+    if (movies.length > 0) {
+      const spec = withBookingContext(generateMovieSpec(movies), {});
+      addSystemMessage('movie', spec);
+      setUiSpec(spec);
+      return;
+    }
     loadStageData('movie', { booking: {} });
-  }, [resetChat, loadStageData]);
+  }, [resetChat, movies, addSystemMessage, setUiSpec, loadStageData]);
 
   const handleSetSpec = useCallback(
     (
@@ -705,9 +712,16 @@ export function ChatPage() {
   const handleSessionReset = useCallback(() => {
     resetChat();
     setBooking(null);
-    initialized.current = false;
+    setError(null);
+    initialized.current = true;
+    if (movies.length > 0) {
+      const spec = withBookingContext(generateMovieSpec(movies), {});
+      addSystemMessage('movie', spec);
+      setUiSpec(spec);
+      return;
+    }
     loadStageData('movie', { booking: {} });
-  }, [resetChat, loadStageData]);
+  }, [resetChat, movies, addSystemMessage, setUiSpec, loadStageData]);
 
   const agentToolSchema = useMemo(
     () => buildToolSchemaForStage(activeSpec, currentStage),
@@ -716,6 +730,7 @@ export function ChatPage() {
 
   const {
     sendUserMessageToAgent,
+    sendSessionResetToAgent,
     isConnected: isAgentBridgeConnected,
     isJoined: isAgentBridgeJoined,
     joinedSessionId: agentSessionId,
@@ -731,6 +746,19 @@ export function ChatPage() {
     },
     onSessionEnd: handleSessionReset,
   });
+
+  const handleManualReset = useCallback(() => {
+    if (loading) return;
+    const confirmed = window.confirm('Reset the current chat and booking progress?');
+    if (!confirmed) return;
+    sendSessionResetToAgent('host-manual-reset');
+    handleSessionReset();
+  }, [handleSessionReset, loading, sendSessionResetToAgent]);
+
+  const handleBookAnother = useCallback(() => {
+    sendSessionResetToAgent('host-book-another');
+    handleBookAnotherLocal();
+  }, [sendSessionResetToAgent, handleBookAnotherLocal]);
 
   const handleChatInputSubmit = useCallback(
     (text: string) => {
@@ -848,6 +876,14 @@ export function ChatPage() {
                 Carousel
               </button>
             </div>
+            <button
+              type="button"
+              onClick={handleManualReset}
+              disabled={loading}
+              className="px-3 py-1 text-xs rounded border border-gray-600 text-gray-300 hover:text-white hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Reset
+            </button>
           </div>
         </div>
       </header>

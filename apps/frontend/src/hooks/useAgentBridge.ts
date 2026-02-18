@@ -20,6 +20,7 @@ interface UseAgentBridgeOptions {
 
 interface UseAgentBridgeResult {
   sendUserMessageToAgent: (text: string, stage: Stage) => void;
+  sendSessionResetToAgent: (reason?: string) => void;
   isConnected: boolean;
   isJoined: boolean;
   joinedSessionId: string | null;
@@ -340,8 +341,19 @@ export function useAgentBridge({
     [sendEnvelope]
   );
 
+  const sendSessionResetToAgent = useCallback(
+    (reason = 'host-manual-reset') => {
+      sendEnvelope({
+        type: 'session.reset',
+        payload: { reason },
+      });
+    },
+    [sendEnvelope]
+  );
+
   return {
     sendUserMessageToAgent,
+    sendSessionResetToAgent,
     isConnected,
     isJoined,
     joinedSessionId,

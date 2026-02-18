@@ -7,6 +7,11 @@ export class AgentMemory {
   private context: PerceivedContext | null = null;
   private episodic: EpisodicRecord[] = [];
 
+  reset(): void {
+    this.context = null;
+    this.episodic = [];
+  }
+
   setContext(context: PerceivedContext): void {
     this.context = context;
   }
