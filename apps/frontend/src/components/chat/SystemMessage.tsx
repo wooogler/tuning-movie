@@ -2,9 +2,35 @@ import type { SystemMessage as SystemMessageType } from '../../store/chatStore';
 import type { UISpec } from '../../spec';
 import { StageRenderer } from '../../renderer';
 
+function getToolActionLabel(toolName: string): string {
+  switch (toolName) {
+    case 'select':
+      return 'is selecting';
+    case 'filter':
+      return 'is filtering';
+    case 'sort':
+      return 'is sorting';
+    case 'highlight':
+      return 'is highlighting';
+    case 'augment':
+      return 'is updating labels';
+    case 'clearModification':
+      return 'is clearing modifications';
+    case 'setQuantity':
+      return 'is setting quantities';
+    case 'next':
+      return 'is moving to the next step';
+    case 'prev':
+      return 'is going back';
+    default:
+      return `is applying ${toolName}`;
+  }
+}
+
 interface SystemMessageProps {
   message: SystemMessageType;
   isActive: boolean;
+  linkedAssistantText?: string;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
   onQuantityChange?: (typeId: string, quantity: number) => void;
@@ -18,6 +44,7 @@ interface SystemMessageProps {
 export function SystemMessage({
   message,
   isActive,
+  linkedAssistantText,
   onSelect,
   onToggle,
   onQuantityChange,
@@ -30,6 +57,10 @@ export function SystemMessage({
   const spec = isActive && activeSpec ? activeSpec : message.spec;
   const annotation = message.annotation;
   const isToolModification = annotation?.kind === 'tool-modification';
+  const toolDescriptionText =
+    typeof linkedAssistantText === 'string' && linkedAssistantText.trim()
+      ? linkedAssistantText.trim()
+      : annotation?.reason ?? '';
   const titleClass = isActive ? 'text-white font-medium mb-1' : 'text-gray-500 font-medium mb-1';
   const descriptionClass = isActive ? 'text-gray-400 text-sm mb-3' : 'text-gray-600 text-sm mb-3';
 
@@ -57,11 +88,10 @@ export function SystemMessage({
         {isToolModification ? (
           <div className="rounded-2xl rounded-tl-sm p-3 bg-blue-500/15 border border-blue-500/40">
             <div className="text-blue-300 text-xs font-semibold mb-1">
-              {annotation.source === 'devtools'
-                ? `DevTools applied ${annotation.toolName}`
-                : `Agent applied ${annotation.toolName}`}
+              {annotation.source === 'devtools' ? 'DevTools' : 'Agent'}{' '}
+              {getToolActionLabel(annotation.toolName)}
             </div>
-            <div className="text-blue-100 text-sm mb-3 whitespace-pre-wrap">{annotation.reason}</div>
+            <div className="text-blue-100 text-sm mb-3 whitespace-pre-wrap">{toolDescriptionText}</div>
             <div className="bg-dark-light rounded-xl px-4 py-3">
               {/* Stage Title */}
               <div className={titleClass}>{spec.title}</div>

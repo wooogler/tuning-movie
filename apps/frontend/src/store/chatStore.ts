@@ -18,6 +18,12 @@ export interface SystemMessageAnnotation {
   source: 'agent' | 'devtools';
 }
 
+export interface AgentMessageActionTag {
+  toolName: 'next' | 'prev';
+  reason: string;
+  source: 'agent' | 'devtools';
+}
+
 export interface SystemMessage extends BaseMessage {
   type: 'system';
   spec: UISpec;
@@ -33,6 +39,7 @@ export interface UserMessage extends BaseMessage {
 export interface AgentMessage extends BaseMessage {
   type: 'agent';
   text: string;
+  actionTag?: AgentMessageActionTag;
 }
 
 export type ChatMessage = SystemMessage | UserMessage | AgentMessage;
@@ -56,6 +63,9 @@ interface ChatActions {
 
   /** Add agent explanation message */
   addAgentMessage: (stage: Stage, text: string) => void;
+
+  /** Attach tool-action tag to the latest agent message in the stage */
+  annotateLastAgentMessage: (stage: Stage, actionTag: AgentMessageActionTag) => void;
 
   /** Update the active spec (for selections/modifications) */
   updateActiveSpec: (spec: UISpec) => void;
@@ -150,6 +160,20 @@ export const useChatStore = create<ChatState & ChatActions>((set) => ({
     set((state) => ({
       messages: [...state.messages, message],
     }));
+  },
+
+  annotateLastAgentMessage: (stage, actionTag) => {
+    set((state) => {
+      const messages = [...state.messages];
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message.type === 'agent' && message.stage === stage) {
+          messages[i] = { ...message, actionTag };
+          break;
+        }
+      }
+      return { messages };
+    });
   },
 
   updateActiveSpec: (spec) => {

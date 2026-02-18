@@ -28,6 +28,16 @@ export function MessageList({
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const isToolLinkedAgentMessage = (index: number): boolean => {
+    const current = messages[index];
+    const next = messages[index + 1];
+    if (!current || !next) return false;
+    if (current.type !== 'agent' || next.type !== 'system') return false;
+    if (next.annotation?.kind !== 'tool-modification') return false;
+    if (next.annotation.source !== 'agent') return false;
+    return current.stage === next.stage;
+  };
+
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -45,11 +55,17 @@ export function MessageList({
         {messages.map((message, index) => {
           if (message.type === 'system') {
             const isActive = index === lastSystemIndex;
+            const previous = index > 0 ? messages[index - 1] : null;
+            const linkedAssistantText =
+              previous && previous.type === 'agent' && isToolLinkedAgentMessage(index - 1)
+                ? previous.text
+                : undefined;
             return (
               <SystemMessage
                 key={message.id}
                 message={message}
                 isActive={isActive}
+                linkedAssistantText={linkedAssistantText}
                 activeSpec={isActive ? activeSpec : null}
                 onSelect={onSelect}
                 onToggle={onToggle}
@@ -63,6 +79,10 @@ export function MessageList({
 
           if (message.type === 'user') {
             return <UserMessage key={message.id} message={message} />;
+          }
+
+          if (isToolLinkedAgentMessage(index)) {
+            return null;
           }
 
           return <AgentMessage key={message.id} message={message} />;

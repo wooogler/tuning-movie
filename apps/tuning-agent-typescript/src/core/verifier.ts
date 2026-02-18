@@ -8,9 +8,10 @@ export function shouldResync(action: PlannedAction, outcome: ActionOutcome): boo
     typeof action.payload.toolName === 'string' ? action.payload.toolName : '';
 
   // Stage navigation tools are asynchronous on host side.
-  // Requesting a snapshot helps us recover if state.updated is delayed.
+  // Prefer waiting for host-driven state.updated to avoid snapshot races
+  // where stale stage data causes duplicate planning turns.
   if (toolName === 'next' || toolName === 'prev') {
-    return true;
+    return false;
   }
 
   return false;

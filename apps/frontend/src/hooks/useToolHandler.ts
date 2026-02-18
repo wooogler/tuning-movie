@@ -30,8 +30,8 @@ interface SetSpecOptions {
 interface UseToolHandlerOptions<T extends DataItem> {
   spec: UISpec<T> | null;
   setSpec: (spec: UISpec<T>, options?: SetSpecOptions) => void;
-  onNext?: () => void;
-  onBack?: () => void;
+  onNext?: (context?: ToolApplyContext) => void;
+  onBack?: (context?: ToolApplyContext) => void;
   onPostMessage?: (text: string) => void;
   multiSelect?: boolean;
 }
@@ -114,10 +114,10 @@ export function useToolHandler<T extends DataItem>({
             break;
           }
           case 'next':
-            onNext?.();
+            onNext?.(context);
             return null;
           case 'prev':
-            onBack?.();
+            onBack?.(context);
             return null;
           case 'postMessage': {
             const text = params.text as string;
@@ -133,6 +133,7 @@ export function useToolHandler<T extends DataItem>({
         }
 
         const isModification = isModificationTool(toolName);
+        const shouldAppendSystemSnapshot = isModification || toolName === 'select';
         const source = context?.source === 'devtools' ? 'devtools' : 'agent';
         const reason = typeof context?.reason === 'string' && context.reason.trim()
           ? context.reason.trim()
@@ -141,8 +142,8 @@ export function useToolHandler<T extends DataItem>({
           : `Apply ${toolName} to reflect user intent in the current UI.`;
 
         setSpec(newSpec as UISpec<T>, {
-          appendAsSystemMessage: isModification,
-          modificationMeta: isModification
+          appendAsSystemMessage: shouldAppendSystemSnapshot,
+          modificationMeta: shouldAppendSystemSnapshot
             ? {
                 toolName,
                 reason,

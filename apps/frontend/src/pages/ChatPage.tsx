@@ -6,7 +6,7 @@ import {
   getPrevStage,
   STAGE_ORDER,
 } from '../store/chatStore';
-import { useDevTools } from '../components/devToolsContextShared';
+import { useDevTools, type ToolApplyContext } from '../components/devToolsContextShared';
 import {
   generateMovieSpec,
   generateTheaterSpec,
@@ -184,6 +184,7 @@ export function ChatPage() {
   const addSystemMessage = useChatStore((s) => s.addSystemMessage);
   const addUserMessage = useChatStore((s) => s.addUserMessage);
   const addAgentMessage = useChatStore((s) => s.addAgentMessage);
+  const annotateLastAgentMessage = useChatStore((s) => s.annotateLastAgentMessage);
   const updateActiveSpec = useChatStore((s) => s.updateActiveSpec);
   const resetChat = useChatStore((s) => s.reset);
 
@@ -434,7 +435,7 @@ export function ChatPage() {
     [activeSpec, ticketTypes, updateActiveSpec, setUiSpec]
   );
 
-  const handleConfirm = useCallback(async () => {
+  const handleConfirm = useCallback(async (context?: ToolApplyContext) => {
     if (!activeSpec) return;
 
     const bookingCtx = getBookingContext(activeSpec);
@@ -462,7 +463,9 @@ export function ChatPage() {
       });
 
       setBooking(result.booking);
-      addUserMessage('confirm', 'select', 'Booking Confirmed!');
+      if (!context) {
+        addUserMessage('confirm', 'select', 'Booking Confirmed!');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Booking failed');
     } finally {
@@ -470,7 +473,7 @@ export function ChatPage() {
     }
   }, [activeSpec, addUserMessage]);
 
-  const handleNext = useCallback(async () => {
+  const handleNext = useCallback(async (context?: ToolApplyContext) => {
     if (!activeSpec) return;
 
     let selectionLabel = '';
@@ -584,15 +587,30 @@ export function ChatPage() {
       }
 
       case 'confirm': {
-        await handleConfirm();
+        await handleConfirm(context);
         return;
       }
     }
 
-    addUserMessage(currentStage, 'select', selectionLabel);
+    if (!context) {
+      addUserMessage(currentStage, 'select', selectionLabel);
+    }
 
     const nextStage = getNextStage(currentStage);
     if (nextStage) {
+      const source: 'agent' | 'devtools' =
+        context?.source === 'devtools' ? 'devtools' : 'agent';
+      const transitionReason =
+        typeof context?.reason === 'string' && context.reason.trim()
+          ? context.reason.trim()
+          : 'Move to the next stage because the current step is ready.';
+      if (context) {
+        annotateLastAgentMessage(currentStage, {
+          toolName: 'next',
+          source,
+          reason: transitionReason,
+        });
+      }
       loadStageData(nextStage, {
         booking: projectBookingForStage(nextStage, nextBooking),
       });
@@ -604,23 +622,38 @@ export function ChatPage() {
     theaters,
     showings,
     addUserMessage,
+    annotateLastAgentMessage,
     loadStageData,
     handleConfirm,
   ]);
 
-  const handleBack = useCallback(async () => {
+  const handleBack = useCallback(async (context?: ToolApplyContext) => {
     if (!activeSpec) return;
 
     const prevStage = getPrevStage(currentStage);
     if (!prevStage) return;
 
-    addUserMessage(currentStage, 'back', 'Back');
+    if (!context) {
+      addUserMessage(currentStage, 'back', 'Back');
+    }
 
     const currentBooking = getBookingContext(activeSpec);
+    const source: 'agent' | 'devtools' = context?.source === 'devtools' ? 'devtools' : 'agent';
+    const transitionReason =
+      typeof context?.reason === 'string' && context.reason.trim()
+        ? context.reason.trim()
+        : 'Return to the previous stage to update an earlier choice.';
+    if (context) {
+      annotateLastAgentMessage(currentStage, {
+        toolName: 'prev',
+        source,
+        reason: transitionReason,
+      });
+    }
     loadStageData(prevStage, {
       booking: projectBookingForStage(prevStage, currentBooking),
     });
-  }, [activeSpec, currentStage, addUserMessage, loadStageData]);
+  }, [activeSpec, currentStage, addUserMessage, annotateLastAgentMessage, loadStageData]);
 
   const handleBookAnother = useCallback(() => {
     resetChat();

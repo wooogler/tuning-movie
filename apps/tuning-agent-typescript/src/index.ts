@@ -221,6 +221,10 @@ async function ensureSessionReady(reason: string): Promise<void> {
 
 async function maybePlanAndExecute(trigger: string): Promise<void> {
   if (actionInFlight || planningInFlight) {
+    if (trigger === 'state.updated') {
+      monitor.pushEvent('planner.skip_replan_while_busy', { trigger });
+      return;
+    }
     requestDeferredReplan(trigger);
     return;
   }
@@ -336,9 +340,13 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       );
     }
 
-    const shouldResyncNow =
-      shouldResync(action, outcome) ||
-      (outcome.ok && action.type === 'tool.call');
+    const toolName =
+      action.type === 'tool.call' && typeof action.payload.toolName === 'string'
+        ? action.payload.toolName
+        : '';
+    const shouldResyncAfterSuccess =
+      outcome.ok && action.type === 'tool.call' && toolName !== 'next' && toolName !== 'prev';
+    const shouldResyncNow = shouldResync(action, outcome) || shouldResyncAfterSuccess;
     if (shouldResyncNow) {
       monitor.pushEvent('state.resync_requested', {
         reason: outcome.ok ? 'post-action' : 'error',
@@ -402,11 +410,26 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
     case 'state.updated': {
       const current = memory.getContext();
       if (!current) return;
-      upsertContext(applyStateUpdated(current, toStateUpdatedPayload(envelope.payload)));
+      const next = applyStateUpdated(current, toStateUpdatedPayload(envelope.payload));
+      const stageChanged = next.stage !== current.stage;
+      upsertContext(next);
       monitor.updateContext(memory.getContext());
-      const trigger = userTurnAwaitingStateUpdate ? 'state.updated:user-message' : 'state.updated';
-      userTurnAwaitingStateUpdate = false;
-      await maybePlanAndExecute(trigger);
+
+      if (userTurnAwaitingStateUpdate) {
+        userTurnAwaitingStateUpdate = false;
+        await maybePlanAndExecute('state.updated:user-message');
+        return;
+      }
+
+      if (stageChanged) {
+        await maybePlanAndExecute('state.updated:stage-change');
+        return;
+      }
+
+      monitor.pushEvent('planner.ignored_state_updated', {
+        stage: next.stage,
+        reason: 'no-user-turn-and-no-stage-change',
+      });
       return;
     }
     case 'user.message': {
