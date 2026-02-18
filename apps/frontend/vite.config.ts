@@ -7,6 +7,8 @@ export default defineConfig({
   envDir: '../..',
   plugins: [react(), tailwindcss()],
   server: {
+    port: Number(process.env.FRONTEND_PORT || 5173),
+    open: true,
     proxy: {
       '/movies': 'http://localhost:3000',
       '/theaters': 'http://localhost:3000',

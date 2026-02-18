@@ -6,7 +6,8 @@ export default defineConfig({
   envDir: '../..',
   plugins: [react(), tailwindcss()],
   server: {
-    port: 3501,
+    port: Number(process.env.AGENT_MONITOR_WEB_PORT || 3501),
+    open: true,
     proxy: {
       '/monitor-api': {
         target: 'http://localhost:3500',

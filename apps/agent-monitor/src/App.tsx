@@ -54,6 +54,16 @@ function fmt(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function copyText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    const json = JSON.stringify(value, null, 2);
+    return json === undefined ? String(value) : json;
+  } catch {
+    return String(value);
+  }
+}
+
 function shortTime(value: string): string {
   if (!value) return '-';
   return new Date(value).toLocaleTimeString();
@@ -107,11 +117,12 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<'agent' | 'llm'>('agent');
+  const [tab, setTab] = useState<'agent' | 'llm'>('llm');
   const [monitorState, setMonitorState] = useState<MonitorState | null>(null);
   const [events, setEvents] = useState<MonitorEvent[]>([]);
   const [connection, setConnection] = useState<'connecting' | 'live' | 'error'>('connecting');
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
     let closed = false;
@@ -175,8 +186,28 @@ export default function App() {
     };
   }, []);
 
-  const llmInteractions = useMemo(() => buildLlmInteractions(events).slice().reverse(), [events]);
+  const llmInteractions = useMemo(() => buildLlmInteractions(events), [events]);
   const recentEvents = useMemo(() => events.slice().reverse().slice(0, 160), [events]);
+
+  async function clearMonitorEvents() {
+    if (isClearing) return;
+    const confirmed = window.confirm('Clear all monitor events and LLM trace?');
+    if (!confirmed) return;
+
+    setIsClearing(true);
+    try {
+      const res = await fetch(`${API_BASE}/events/clear`, { method: 'POST' });
+      if (!res.ok) {
+        throw new Error(`clear failed (${res.status})`);
+      }
+      setErrorText(null);
+      setEvents([]);
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsClearing(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-[1500px] px-4 pb-10 pt-6">
@@ -203,28 +234,42 @@ export default function App() {
         </div>
       </header>
 
-      <div className="mb-4 flex gap-2 text-sm">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="flex gap-2">
+          <button
+            className={`rounded-lg border px-3 py-1.5 ${
+              tab === 'llm'
+                ? 'border-mist-500 bg-mist-700/20 text-mist-100'
+                : 'border-ink-700 bg-ink-900/50 text-mist-300'
+            }`}
+            onClick={() => setTab('llm')}
+            type="button"
+          >
+            LLM Trace
+          </button>
+          <button
+            className={`rounded-lg border px-3 py-1.5 ${
+              tab === 'agent'
+                ? 'border-mist-500 bg-mist-700/20 text-mist-100'
+                : 'border-ink-700 bg-ink-900/50 text-mist-300'
+            }`}
+            onClick={() => setTab('agent')}
+            type="button"
+          >
+            Agent
+          </button>
+        </div>
         <button
-          className={`rounded-lg border px-3 py-1.5 ${
-            tab === 'agent'
-              ? 'border-mist-500 bg-mist-700/20 text-mist-100'
-              : 'border-ink-700 bg-ink-900/50 text-mist-300'
+          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+            isClearing
+              ? 'cursor-not-allowed border-ink-700 bg-ink-900/50 text-mist-400'
+              : 'border-danger-500/60 bg-danger-500/10 text-danger-500 hover:bg-danger-500/20'
           }`}
-          onClick={() => setTab('agent')}
+          disabled={isClearing}
+          onClick={() => void clearMonitorEvents()}
           type="button"
         >
-          Agent
-        </button>
-        <button
-          className={`rounded-lg border px-3 py-1.5 ${
-            tab === 'llm'
-              ? 'border-mist-500 bg-mist-700/20 text-mist-100'
-              : 'border-ink-700 bg-ink-900/50 text-mist-300'
-          }`}
-          onClick={() => setTab('llm')}
-          type="button"
-        >
-          LLM Trace
+          {isClearing ? 'Clearing...' : 'Clear'}
         </button>
       </div>
 
@@ -314,11 +359,14 @@ export default function App() {
                     </span>
                   </div>
                   <div className="grid gap-3 lg:grid-cols-2">
-                    <TraceBlock title="Request" value={item.request} />
-                    <TraceBlock title="Raw Output" value={item.raw} />
-                    <TraceBlock title="Parsed Output" value={item.parsed} />
-                    <TraceBlock title="Error" value={item.error} />
+                    <TraceBlock title="Request" value={item.request} copyable />
+                    <TraceBlock title="Response" value={item.parsed} copyable />
                   </div>
+                  {item.error !== null && item.error !== undefined ? (
+                    <div className="mt-3">
+                      <TraceBlock title="Error" value={item.error} />
+                    </div>
+                  ) : null}
                 </article>
               );
             })
@@ -349,10 +397,52 @@ function JsonCard({ title, value }: { title: string; value: unknown }) {
   );
 }
 
-function TraceBlock({ title, value }: { title: string; value: unknown }) {
+function TraceBlock({
+  title,
+  value,
+  copyable = false,
+}: {
+  title: string;
+  value: unknown;
+  copyable?: boolean;
+}) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = window.setTimeout(() => setCopyState('idle'), 1200);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(copyText(value));
+      setCopyState('copied');
+    } catch {
+      setCopyState('error');
+    }
+  }
+
   return (
     <section>
-      <div className="mb-1 text-xs font-semibold text-mist-300">{title}</div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-mist-300">{title}</div>
+        {copyable ? (
+          <button
+            className={`rounded border px-2 py-0.5 text-[11px] ${
+              copyState === 'copied'
+                ? 'border-ok-500/60 bg-ok-500/15 text-ok-500'
+                : copyState === 'error'
+                  ? 'border-danger-500/60 bg-danger-500/15 text-danger-500'
+                  : 'border-ink-600 bg-ink-900/60 text-mist-200 hover:border-mist-500'
+            }`}
+            onClick={() => void handleCopy()}
+            type="button"
+          >
+            {copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Failed' : 'Copy'}
+          </button>
+        ) : null}
+      </div>
       <pre className="max-h-72 overflow-auto rounded-md border border-ink-700 bg-ink-950/70 p-2 font-mono text-[11px] text-mist-100">
         {fmt(value)}
       </pre>

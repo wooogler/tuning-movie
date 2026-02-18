@@ -119,7 +119,7 @@ export function useAgentBridge({
   }, []);
 
   const handleEnvelope = useCallback((message: RelayEnvelope) => {
-    const { onToolCall: applyTool, onAgentMessage: postAgentMessage, onSessionEnd: handleSessionEnd } = latestRef.current;
+    const { onToolCall: applyTool, onAgentMessage: postAgentMessage } = latestRef.current;
 
     switch (message.type) {
       case 'relay.joined':
@@ -237,16 +237,7 @@ export function useAgentBridge({
       }
 
       case 'session.end':
-        handleSessionEnd();
-        sendEnvelope({
-          type: 'session.ended',
-          replyTo: message.id,
-          payload: {
-            sessionId: sessionIdRef.current,
-            logFile: `logs/study/${sessionIdRef.current}.jsonl`,
-            stateReset: true,
-          },
-        });
+        // Intentionally ignore session.end from agent on host side.
         return;
 
       default:
