@@ -63,6 +63,7 @@ export interface ActionOutcome {
   ok: boolean;
   code?: string;
   message?: string;
+  uiSpec?: unknown;
   replan: boolean;
 }
 

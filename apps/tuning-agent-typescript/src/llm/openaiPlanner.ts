@@ -1,8 +1,20 @@
 import type { ToolSchemaItem } from '../types';
 
+export interface PlannerWorkflow {
+  stageOrder: string[];
+  currentStage: string;
+  previousStage: string | null;
+  nextStage: string | null;
+  stageGoal: string;
+  proceedRule: string;
+  availableToolNames: string[];
+  guardrails: string[];
+}
+
 interface PlannerInput {
   history: unknown[];
   availableTools: ToolSchemaItem[];
+  workflow: PlannerWorkflow;
 }
 
 interface PlannerAction {
@@ -143,15 +155,19 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
           'You are a UI agent for movie booking. Pick exactly one next step that best reflects user intent and current GUI state.\n' +
           'Constraints:\n' +
           '- Return JSON only via schema.\n' +
-          '- Use only the provided history stream as context. Infer intent from the most recent user message in history.\n' +
-          '- You may choose action.type="none" if clarification is needed.\n' +
+          '- Use the provided history stream as context. Infer intent from the conversation, prioritizing unresolved recent user preferences.\n' +
+          '- Use the provided workflow object as process guidance (stage order, current/next stage, proceedRule, guardrails).\n' +
+          '- Treat workflow.currentStage and availableTools as operational boundaries.\n' +
+          '- If intent is reasonably clear, prefer taking one concrete action over asking repetitive clarification questions.\n' +
+          '- Ask clarification only when multiple interpretations would lead to different actions.\n' +
+          '- assistantMessage is the user-facing conversational response.\n' +
+          '- You may choose action.type="none" when clarification/confirmation is needed.\n' +
           '- If action.type="tool.call", toolName must be one of available tools.\n' +
-          '- Prefer GUI adaptation first (filter/sort/highlight/augment/postMessage) when user intent is broad or ambiguous.\n' +
+          '- Prefer GUI adaptation first (filter/sort/highlight/augment) when user intent is broad or ambiguous.\n' +
           '- If the user explicitly asks to choose/select/proceed, prefer execution tools (select/next/prev/setQuantity).\n' +
           '- Choose exactly one action for this turn.\n' +
           '- select requires params.itemId from visible item ids.\n' +
           '- setQuantity requires integer quantity >= 0.\n' +
-          '- postMessage should be used for concise, user-friendly explanation when helpful.\n' +
           '- assistantMessage must always be English.\n' +
           '- Keep assistantMessage short and natural.',
       },

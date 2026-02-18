@@ -18,11 +18,6 @@ function safeArray<T>(value: unknown): T[] {
   return [];
 }
 
-function tail<T>(items: T[], count: number): T[] {
-  if (items.length <= count) return items;
-  return items.slice(-count);
-}
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -32,7 +27,7 @@ export function fromSnapshot(payload: SnapshotStatePayload): PerceivedContext {
     sessionId: payload.sessionId ?? null,
     stage: pickStage(payload.uiSpec),
     uiSpec: payload.uiSpec ?? null,
-    messageHistoryTail: tail(safeArray(payload.messageHistory), 20),
+    messageHistoryTail: safeArray(payload.messageHistory).slice(),
     toolSchema: safeArray<ToolSchemaItem>(payload.toolSchema),
     lastUserMessage: null,
     lastUpdatedAt: nowIso(),
@@ -47,7 +42,7 @@ export function applyStateUpdated(
     ...previous,
     stage: pickStage(payload.uiSpec),
     uiSpec: payload.uiSpec ?? null,
-    messageHistoryTail: tail(safeArray(payload.messageHistory), 20),
+    messageHistoryTail: safeArray(payload.messageHistory).slice(),
     toolSchema: safeArray<ToolSchemaItem>(payload.toolSchema),
     lastUpdatedAt: nowIso(),
   };

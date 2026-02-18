@@ -22,6 +22,7 @@ const agentName = process.env.AGENT_NAME || 'tuning-agent-typescript';
 const studyId = process.env.AGENT_STUDY_ID || 'pilot-01';
 const participantId = process.env.AGENT_PARTICIPANT_ID || 'P01';
 const monitorPort = Number(process.env.AGENT_MONITOR_PORT || 3500);
+const monitorWebPort = Number(process.env.AGENT_MONITOR_WEB_PORT || 3501);
 
 const memory = new AgentMemory();
 const relay = new RelayClient({ relayUrl, sessionId, agentName, requestTimeoutMs: 12000 });
@@ -38,6 +39,7 @@ let connectedOnce = false;
 let planningInFlight = false;
 let deferredReplanRequested = false;
 let deferredReplanTrigger: string | null = null;
+let userTurnAwaitingStateUpdate = false;
 
 const RETRY_DELAY_MS = 1200;
 
@@ -76,6 +78,22 @@ function toUserMessagePayload(value: unknown): UserMessagePayload {
   };
 }
 
+function pickStageFromUiSpec(uiSpec: unknown): string | null {
+  const record = asRecord(uiSpec);
+  const stage = record.currentStage ?? record.stage;
+  return typeof stage === 'string' ? stage : null;
+}
+
+function applyImmediateUiSpec(context: PerceivedContext, uiSpec: unknown): PerceivedContext {
+  const nextStage = pickStageFromUiSpec(uiSpec) ?? context.stage;
+  return {
+    ...context,
+    stage: nextStage,
+    uiSpec: uiSpec ?? null,
+    lastUpdatedAt: new Date().toISOString(),
+  };
+}
+
 function getToolName(action: import('./types').PlannedAction): string {
   if (action.type !== 'tool.call') return action.type;
   return typeof action.payload.toolName === 'string' ? action.payload.toolName : 'tool.call';
@@ -88,24 +106,23 @@ function requestDeferredReplan(trigger: string): void {
   monitor.pushEvent('planner.deferred_replan', { trigger });
 }
 
-function buildPostMessageAction(text: string): import('./types').PlannedAction {
+function buildAgentMessageAction(text: string): import('./types').PlannedAction {
   return {
-    type: 'tool.call',
-    reason: 'Explain current agent decision to the user.',
+    type: 'agent.message',
+    reason: 'Provide a concise assistant response to the user.',
     payload: {
-      toolName: 'postMessage',
-      params: { text },
-      reason: 'Explain current agent decision to the user.',
+      text,
     },
   };
 }
 
-async function maybePostMessage(context: PerceivedContext, text: string): Promise<void> {
-  if (!context.toolSchema.some((tool) => tool.name === 'postMessage')) return;
-  const action = buildPostMessageAction(text);
+async function maybeSendAssistantMessage(context: PerceivedContext, text: string): Promise<void> {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const action = buildAgentMessageAction(trimmed);
   if (!isActionSafe(context, action)) return;
   const outcome = await executePlannedAction(relay, action);
-  monitor.pushEvent('postmessage.outcome', { text, outcome });
+  monitor.pushEvent('assistant_message.outcome', { text: trimmed, outcome });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -163,7 +180,8 @@ async function ensureSessionReady(reason: string): Promise<void> {
         if (!connectedOnce) {
           connectedOnce = true;
           console.log(`[tuning-agent-typescript] connected to ${relayUrl} (sessionId=${sessionId})`);
-          console.log(`[tuning-agent-typescript] monitor available at http://localhost:${monitorPort}`);
+          console.log(`[tuning-agent-typescript] monitor API available at http://localhost:${monitorPort}`);
+          console.log(`[tuning-agent-typescript] monitor UI available at http://localhost:${monitorWebPort}`);
         }
         return;
       } catch (error) {
@@ -221,8 +239,8 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     const decisionExplainText = decision.explainText ?? '';
 
     if (!action) {
-      if (trigger === 'user.message') {
-        await maybePostMessage(
+      if (trigger === 'user.message' || trigger === 'state.updated:user-message') {
+        await maybeSendAssistantMessage(
           planningContext,
           decision.explainText ??
             'I could not find a single valid next action from the current state. Please share your preference in a bit more detail.'
@@ -272,20 +290,28 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     lastActionFingerprint = actionFingerprint;
     lastActionAt = now;
 
-    if (action.type !== 'tool.call' || getToolName(action) !== 'postMessage') {
-      await maybePostMessage(
+    if (action.type !== 'agent.message') {
+      await maybeSendAssistantMessage(
         planningContext,
         decisionExplainText || `I will run ${getToolName(action)} next. Reason: ${action.reason}`
       );
     }
 
     const outcome = await executePlannedAction(relay, action);
+    if (outcome.uiSpec !== undefined) {
+      const current = memory.getContext();
+      if (current) {
+        const next = applyImmediateUiSpec(current, outcome.uiSpec);
+        upsertContext(next);
+        monitor.updateContext(next);
+      }
+    }
     monitor.setLastOutcome(outcome);
     monitor.pushEvent('action.outcome', { action, outcome });
 
     if (!outcome.ok && outcome.code === 'SESSION_NOT_ACTIVE') {
       monitor.updateState({ sessionReady: false, waitingForHost: true, phase: 'waiting-host' });
-      await maybePostMessage(
+      await maybeSendAssistantMessage(
         planningContext,
         'The host connection is not ready yet. I will retry once the host is available.'
       );
@@ -304,7 +330,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     });
 
     if (!outcome.ok) {
-      await maybePostMessage(
+      await maybeSendAssistantMessage(
         planningContext,
         `The action failed (${outcome.code ?? 'UNKNOWN'}). ${outcome.message ?? 'Please try again.'}`
       );
@@ -312,7 +338,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
 
     const shouldResyncNow =
       shouldResync(action, outcome) ||
-      (outcome.ok && action.type === 'tool.call' && getToolName(action) !== 'postMessage');
+      (outcome.ok && action.type === 'tool.call');
     if (shouldResyncNow) {
       monitor.pushEvent('state.resync_requested', {
         reason: outcome.ok ? 'post-action' : 'error',
@@ -378,7 +404,9 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       if (!current) return;
       upsertContext(applyStateUpdated(current, toStateUpdatedPayload(envelope.payload)));
       monitor.updateContext(memory.getContext());
-      await maybePlanAndExecute('state.updated');
+      const trigger = userTurnAwaitingStateUpdate ? 'state.updated:user-message' : 'state.updated';
+      userTurnAwaitingStateUpdate = false;
+      await maybePlanAndExecute(trigger);
       return;
     }
     case 'user.message': {
@@ -389,7 +417,12 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       upsertContext(applyUserMessage(current, userMessage));
       monitor.updateContext(memory.getContext());
       monitor.updateState({ pendingUserMessages: 0 });
-      await maybePlanAndExecute('user.message');
+      // Defer planning until state.updated arrives so planner history always
+      // includes the newly appended timeline user message.
+      userTurnAwaitingStateUpdate = true;
+      monitor.pushEvent('planner.waiting_state_updated_after_user_message', {
+        stage: userMessage.stage ?? null,
+      });
       return;
     }
     case 'session.ended': {

@@ -1,11 +1,15 @@
 import { RelayClient } from '../runtime/relayClient';
 import type { ActionOutcome, PlannedAction } from '../types';
 
-function payloadCodeAndMessage(payload: Record<string, unknown> | undefined): Pick<ActionOutcome, 'code' | 'message'> {
+function payloadCodeAndMessage(
+  payload: Record<string, unknown> | undefined
+): Pick<ActionOutcome, 'code' | 'message' | 'uiSpec'> {
   if (!payload) return {};
   const code = typeof payload.code === 'string' ? payload.code : undefined;
   const message = typeof payload.message === 'string' ? payload.message : undefined;
-  return { code, message };
+  const hasUiSpec = Object.prototype.hasOwnProperty.call(payload, 'uiSpec');
+  const uiSpec = hasUiSpec ? payload.uiSpec : undefined;
+  return { code, message, uiSpec };
 }
 
 function classifyExecutionError(error: unknown): Pick<ActionOutcome, 'code' | 'message'> {

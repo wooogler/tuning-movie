@@ -1,4 +1,4 @@
-import { planActionWithOpenAI } from '../llm/openaiPlanner';
+import { planActionWithOpenAI, type PlannerWorkflow } from '../llm/openaiPlanner';
 import type { AgentMemory } from './memory';
 import {
   getEnabledVisibleItems,
@@ -13,14 +13,22 @@ import {
 import type { PerceivedContext, PlanDecision, PlannedAction, ToolSchemaItem } from '../types';
 
 type Stage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'ticket' | 'confirm';
+const STAGE_ORDER: Stage[] = ['movie', 'theater', 'date', 'time', 'seat', 'ticket', 'confirm'];
 
 function containsEndIntent(text: string): boolean {
   const normalized = text.toLowerCase();
-  return normalized.includes('end') || normalized.includes('finish') || normalized.includes('종료');
+  const englishEndIntent = /\b(end|finish|quit|exit|stop)\b/u;
+  const koreanEndIntent = /(종료|끝내|끝낼|그만|마칠)/u;
+  return englishEndIntent.test(normalized) || koreanEndIntent.test(text);
 }
 
 function hasTool(toolSchema: ToolSchemaItem[], toolName: string): boolean {
   return toolSchema.some((tool) => tool.name === toolName);
+}
+
+function getPlannerToolSchema(toolSchema: ToolSchemaItem[]): ToolSchemaItem[] {
+  // Treat conversational text as assistant response (agent.message), not as a UI tool.
+  return toolSchema.filter((tool) => tool.name !== 'postMessage');
 }
 
 function toStage(raw: string | null): Stage | null {
@@ -114,62 +122,86 @@ function containsBookingConfirmed(messages: unknown[]): boolean {
   });
 }
 
-function buildUiSummary(stage: Stage, spec: UISpecLike): Record<string, unknown> {
-  const visibleItems = getEnabledVisibleItems(spec).slice(0, 60);
+function stageGoal(stage: Stage): string {
+  switch (stage) {
+    case 'movie':
+      return 'Pick one movie title.';
+    case 'theater':
+      return 'Pick one theater for the selected movie.';
+    case 'date':
+      return 'Pick one date for the selected movie and theater.';
+    case 'time':
+      return 'Pick one showtime.';
+    case 'seat':
+      return 'Select one or more seats.';
+    case 'ticket':
+      return 'Set ticket quantities to match selected seat count.';
+    case 'confirm':
+      return 'Submit confirmation to finalize booking.';
+    default:
+      return 'Make progress to the next stage.';
+  }
+}
+
+function stageTransition(stage: Stage): { previousStage: Stage | null; nextStage: Stage | null } {
+  const index = STAGE_ORDER.indexOf(stage);
+  if (index < 0) return { previousStage: null, nextStage: null };
   return {
-    stage,
-    selectedId: getSelectedId(spec),
-    selectedListIds: getSelectedListIds(spec),
-    quantities: getTicketQuantities(spec),
-    maxTotal: getTicketMaxTotal(spec),
-    visibleItems: visibleItems.map((item) => ({
-      id: item.id,
-      value: item.value,
-    })),
-    meta: spec.meta ?? {},
+    previousStage: index > 0 ? STAGE_ORDER[index - 1] : null,
+    nextStage: index < STAGE_ORDER.length - 1 ? STAGE_ORDER[index + 1] : null,
+  };
+}
+
+function buildWorkflowContext(
+  context: PerceivedContext,
+  stage: Stage,
+  spec: UISpecLike,
+  plannerTools: ToolSchemaItem[]
+): PlannerWorkflow {
+  const selectedId = getSelectedId(spec);
+  const selectedListCount = getSelectedListIds(spec).length;
+  const quantities = getTicketQuantities(spec);
+  const ticketTotal = quantities.reduce((sum, quantity) => sum + quantity.count, 0);
+  const ticketMaxTotal = getTicketMaxTotal(spec);
+  const canNext = hasTool(plannerTools, 'next');
+  const { previousStage, nextStage } = stageTransition(stage);
+
+  const guardrails: string[] = [
+    'Choose exactly one action for this turn.',
+    'Do not call tools outside availableToolNames.',
+  ];
+  let proceedRule = 'Only advance stage when required selections are complete.';
+
+  if (stage === 'seat') {
+    proceedRule = `Call next only if selectedListCount > 0 (current: ${selectedListCount}).`;
+  } else if (stage === 'ticket') {
+    proceedRule = `Call next only when ticketTotal equals ticketMaxTotal and ticketMaxTotal > 0 (current: ${ticketTotal}/${ticketMaxTotal}).`;
+  } else if (stage === 'confirm') {
+    const bookingConfirmed = containsBookingConfirmed(context.messageHistoryTail);
+    proceedRule = bookingConfirmed
+      ? 'Booking confirmation detected; end session.'
+      : `Submit confirmation when ready (next available: ${String(canNext)}).`;
+  } else {
+    proceedRule = `Call next only when selectedId exists (current: ${selectedId ?? 'null'}).`;
+  }
+
+  return {
+    stageOrder: STAGE_ORDER,
+    currentStage: stage,
+    previousStage,
+    nextStage,
+    stageGoal: stageGoal(stage),
+    proceedRule,
+    availableToolNames: plannerTools.map((tool) => tool.name),
+    guardrails,
   };
 }
 
 function buildPlannerHistory(
-  context: PerceivedContext,
-  memory: AgentMemory,
-  stage: Stage,
-  spec: UISpecLike
+  context: PerceivedContext
 ): unknown[] {
-  const history: unknown[] = [];
-  history.push({
-    type: 'context.snapshot',
-    stage,
-    uiSummary: buildUiSummary(stage, spec),
-    toolNames: context.toolSchema.map((tool) => tool.name),
-    timestamp: context.lastUpdatedAt,
-  });
-
-  for (const item of context.messageHistoryTail.slice(-20)) {
-    history.push({ type: 'timeline.message', item });
-  }
-
-  if (context.lastUserMessage?.text?.trim()) {
-    history.push({
-      type: 'intent.latest',
-      text: context.lastUserMessage.text,
-      stage: context.lastUserMessage.stage ?? null,
-    });
-  }
-
-  for (const record of memory.getRecentRecords(12)) {
-    history.push({
-      type: 'agent.action_outcome',
-      timestamp: record.timestamp,
-      stage: record.stage,
-      actionType: record.actionType,
-      ok: record.ok,
-      code: record.code ?? null,
-      reason: record.reason,
-    });
-  }
-
-  return history;
+  // Pass frontend messageHistory through as-is so the LLM sees exactly what users see.
+  return context.messageHistoryTail.slice();
 }
 
 function validateLlmAction(
@@ -195,6 +227,22 @@ function validateLlmAction(
   }
 
   const toolName = decision.action.toolName;
+
+  if (toolName === 'postMessage') {
+    const text = typeof decision.action.params.text === 'string' ? decision.action.params.text.trim() : '';
+    return {
+      action: {
+        type: 'agent.message',
+        reason: decision.action.reason,
+        payload: {
+          text: text || explainText || decision.action.reason,
+        },
+      },
+      explainText,
+      source: 'llm',
+    };
+  }
+
   if (!toolName || !hasTool(context.toolSchema, toolName)) return null;
 
   const params = decision.action.params ?? {};
@@ -210,13 +258,6 @@ function validateLlmAction(
     const typeId = typeof params.typeId === 'string' ? params.typeId : '';
     const quantity = params.quantity;
     if (!typeId || !Number.isInteger(quantity) || Number(quantity) < 0) return null;
-  }
-
-  if (toolName === 'postMessage') {
-    const text = typeof params.text === 'string' ? params.text.trim() : '';
-    if (!text) {
-      params.text = explainText ?? decision.action.reason;
-    }
   }
 
   return {
@@ -402,9 +443,11 @@ export async function planNextAction(
 
   try {
     if (fallbackReason !== 'LLM_DISABLED_BY_FLAG' && fallbackReason !== 'LLM_DISABLED_NO_API_KEY') {
+      const plannerTools = getPlannerToolSchema(context.toolSchema);
       const llm = await planActionWithOpenAI({
-        history: buildPlannerHistory(context, memory, stage, spec),
-        availableTools: context.toolSchema,
+        history: buildPlannerHistory(context),
+        availableTools: plannerTools,
+        workflow: buildWorkflowContext(context, stage, spec, plannerTools),
       });
       if (!llm) {
         fallbackReason = 'LLM_EMPTY_OR_UNPARSEABLE_OUTPUT';

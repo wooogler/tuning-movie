@@ -18,6 +18,7 @@ export interface UISpecLike {
   state?: {
     selected?: { id?: string; value?: string };
     selectedList?: Array<{ id?: string; value?: string }>;
+    highlighted?: Array<{ id?: string; value?: string }>;
     quantities?: QuantityLike[];
   };
   meta?: Record<string, unknown>;
@@ -46,6 +47,13 @@ export function getSelectedId(spec: UISpecLike): string | null {
 export function getSelectedListIds(spec: UISpecLike): string[] {
   const selectedList = Array.isArray(spec.state?.selectedList) ? spec.state?.selectedList : [];
   return selectedList
+    .map((entry) => (typeof entry?.id === 'string' ? entry.id : ''))
+    .filter((id) => id.length > 0);
+}
+
+export function getHighlightedIds(spec: UISpecLike): string[] {
+  const highlighted = Array.isArray(spec.state?.highlighted) ? spec.state?.highlighted : [];
+  return highlighted
     .map((entry) => (typeof entry?.id === 'string' ? entry.id : ''))
     .filter((id) => id.length > 0);
 }
