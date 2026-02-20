@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: tuning-movie-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=/app/apps/backend/data/tuning-movie.db
+    volumes:
+      - ./apps/backend/data:/app/apps/backend/data:z
+    networks:
+      - tuning-movie-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  agent:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.agent
+    container_name: tuning-movie-agent
+    restart: unless-stopped
+    environment:
+      - AGENT_RELAY_URL=ws://backend:3000/agent/ws
+      - AGENT_SESSION_ID=${AGENT_SESSION_ID:-default}
+      - AGENT_NAME=${AGENT_NAME:-tuning-agent-typescript}
+      - AGENT_STUDY_ID=${AGENT_STUDY_ID:-pilot-01}
+      - AGENT_PARTICIPANT_ID=${AGENT_PARTICIPANT_ID:-P01}
+      - AGENT_MONITOR_PORT=3500
+      - AGENT_MONITOR_WEB_PORT=3501
+      - AGENT_ENABLE_OPENAI=${AGENT_ENABLE_OPENAI:-true}
+      - AGENT_OPENAI_MODEL=${AGENT_OPENAI_MODEL:-gpt-5.2}
+      - AGENT_LLM_DEBUG=${AGENT_LLM_DEBUG:-false}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - tuning-movie-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3500/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  nginx:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.nginx
+    container_name: tuning-movie-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro,z
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro,z
+      - ./deploy/ssl:/etc/nginx/ssl:ro,z
+    depends_on:
+      backend:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+    networks:
+      - tuning-movie-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  tuning-movie-network:
+    name: tuning-movie-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.1.24.0/24

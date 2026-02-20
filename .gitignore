@@ -6,3 +6,5 @@ dist/
 *.db
 logs/
 apps/backend/logs/
+deploy/ssl/*.pem
+*.tar.gz

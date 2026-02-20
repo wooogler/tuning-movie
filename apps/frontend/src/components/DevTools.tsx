@@ -10,7 +10,7 @@ type Tab = 'booking' | 'backend' | 'spec';
 
 export function DevTools() {
   const { backendData, uiSpec, onToolApply } = useDevTools();
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('spec');
   const [isExpanded, setIsExpanded] = useState(false);
 

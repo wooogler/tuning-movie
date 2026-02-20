@@ -1,0 +1,17 @@
+FROM node:20-alpine AS monitor-builder
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY apps ./apps
+
+RUN npm install
+RUN npm run build --workspace=apps/agent-monitor
+
+FROM nginx:alpine
+
+RUN rm -f /etc/nginx/conf.d/default.conf
+
+COPY deploy/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY deploy/nginx/conf.d /etc/nginx/conf.d
+COPY --from=monitor-builder /app/apps/agent-monitor/dist /usr/share/nginx/agent-monitor

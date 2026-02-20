@@ -259,6 +259,25 @@ AGENT_RELAY_URL=ws://localhost:3000/agent/ws
 AGENT_SESSION_ID=default
 ```
 
+## 🚢 Server Deployment (Podman)
+
+This repository now includes production deployment files matching your existing server pattern (`npm run dev` equivalent runtime):
+
+- `docker-compose.yml`
+- `deploy/nginx/*`
+- `deploy/scripts/setup-podman.sh`
+- `deploy/scripts/deploy-podman.sh`
+- `DEPLOYMENT.md`
+
+Deployed services:
+- `backend` (Fastify + SQLite + main frontend)
+- `agent` (`apps/tuning-agent-typescript`)
+- `nginx` (public routing + `/agent-monitor/` + `/monitor-api/*`)
+
+Note: monitor routes are localhost-only by default for security.
+
+For full instructions, see `DEPLOYMENT.md`.
+
 `AGENT_SESSION_ID` must match frontend `VITE_AGENT_SESSION_ID`.
 
 ## 🤖 External Agent (Study MVP)
