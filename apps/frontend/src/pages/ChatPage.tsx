@@ -1048,26 +1048,26 @@ export function ChatPage() {
         </div>
       )}
 
-      <ChatInput
-        disabled={inputDisabled}
-        onSubmit={handleChatInputSubmit}
-        statusLabel={inputStatusLabel}
-        statusDetail={inputStatusDetail}
-        statusTone={inputStatusTone}
-        placeholder={
-          !agentBridgeEnabled
-            ? 'Agent connection is off. Turn it on to reconnect.'
-            : !isAgentBridgeConnected
-            ? 'Waiting for agent relay connection...'
-            : !isAgentBridgeJoined
-            ? 'Joining agent session...'
-            : !hasConnectedAgent
-            ? 'Waiting for an external agent to connect...'
-            : viewMode === 'chat'
-            ? 'Send a message to the external agent...'
-            : 'Carousel mode: input is available here as well'
-        }
-      />
+      {agentBridgeEnabled && (
+        <ChatInput
+          disabled={inputDisabled}
+          onSubmit={handleChatInputSubmit}
+          statusLabel={inputStatusLabel}
+          statusDetail={inputStatusDetail}
+          statusTone={inputStatusTone}
+          placeholder={
+            !isAgentBridgeConnected
+              ? 'Waiting for agent relay connection...'
+              : !isAgentBridgeJoined
+              ? 'Joining agent session...'
+              : !hasConnectedAgent
+              ? 'Waiting for an external agent to connect...'
+              : viewMode === 'chat'
+              ? 'Send a message to the external agent...'
+              : 'Carousel mode: input is available here as well'
+          }
+        />
+      )}
     </div>
   );
 }
