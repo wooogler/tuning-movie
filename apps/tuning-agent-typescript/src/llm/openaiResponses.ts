@@ -75,7 +75,7 @@ export async function chooseItemWithOpenAI(input: ChooseItemInput): Promise<Item
     model: DEFAULT_MODEL,
     input:
       'Choose exactly one candidate item id.\n' +
-      'Prefer matching the user preference if provided. If unclear, choose a sensible default.\n\n' +
+      'Prefer matching the user preference if provided.\n\n' +
       JSON.stringify(input),
     text: {
       format: {

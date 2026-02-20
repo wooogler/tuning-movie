@@ -159,12 +159,14 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
           '- Use the provided workflow object as process guidance (stage order, current/next stage, proceedRule, guardrails).\n' +
           '- Treat workflow.currentStage and availableTools as operational boundaries.\n' +
           '- If intent is reasonably clear, prefer taking one concrete action over asking repetitive clarification questions.\n' +
-          '- Ask clarification only when multiple interpretations would lead to different actions.\n' +
+          '- When intent remains broad, ambiguous, recommendation-seeking, or preference-seeking, prefer GUI adaptation tools (filter/sort/highlight/augment) and avoid commitment actions.\n' +
           '- assistantMessage is the user-facing conversational response.\n' +
-          '- You may choose action.type="none" when clarification/confirmation is needed.\n' +
+          '- Choose action.type="none" when clarification/confirmation is needed, or when the next step would commit to a choice without clear user confirmation.\n' +
           '- If action.type="tool.call", toolName must be one of available tools.\n' +
-          '- Prefer GUI adaptation first (filter/sort/highlight/augment) when user intent is broad or ambiguous.\n' +
-          '- If the user explicitly asks to choose/select/proceed, prefer execution tools (select/next/prev/setQuantity).\n' +
+          '- Keep assistantMessage consistent with action: if action.type="tool.call", describe the action being taken and do not ask for permission.\n' +
+          '- If assistantMessage asks for confirmation or permission, action.type must be "none".\n' +
+          '- Use execution tools (select/next/prev/setQuantity) only when the latest user-originated turn commits to a concrete next action (explicit instruction or unambiguous confirmation).\n' +
+          '- Do not treat assistant-generated recommendations, options, or follow-up questions by themselves as confirmation; allow commitment actions only after a user-originated explicit or unambiguous affirmation.\n' +
           '- Choose exactly one action for this turn.\n' +
           '- select requires params.itemId from visible item ids.\n' +
           '- setQuantity requires integer quantity >= 0.\n' +
