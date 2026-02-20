@@ -57,17 +57,48 @@ export function SystemMessage({
   const spec = isActive && activeSpec ? activeSpec : message.spec;
   const annotation = message.annotation;
   const isToolModification = annotation?.kind === 'tool-modification';
+  const isAgentControlled = isToolModification && annotation?.source === 'agent';
   const toolDescriptionText =
     typeof linkedAssistantText === 'string' && linkedAssistantText.trim()
       ? linkedAssistantText.trim()
       : annotation?.reason ?? '';
   const titleClass = isActive ? 'text-white font-medium mb-1' : 'text-gray-500 font-medium mb-1';
   const descriptionClass = isActive ? 'text-gray-400 text-sm mb-3' : 'text-gray-600 text-sm mb-3';
+  const stageCard = (
+    <div className="bg-dark-light rounded-2xl rounded-tl-sm px-4 py-3">
+      {/* Stage Title */}
+      <div className={titleClass}>{spec.title}</div>
+      {spec.description && (
+        <div className={descriptionClass}>{spec.description}</div>
+      )}
+
+      {/* Stage Component */}
+      <div
+        className={`transition-opacity ${
+          !isActive ? 'opacity-50 pointer-events-none' : ''
+        }`}
+      >
+        <StageRenderer
+          spec={spec}
+          onSelect={isActive && onSelect ? onSelect : () => {}}
+          onToggle={isActive && onToggle ? onToggle : () => {}}
+          onQuantityChange={isActive && onQuantityChange ? onQuantityChange : () => {}}
+          onNext={isActive && onNext ? onNext : () => {}}
+          onBack={isActive && onBack ? onBack : undefined}
+          onConfirm={isActive && onConfirm ? onConfirm : () => {}}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex gap-3 py-4 justify-start">
       {/* System Avatar */}
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center self-start mt-1">
+      <div
+        className={`flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center self-start mt-1 ${
+          isAgentControlled ? 'ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]' : ''
+        }`}
+      >
         <svg
           className="w-5 h-5 text-dark"
           fill="none"
@@ -84,64 +115,26 @@ export function SystemMessage({
       </div>
 
       {/* Message Content */}
-      <div className="max-w-[85%]">
+      <div className="max-w-[85%] min-w-0">
         {isToolModification ? (
-          <div className="rounded-2xl rounded-tl-sm p-3 bg-blue-500/15 border border-blue-500/40">
-            <div className="text-blue-300 text-xs font-semibold mb-1">
-              {annotation.source === 'devtools' ? 'DevTools' : 'Agent'}{' '}
-              {getToolActionLabel(annotation.toolName)}
-            </div>
-            <div className="text-blue-100 text-sm mb-3 whitespace-pre-wrap">{toolDescriptionText}</div>
-            <div className="bg-dark-light rounded-xl px-4 py-3">
-              {/* Stage Title */}
-              <div className={titleClass}>{spec.title}</div>
-              {spec.description && (
-                <div className={descriptionClass}>{spec.description}</div>
-              )}
-
-              {/* Stage Component */}
-              <div
-                className={`transition-opacity ${
-                  !isActive ? 'opacity-50 pointer-events-none' : ''
-                }`}
-              >
-                <StageRenderer
-                  spec={spec}
-                  onSelect={isActive && onSelect ? onSelect : () => {}}
-                  onToggle={isActive && onToggle ? onToggle : () => {}}
-                  onQuantityChange={isActive && onQuantityChange ? onQuantityChange : () => {}}
-                  onNext={isActive && onNext ? onNext : () => {}}
-                  onBack={isActive && onBack ? onBack : undefined}
-                  onConfirm={isActive && onConfirm ? onConfirm : () => {}}
-                />
+          <div className="-mr-3 rounded-2xl rounded-tl-sm p-3 bg-blue-500/15 border border-blue-500/40">
+            {annotation ? (
+              <div className="w-0 min-w-full">
+                <div className="text-blue-300 text-xs font-semibold mb-1">
+                  {annotation.source === 'devtools' ? 'DevTools' : 'Agent'}{' '}
+                  {getToolActionLabel(annotation.toolName)}
+                </div>
+                {toolDescriptionText ? (
+                  <div className="text-blue-100 text-base font-medium mb-3 whitespace-pre-wrap break-words">
+                    {toolDescriptionText}
+                  </div>
+                ) : null}
               </div>
-            </div>
+            ) : null}
+            {stageCard}
           </div>
         ) : (
-          <div className="bg-dark-light rounded-2xl rounded-tl-sm px-4 py-3">
-            {/* Stage Title */}
-            <div className={titleClass}>{spec.title}</div>
-            {spec.description && (
-              <div className={descriptionClass}>{spec.description}</div>
-            )}
-
-            {/* Stage Component */}
-            <div
-              className={`transition-opacity ${
-                !isActive ? 'opacity-50 pointer-events-none' : ''
-              }`}
-            >
-              <StageRenderer
-                spec={spec}
-                onSelect={isActive && onSelect ? onSelect : () => {}}
-                onToggle={isActive && onToggle ? onToggle : () => {}}
-                onQuantityChange={isActive && onQuantityChange ? onQuantityChange : () => {}}
-                onNext={isActive && onNext ? onNext : () => {}}
-                onBack={isActive && onBack ? onBack : undefined}
-                onConfirm={isActive && onConfirm ? onConfirm : () => {}}
-              />
-            </div>
-          </div>
+          stageCard
         )}
       </div>
     </div>

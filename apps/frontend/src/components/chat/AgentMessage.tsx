@@ -25,7 +25,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
         </svg>
       </div>
 
-      <div className="max-w-[80%]">
+      <div className="max-w-[80%] min-w-0">
         <div className="text-sm text-blue-300 mb-1 flex items-center gap-2">
           <span>Agent</span>
           {actionTag ? (
@@ -37,7 +37,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
             </span>
           ) : null}
         </div>
-        <div className="rounded-2xl rounded-tl-sm px-4 py-2 bg-blue-500/15 border border-blue-500/40 text-blue-100 whitespace-pre-wrap">
+        <div className="rounded-2xl rounded-tl-sm px-4 py-2 bg-blue-500/15 border border-blue-500/40 text-blue-100 text-base font-medium whitespace-pre-wrap break-words">
           {message.text}
         </div>
       </div>
