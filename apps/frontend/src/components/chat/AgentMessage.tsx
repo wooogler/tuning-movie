@@ -26,18 +26,18 @@ export function AgentMessage({ message }: AgentMessageProps) {
       </div>
 
       <div className="max-w-[80%] min-w-0">
-        <div className="text-sm text-blue-300 mb-1 flex items-center gap-2">
+        <div className="text-sm text-info-label mb-1 flex items-center gap-2">
           <span>Agent</span>
           {actionTag ? (
             <span
-              className="text-[11px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-blue-400/70 text-blue-200 bg-blue-500/20"
+              className="text-[11px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-info-border text-info-text bg-info-bg"
               title={actionTag.reason}
             >
               {actionTag.toolName}
             </span>
           ) : null}
         </div>
-        <div className="rounded-2xl rounded-tl-sm px-4 py-2 bg-blue-500/15 border border-blue-500/40 text-blue-100 text-base font-medium whitespace-pre-wrap break-words">
+        <div className="rounded-2xl rounded-tl-sm px-4 py-2 bg-info-bg border border-info-border text-info-text text-base font-medium whitespace-pre-wrap break-words">
           {message.text}
         </div>
       </div>

@@ -18,7 +18,7 @@ export function DevTools() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed right-4 top-1/2 -translate-y-1/2 bg-dark-lighter text-white px-2 py-4 rounded-lg shadow-lg hover:bg-dark-border transition-colors z-50"
+        className="fixed right-4 top-1/2 -translate-y-1/2 bg-dark-lighter text-fg-strong px-2 py-4 rounded-lg shadow-lg hover:bg-dark-border transition-colors z-50"
         title="Open Agent Console"
       >
         &lt;
@@ -34,18 +34,18 @@ export function DevTools() {
     >
       {/* Header */}
       <div className="bg-dark border-b border-dark-border p-3 flex items-center justify-between">
-        <h2 className="text-white font-semibold">Agent Console</h2>
+        <h2 className="text-fg-strong font-semibold">Agent Console</h2>
         <div className="flex gap-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-gray-400 hover:text-white transition-colors px-2"
+            className="text-fg-muted hover:text-fg-strong transition-colors px-2"
             title={isExpanded ? 'Collapse' : 'Expand'}
           >
             {isExpanded ? '←' : '→'}
           </button>
           <button
             onClick={() => setIsOpen(false)}
-            className="text-gray-400 hover:text-white transition-colors px-2"
+            className="text-fg-muted hover:text-fg-strong transition-colors px-2"
             title="Close"
           >
             ✕
@@ -94,7 +94,7 @@ export function DevTools() {
       {/* Agent Tools - Always visible at bottom */}
       <div className="border-t border-dark-border bg-dark">
         <div className="p-3 border-b border-dark-border">
-          <h3 className="text-white font-semibold text-sm">Agent Actions</h3>
+          <h3 className="text-fg-strong font-semibold text-sm">Agent Actions</h3>
         </div>
         <div className="p-4 max-h-80 overflow-auto">
           <AgentToolsPanel
@@ -123,8 +123,8 @@ function TabButton({
       onClick={onClick}
       className={`px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
         active
-          ? 'bg-dark-lighter text-white border-b-2 border-primary'
-          : 'text-gray-400 hover:text-white hover:bg-dark-lighter/50'
+          ? 'bg-dark-lighter text-fg-strong border-b-2 border-primary'
+          : 'text-fg-muted hover:text-fg-strong hover:bg-dark-lighter/50'
       }`}
     >
       {children}
@@ -146,11 +146,11 @@ function JsonViewer({ data }: { data: unknown }) {
             setJsonText(formattedJson);
             setEditMode(true);
           }}
-          className="px-3 py-1 bg-primary text-white text-xs rounded hover:bg-primary-hover transition-colors"
+          className="px-3 py-1 bg-primary text-primary-fg text-xs rounded hover:bg-primary-hover transition-colors"
         >
           Edit Mode
         </button>
-        <pre className="bg-dark p-4 rounded-lg text-xs text-gray-300 overflow-auto font-mono whitespace-pre-wrap break-words">
+        <pre className="bg-dark p-4 rounded-lg text-xs text-fg overflow-auto font-mono whitespace-pre-wrap break-words">
           {formattedJson}
         </pre>
       </div>
@@ -162,7 +162,7 @@ function JsonViewer({ data }: { data: unknown }) {
       <div className="flex gap-2">
         <button
           onClick={() => setEditMode(false)}
-          className="px-3 py-1 bg-dark-border text-white text-xs rounded hover:bg-dark transition-colors"
+          className="px-3 py-1 bg-dark-border text-fg-strong text-xs rounded hover:bg-dark transition-colors"
         >
           View Mode
         </button>
@@ -192,7 +192,7 @@ function JsonViewer({ data }: { data: unknown }) {
       <textarea
         value={jsonText}
         onChange={(e) => setJsonText(e.target.value)}
-        className="w-full h-[calc(100vh-200px)] bg-dark p-4 rounded-lg text-xs text-gray-300 font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+        className="w-full h-[calc(100vh-200px)] bg-dark p-4 rounded-lg text-xs text-fg font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary"
         spellCheck={false}
       />
     </div>
@@ -298,7 +298,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
 
   if (!hasSpec) {
     return (
-      <div className="text-gray-500 text-center py-4 text-sm">
+      <div className="text-fg-faint text-center py-4 text-sm">
         No UI Spec available
       </div>
     );
@@ -311,7 +311,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
         <select
           value={selectedTool}
           onChange={(e) => handleToolChange(e.target.value)}
-          className="w-full bg-dark border border-dark-border rounded px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-full bg-dark border border-dark-border rounded px-3 py-2 text-fg-strong text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         >
           <optgroup label="Modification Tools">
             {tools
@@ -349,16 +349,16 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
           {Object.entries(currentTool.parameters).map(([paramName, paramDef]) => (
             <div key={paramName}>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-white text-xs">{paramName}</span>
+                <span className="text-fg-strong text-xs">{paramName}</span>
                 {paramDef.optional && (
-                  <span className="text-gray-500 text-xs">(opt)</span>
+                  <span className="text-fg-faint text-xs">(opt)</span>
                 )}
               </div>
               {paramDef.enum ? (
                 <select
                   value={params[paramName] || ''}
                   onChange={(e) => handleParamChange(paramName, e.target.value)}
-                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-fg-strong text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="">Select...</option>
                   {paramDef.enum.map((opt) => (
@@ -384,7 +384,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
                       ? '["id1", "id2"]'
                       : '{ "key": "value" }'
                   }
-                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary h-14 resize-none"
+                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-fg-strong text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary h-14 resize-none"
                 />
               ) : (
                 <input
@@ -392,7 +392,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
                   value={params[paramName] || ''}
                   onChange={(e) => handleParamChange(paramName, e.target.value)}
                   placeholder={paramDef.description}
-                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-fg-strong text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               )}
             </div>
@@ -404,14 +404,14 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
       {isModificationSelected && (
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-white text-xs">reason</span>
-            <span className="text-gray-500 text-xs">(optional)</span>
+            <span className="text-fg-strong text-xs">reason</span>
+            <span className="text-fg-faint text-xs">(optional)</span>
           </div>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder='e.g. Filter to evening-friendly options as requested by user.'
-            className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary h-14 resize-none"
+            className="w-full bg-dark-lighter border border-dark-border rounded px-2 py-1.5 text-fg-strong text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary h-14 resize-none"
           />
         </div>
       )}
@@ -421,7 +421,7 @@ function AgentToolsPanel({ tools, onApply, hasSpec, uiSpec }: AgentToolsPanelPro
         <button
           onClick={handleApply}
           disabled={!hasSpec}
-          className="px-4 py-1.5 bg-primary text-white text-sm rounded hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-4 py-1.5 bg-primary text-primary-fg text-sm rounded hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Apply
         </button>

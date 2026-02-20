@@ -68,7 +68,7 @@ export function MessageList({
           >
             <span
               className={`absolute left-1/2 top-[38%] h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors ${
-                isResizingWidth ? 'bg-primary' : 'bg-gray-600 hover:bg-gray-500'
+                isResizingWidth ? 'bg-primary' : 'bg-dark-border hover:bg-dark-lighter'
               }`}
             />
           </button>
@@ -111,7 +111,7 @@ export function MessageList({
 
         {/* Empty state */}
         {messages.length === 0 && (
-          <div className="text-center text-gray-500 py-12">
+          <div className="text-center text-fg-faint py-12">
             Loading...
           </div>
         )}

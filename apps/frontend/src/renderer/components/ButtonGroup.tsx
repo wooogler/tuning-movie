@@ -43,8 +43,8 @@ export function ButtonGroup({
               relative w-full px-6 py-4 rounded-xl text-left transition-all border
               ${
                 isSelected
-                  ? 'bg-primary text-dark font-semibold border-primary'
-                  : 'bg-dark-light text-white hover:bg-dark-lighter border-gray-600 hover:border-gray-500'
+                  ? 'bg-primary text-primary-fg font-semibold border-primary'
+                  : 'bg-dark-light text-fg-strong hover:bg-dark-lighter border-dark-border hover:border-dark-border'
               }
               ${highlightClass}
               ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}

@@ -29,7 +29,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="border-t border-gray-700 bg-dark p-4">
+    <div className="border-t border-dark-border bg-dark p-4">
       <div className="mx-auto" style={{ width: `min(100%, ${chatWidthPx}px)` }}>
         {(statusLabel || statusDetail) && (
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -39,14 +39,14 @@ export function ChatInput({
                   statusTone === 'warning'
                     ? 'text-yellow-400'
                     : statusTone === 'success'
-                    ? 'text-blue-300'
-                    : 'text-gray-500'
+                    ? 'text-info-label'
+                    : 'text-fg-faint'
                 }
               >
                 {statusLabel}
               </span>
             )}
-            {statusDetail && <span className="text-gray-500">{statusDetail}</span>}
+            {statusDetail && <span className="text-fg-faint">{statusDetail}</span>}
           </div>
         )}
         <div className="flex gap-3 items-center">
@@ -62,7 +62,7 @@ export function ChatInput({
                 handleSubmit();
               }
             }}
-            className={`flex-1 bg-dark-light border border-gray-700 rounded-full px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary ${
+            className={`flex-1 bg-dark-light border border-dark-border rounded-full px-4 py-3 text-fg-strong placeholder-fg-faint focus:outline-none focus:border-primary ${
               disabled ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           />
@@ -74,7 +74,7 @@ export function ChatInput({
             }`}
           >
             <svg
-              className="w-5 h-5 text-dark"
+              className="w-5 h-5 text-primary-fg"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -89,7 +89,7 @@ export function ChatInput({
           </button>
         </div>
         {disabled && (
-          <div className="text-center text-gray-500 text-xs mt-2">
+          <div className="text-center text-fg-faint text-xs mt-2">
             Input is currently disabled
           </div>
         )}

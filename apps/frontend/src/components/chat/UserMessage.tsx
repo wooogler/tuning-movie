@@ -12,14 +12,14 @@ export function UserMessage({ message }: UserMessageProps) {
     <div className="flex gap-3 py-4 justify-end">
       {/* Message Content */}
       <div className="max-w-[80%]">
-        <div className="text-sm text-gray-400 mb-1 text-right">You</div>
+        <div className="text-sm text-fg-muted mb-1 text-right">You</div>
         <div
           className={`rounded-2xl px-4 py-2 ${
             isBack
-              ? 'bg-gray-700 text-gray-300'
+              ? 'bg-dark-lighter text-fg'
               : isInput
               ? 'bg-blue-600 text-white'
-              : 'bg-primary text-dark'
+              : 'bg-primary text-primary-fg'
           }`}
         >
           <span className="font-medium">{message.label}</span>
@@ -30,9 +30,9 @@ export function UserMessage({ message }: UserMessageProps) {
       </div>
 
       {/* User Avatar */}
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-dark-border flex items-center justify-center">
         <svg
-          className="w-5 h-5 text-gray-300"
+          className="w-5 h-5 text-fg"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"

@@ -1,10 +1,57 @@
 @import "tailwindcss";
 
+:root,
+:root[data-theme='dark'] {
+  --app-surface-0: #0f0f0f;
+  --app-surface-1: #1a1a1a;
+  --app-surface-2: #2a2a2a;
+  --app-border: #333;
+  --app-text-strong: #f9fafb;
+  --app-text-main: #d1d5db;
+  --app-text-muted: #9ca3af;
+  --app-text-faint: #6b7280;
+  --app-primary-fg: #0f0f0f;
+  --app-info-bg: rgba(59, 130, 246, 0.15);
+  --app-info-border: rgba(96, 165, 250, 0.4);
+  --app-info-text: #dbeafe;
+  --app-info-label: #93c5fd;
+}
+
+:root[data-theme='light'] {
+  --app-surface-0: #ffffff;
+  --app-surface-1: #f8fafc;
+  --app-surface-2: #e2e8f0;
+  --app-border: #cbd5e1;
+  --app-text-strong: #0f172a;
+  --app-text-main: #1f2937;
+  --app-text-muted: #475569;
+  --app-text-faint: #64748b;
+  --app-primary-fg: #ffffff;
+  --app-info-bg: rgba(37, 99, 235, 0.1);
+  --app-info-border: rgba(37, 99, 235, 0.35);
+  --app-info-text: #1e3a8a;
+  --app-info-label: #1d4ed8;
+}
+
 @theme {
   --color-primary: #e50914;
   --color-primary-hover: #f40612;
-  --color-dark: #0f0f0f;
-  --color-dark-light: #1a1a1a;
-  --color-dark-lighter: #2a2a2a;
-  --color-dark-border: #333;
+  --color-dark: var(--app-surface-0);
+  --color-dark-light: var(--app-surface-1);
+  --color-dark-lighter: var(--app-surface-2);
+  --color-dark-border: var(--app-border);
+  --color-fg-strong: var(--app-text-strong);
+  --color-fg: var(--app-text-main);
+  --color-fg-muted: var(--app-text-muted);
+  --color-fg-faint: var(--app-text-faint);
+  --color-primary-fg: var(--app-primary-fg);
+  --color-info-bg: var(--app-info-bg);
+  --color-info-border: var(--app-info-border);
+  --color-info-text: var(--app-info-text);
+  --color-info-label: var(--app-info-label);
+}
+
+body {
+  background-color: var(--app-surface-0);
+  color: var(--app-text-main);
 }

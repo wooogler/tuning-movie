@@ -159,7 +159,7 @@ export function DateStage({
       <div className="flex items-center justify-between w-full max-w-md">
         <button
           onClick={goToPrevMonth}
-          className="p-2 rounded-lg bg-dark-light hover:bg-dark-lighter text-white transition-colors"
+          className="p-2 rounded-lg bg-dark-light hover:bg-dark-lighter text-fg-strong transition-colors"
           aria-label="Previous month"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,11 +167,11 @@ export function DateStage({
           </svg>
         </button>
 
-        <div className="text-xl font-semibold text-white">{monthYearDisplay}</div>
+        <div className="text-xl font-semibold text-fg-strong">{monthYearDisplay}</div>
 
         <button
           onClick={goToNextMonth}
-          className="p-2 rounded-lg bg-dark-light hover:bg-dark-lighter text-white transition-colors"
+          className="p-2 rounded-lg bg-dark-light hover:bg-dark-lighter text-fg-strong transition-colors"
           aria-label="Next month"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -186,7 +186,7 @@ export function DateStage({
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
           <div
             key={day}
-            className="text-center text-sm text-gray-500 py-2 font-medium"
+            className="text-center text-sm text-fg-faint py-2 font-medium"
           >
             {day}
           </div>
@@ -204,12 +204,12 @@ export function DateStage({
               className={`
                 relative aspect-square flex items-center justify-center rounded-lg transition-all text-sm
                 ${!day.isCurrentMonth
-                  ? 'text-gray-700'
+                  ? 'text-fg-faint'
                   : day.isSelected
-                  ? 'bg-primary text-dark font-semibold'
+                  ? 'bg-primary text-primary-fg font-semibold'
                   : day.isAvailable
-                  ? 'bg-dark-light text-white hover:bg-dark-lighter'
-                  : 'bg-dark-border/50 text-gray-600 cursor-not-allowed'
+                  ? 'bg-dark-light text-fg-strong hover:bg-dark-lighter'
+                  : 'bg-dark-border/50 text-fg-faint cursor-not-allowed'
                 }
                 ${day.isToday && !day.isSelected ? 'ring-1 ring-primary/50' : ''}
                 ${highlightClass}
@@ -228,7 +228,7 @@ export function DateStage({
 
       {/* 선택된 날짜 표시 */}
       {selectedDate && (
-        <div className="text-gray-400">
+        <div className="text-fg-muted">
           Selected: {selectedDate.displayText}
         </div>
       )}

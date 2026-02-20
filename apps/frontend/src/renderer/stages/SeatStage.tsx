@@ -40,7 +40,7 @@ export function SeatStage({
       {/* Screen indicator */}
       <div className="w-full max-w-lg">
         <div className="w-3/4 h-2 mx-auto bg-gradient-to-b from-gray-300 to-gray-500 rounded-t-full mb-2" />
-        <div className="text-center text-sm text-gray-500 mb-6">SCREEN</div>
+        <div className="text-center text-sm text-fg-faint mb-6">SCREEN</div>
       </div>
 
       {/* Seat map */}
@@ -48,7 +48,7 @@ export function SeatStage({
         {seatsByRow.map((rowSeats, rowIndex) => (
           <div key={rows[rowIndex]} className="flex items-center gap-2">
             {/* Row label */}
-            <span className="w-6 text-center text-sm text-gray-500">
+            <span className="w-6 text-center text-sm text-fg-faint">
               {rows[rowIndex]}
             </span>
 
@@ -70,10 +70,10 @@ export function SeatStage({
                       w-8 h-8 rounded-t-lg text-xs font-medium transition-all
                       ${
                         isOccupied
-                          ? 'bg-gray-600 cursor-not-allowed'
+                          ? 'bg-dark-border cursor-not-allowed'
                           : isSelected
-                          ? 'bg-primary text-dark'
-                          : 'bg-dark-light hover:bg-dark-lighter text-white'
+                          ? 'bg-primary text-primary-fg'
+                          : 'bg-dark-light hover:bg-dark-lighter text-fg-strong'
                       }
                       ${highlightClass}
                     `}
@@ -88,7 +88,7 @@ export function SeatStage({
       </div>
 
       {/* Legend */}
-      <div className="flex gap-6 text-sm text-gray-400">
+      <div className="flex gap-6 text-sm text-fg-muted">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded-t bg-dark-light" />
           <span>Available</span>
@@ -98,14 +98,14 @@ export function SeatStage({
           <span>Selected</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-t bg-gray-600" />
+          <div className="w-4 h-4 rounded-t bg-dark-border" />
           <span>Occupied</span>
         </div>
       </div>
 
       {/* Selected seats info */}
       {selectedList.length > 0 && (
-        <div className="text-gray-400">
+        <div className="text-fg-muted">
           Selected: {selectedList.map((item) => item.value).join(', ')} ({selectedList.length} seats)
         </div>
       )}

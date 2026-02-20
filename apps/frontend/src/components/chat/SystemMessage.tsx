@@ -62,10 +62,10 @@ export function SystemMessage({
     typeof linkedAssistantText === 'string' && linkedAssistantText.trim()
       ? linkedAssistantText.trim()
       : annotation?.reason ?? '';
-  const titleClass = isActive ? 'text-white font-medium mb-1' : 'text-gray-500 font-medium mb-1';
-  const descriptionClass = isActive ? 'text-gray-400 text-sm mb-3' : 'text-gray-600 text-sm mb-3';
+  const titleClass = isActive ? 'text-fg-strong font-medium mb-1' : 'text-fg-faint font-medium mb-1';
+  const descriptionClass = isActive ? 'text-fg-muted text-sm mb-3' : 'text-fg-faint text-sm mb-3';
   const stageCard = (
-    <div className="bg-dark-light rounded-2xl rounded-tl-sm px-4 py-3">
+    <div className="bg-dark border border-dark-border rounded-2xl rounded-tl-sm px-4 py-3">
       {/* Stage Title */}
       <div className={titleClass}>{spec.title}</div>
       {spec.description && (
@@ -100,7 +100,7 @@ export function SystemMessage({
         }`}
       >
         <svg
-          className="w-5 h-5 text-dark"
+          className="w-5 h-5 text-primary-fg"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -117,15 +117,15 @@ export function SystemMessage({
       {/* Message Content */}
       <div className="max-w-[85%] min-w-0">
         {isToolModification ? (
-          <div className="-mr-3 rounded-2xl rounded-tl-sm p-3 bg-blue-500/15 border border-blue-500/40">
+          <div className="-mr-3 rounded-2xl rounded-tl-sm p-3 bg-info-bg border border-info-border">
             {annotation ? (
               <div className="w-0 min-w-full">
-                <div className="text-blue-300 text-xs font-semibold mb-1">
+                <div className="text-info-label text-xs font-semibold mb-1">
                   {annotation.source === 'devtools' ? 'DevTools' : 'Agent'}{' '}
                   {getToolActionLabel(annotation.toolName)}
                 </div>
                 {toolDescriptionText ? (
-                  <div className="text-blue-100 text-base font-medium mb-3 whitespace-pre-wrap break-words">
+                  <div className="text-info-text text-base font-medium mb-3 whitespace-pre-wrap break-words">
                     {toolDescriptionText}
                   </div>
                 ) : null}

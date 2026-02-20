@@ -52,12 +52,12 @@ export function TicketStage({
             >
               {/* Ticket info */}
               <div>
-                <div className="font-semibold text-white">{ticket.name}</div>
-                <div className="text-sm text-gray-400">
+                <div className="font-semibold text-fg-strong">{ticket.name}</div>
+                <div className="text-sm text-fg-muted">
                   {ticket.priceDisplay}
                 </div>
                 {ticket.description && (
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-fg-faint mt-1">
                     {ticket.description}
                   </div>
                 )}
@@ -72,15 +72,15 @@ export function TicketStage({
                     w-10 h-10 rounded-lg text-xl font-bold transition-colors
                     ${
                       canDecrease
-                        ? 'bg-dark-lighter text-white hover:bg-dark-border'
-                        : 'bg-dark-border text-gray-600 cursor-not-allowed'
+                        ? 'bg-dark-lighter text-fg-strong hover:bg-dark-border'
+                        : 'bg-dark-border text-fg-faint cursor-not-allowed'
                     }
                   `}
                 >
                   -
                 </button>
 
-                <span className="w-8 text-center text-xl font-semibold text-white">
+                <span className="w-8 text-center text-xl font-semibold text-fg-strong">
                   {quantity}
                 </span>
 
@@ -91,8 +91,8 @@ export function TicketStage({
                     w-10 h-10 rounded-lg text-xl font-bold transition-colors
                     ${
                       canIncrease
-                        ? 'bg-primary text-dark hover:bg-primary-hover'
-                        : 'bg-dark-border text-gray-600 cursor-not-allowed'
+                        ? 'bg-primary text-primary-fg hover:bg-primary-hover'
+                        : 'bg-dark-border text-fg-faint cursor-not-allowed'
                     }
                   `}
                 >
@@ -106,7 +106,7 @@ export function TicketStage({
 
       {/* Total info */}
       <div className="text-center">
-        <div className="text-gray-400">
+        <div className="text-fg-muted">
           {currentTotal} / {maxTotal} tickets selected
         </div>
         {currentTotal !== maxTotal && (

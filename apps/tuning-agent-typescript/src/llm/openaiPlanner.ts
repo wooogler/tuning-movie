@@ -168,7 +168,7 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
           '- Choose exactly one action for this turn.\n' +
           '- select requires params.itemId from visible item ids.\n' +
           '- setQuantity requires integer quantity >= 0.\n' +
-          '- assistantMessage must always be English.\n' +
+          '- assistantMessage must be plain text only (no Markdown, no code fences, no bullet lists, no links).\n' +
           '- Keep assistantMessage short and natural.',
       },
       {

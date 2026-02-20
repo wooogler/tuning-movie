@@ -30,43 +30,43 @@ export function ConfirmStage({
       <div className="w-full max-w-md bg-dark-light rounded-xl p-6 space-y-4">
         {/* Movie */}
         <div className="flex justify-between">
-          <span className="text-gray-400">Movie</span>
-          <span className="text-white font-semibold">{meta.movie.title}</span>
+          <span className="text-fg-muted">Movie</span>
+          <span className="text-fg-strong font-semibold">{meta.movie.title}</span>
         </div>
 
         {/* Theater */}
         <div className="flex justify-between">
-          <span className="text-gray-400">Theater</span>
-          <span className="text-white">{meta.theater.name}</span>
+          <span className="text-fg-muted">Theater</span>
+          <span className="text-fg-strong">{meta.theater.name}</span>
         </div>
 
         {/* Date & Time */}
         <div className="flex justify-between">
-          <span className="text-gray-400">Date & Time</span>
-          <span className="text-white">
+          <span className="text-fg-muted">Date & Time</span>
+          <span className="text-fg-strong">
             {meta.date} {meta.time}
           </span>
         </div>
 
         {/* Seats */}
         <div className="flex justify-between">
-          <span className="text-gray-400">Seats</span>
-          <span className="text-white">{meta.seats.join(', ')}</span>
+          <span className="text-fg-muted">Seats</span>
+          <span className="text-fg-strong">{meta.seats.join(', ')}</span>
         </div>
 
         <hr className="border-dark-border" />
 
         {/* Tickets */}
         <div className="space-y-2">
-          <span className="text-gray-400">Tickets</span>
+          <span className="text-fg-muted">Tickets</span>
           {meta.tickets
             .filter((t) => t.quantity > 0)
             .map((ticket, index) => (
               <div key={index} className="flex justify-between pl-4">
-                <span className="text-gray-300">
+                <span className="text-fg">
                   {ticket.type} x {ticket.quantity}
                 </span>
-                <span className="text-white">
+                <span className="text-fg-strong">
                   ₩{(ticket.price * ticket.quantity).toLocaleString()}
                 </span>
               </div>
@@ -77,7 +77,7 @@ export function ConfirmStage({
 
         {/* Total */}
         <div className="flex justify-between text-lg">
-          <span className="text-gray-400 font-semibold">Total</span>
+          <span className="text-fg-muted font-semibold">Total</span>
           <span className="text-primary font-bold">
             ₩{totalPrice.toLocaleString()}
           </span>

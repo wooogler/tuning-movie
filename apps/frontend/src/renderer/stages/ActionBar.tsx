@@ -29,8 +29,8 @@ export function ActionBar({
         <button
           className={`px-6 py-3 rounded-lg transition-colors ${
             backDisabled
-              ? 'bg-dark-border/50 text-gray-500 cursor-not-allowed'
-              : 'bg-dark-border text-white hover:bg-dark-lighter'
+              ? 'bg-dark-border/50 text-fg-faint cursor-not-allowed'
+              : 'bg-dark-border text-fg-strong hover:bg-dark-lighter'
           }`}
           onClick={onBack}
           disabled={backDisabled}
@@ -43,8 +43,8 @@ export function ActionBar({
         <button
           className={`px-6 py-3 rounded-lg transition-colors ${
             nextDisabled
-              ? 'bg-primary/50 text-white/50 cursor-not-allowed'
-              : 'bg-primary hover:bg-primary-hover text-white'
+              ? 'bg-primary/50 text-primary-fg/50 cursor-not-allowed'
+              : 'bg-primary hover:bg-primary-hover text-primary-fg'
           }`}
           onClick={onNext}
           disabled={nextDisabled}
