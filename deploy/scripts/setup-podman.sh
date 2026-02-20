@@ -28,7 +28,7 @@ dnf install -y epel-release
 dnf install -y git curl wget vim htop
 
 echo -e "${GREEN}[3/7] Installing Podman stack...${NC}"
-dnf install -y podman podman-compose podman-plugins
+dnf install -y podman podman-compose
 podman --version
 podman-compose --version || true
 

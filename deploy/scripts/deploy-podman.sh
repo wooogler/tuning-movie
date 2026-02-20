@@ -76,17 +76,17 @@ else
 fi
 
 if command -v curl >/dev/null 2>&1; then
-  if curl -fsS http://127.0.0.1/health >/dev/null; then
+  if curl -fsSk https://127.0.0.1/health >/dev/null 2>&1 || curl -fsS http://127.0.0.1/health >/dev/null 2>&1; then
     echo -e "${GREEN}Health check passed.${NC}"
   else
-    echo -e "${RED}Health check failed (http://127.0.0.1/health).${NC}"
+    echo -e "${RED}Health check failed (/health).${NC}"
     exit 1
   fi
 
-  if curl -fsS http://127.0.0.1/monitor-api/health >/dev/null; then
+  if curl -fsSk https://127.0.0.1/monitor-api/health >/dev/null 2>&1 || curl -fsS http://127.0.0.1/monitor-api/health >/dev/null 2>&1; then
     echo -e "${GREEN}Monitor API check passed.${NC}"
   else
-    echo -e "${RED}Monitor API check failed (http://127.0.0.1/monitor-api/health).${NC}"
+    echo -e "${RED}Monitor API check failed (/monitor-api/health).${NC}"
     exit 1
   fi
 fi
