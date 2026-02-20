@@ -6,6 +6,7 @@ interface ChatInputProps {
   statusLabel?: string;
   statusDetail?: string;
   statusTone?: 'default' | 'warning' | 'success';
+  chatWidthPx?: number;
   onSubmit?: (text: string) => void;
 }
 
@@ -15,6 +16,7 @@ export function ChatInput({
   statusLabel,
   statusDetail,
   statusTone = 'default',
+  chatWidthPx = 768,
   onSubmit,
 }: ChatInputProps) {
   const [text, setText] = useState('');
@@ -28,7 +30,7 @@ export function ChatInput({
 
   return (
     <div className="border-t border-gray-700 bg-dark p-4">
-      <div className="max-w-3xl mx-auto">
+      <div className="mx-auto" style={{ width: `min(100%, ${chatWidthPx}px)` }}>
         {(statusLabel || statusDetail) && (
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
             {statusLabel && (

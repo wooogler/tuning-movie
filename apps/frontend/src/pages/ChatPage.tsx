@@ -1,4 +1,11 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { api } from '../api/client';
 import {
   useChatStore,
@@ -46,6 +53,9 @@ const stageInteractionTools: Record<Stage, string[]> = {
   ticket: ['setQuantity', 'prev'],
   confirm: ['prev'],
 };
+const DEFAULT_CHAT_WIDTH_PX = 768;
+const MIN_CHAT_WIDTH_PX = 360;
+const CHAT_WIDTH_VIEWPORT_PADDING_PX = 48;
 
 function canUseNextTool(spec: UISpec): boolean {
   switch (spec.stage) {
@@ -202,9 +212,62 @@ export function ChatPage() {
   const [agentBridgeEnabled, setAgentBridgeEnabled] = useState(true);
   const [carouselOffset, setCarouselOffset] = useState(0);
   const [carouselOpacity, setCarouselOpacity] = useState(1);
+  const [chatWidthPx, setChatWidthPx] = useState(DEFAULT_CHAT_WIDTH_PX);
+  const [isResizingChatWidth, setIsResizingChatWidth] = useState(false);
 
   const initialized = useRef(false);
   const previousStageRef = useRef<Stage>(currentStage);
+  const chatResizeSessionRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const getMaxChatWidth = useCallback(() => {
+    if (typeof window === 'undefined') return DEFAULT_CHAT_WIDTH_PX;
+    return Math.max(
+      MIN_CHAT_WIDTH_PX,
+      window.innerWidth - CHAT_WIDTH_VIEWPORT_PADDING_PX
+    );
+  }, []);
+
+  const clampChatWidth = useCallback(
+    (width: number) =>
+      Math.min(Math.max(width, MIN_CHAT_WIDTH_PX), getMaxChatWidth()),
+    [getMaxChatWidth]
+  );
+
+  const stopChatWidthResize = useCallback(() => {
+    chatResizeSessionRef.current = null;
+    setIsResizingChatWidth(false);
+    if (typeof document !== 'undefined') {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  }, []);
+
+  const handleChatWidthResizeMove = useCallback(
+    (event: PointerEvent) => {
+      const session = chatResizeSessionRef.current;
+      if (!session) return;
+      const nextWidth = session.startWidth + (event.clientX - session.startX);
+      setChatWidthPx(clampChatWidth(nextWidth));
+    },
+    [clampChatWidth]
+  );
+
+  const handleChatWidthResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      chatResizeSessionRef.current = {
+        startX: event.clientX,
+        startWidth: chatWidthPx,
+      };
+      setIsResizingChatWidth(true);
+      if (typeof document !== 'undefined') {
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+      }
+    },
+    [chatWidthPx]
+  );
 
   const loadStageData = useCallback(
     async (stage: typeof currentStage, ctx: StageContext = {}) => {
@@ -396,6 +459,42 @@ export function ChatPage() {
       loadStageData('movie', { booking: {} });
     }
   }, [loadStageData]);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setChatWidthPx((current) => clampChatWidth(current));
+    };
+    handleWindowResize();
+    window.addEventListener('resize', handleWindowResize);
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+    };
+  }, [clampChatWidth]);
+
+  useEffect(() => {
+    if (!isResizingChatWidth) return;
+    const handlePointerUp = () => {
+      stopChatWidthResize();
+    };
+    window.addEventListener('pointermove', handleChatWidthResizeMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handleChatWidthResizeMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [isResizingChatWidth, handleChatWidthResizeMove, stopChatWidthResize]);
+
+  useEffect(
+    () => () => {
+      if (typeof document !== 'undefined') {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    },
+    []
+  );
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -917,6 +1016,9 @@ export function ChatPage() {
           onNext={handleNext}
           onBack={handleBack}
           onConfirm={handleConfirm}
+          chatWidthPx={chatWidthPx}
+          isResizingWidth={isResizingChatWidth}
+          onResizeStart={handleChatWidthResizeStart}
         />
       ) : (
         <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -1050,6 +1152,7 @@ export function ChatPage() {
 
       {agentBridgeEnabled && (
         <ChatInput
+          chatWidthPx={chatWidthPx}
           disabled={inputDisabled}
           onSubmit={handleChatInputSubmit}
           statusLabel={inputStatusLabel}

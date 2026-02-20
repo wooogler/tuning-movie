@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import type { ChatMessage } from '../../store/chatStore';
 import type { UISpec } from '../../spec';
 import { SystemMessage } from './SystemMessage';
@@ -14,6 +14,9 @@ interface MessageListProps {
   onNext?: () => void;
   onBack?: () => void;
   onConfirm?: () => void;
+  chatWidthPx?: number;
+  isResizingWidth?: boolean;
+  onResizeStart?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }
 
 export function MessageList({
@@ -25,6 +28,9 @@ export function MessageList({
   onNext,
   onBack,
   onConfirm,
+  chatWidthPx = 768,
+  isResizingWidth = false,
+  onResizeStart,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -51,7 +57,22 @@ export function MessageList({
 
   return (
     <div className="flex-1 overflow-y-auto px-4">
-      <div className="max-w-3xl mx-auto py-4">
+      <div className="relative mx-auto py-4" style={{ width: `min(100%, ${chatWidthPx}px)` }}>
+        {onResizeStart && (
+          <button
+            type="button"
+            onPointerDown={onResizeStart}
+            aria-label="Resize chat width"
+            title="Drag to resize chat width"
+            className="absolute right-0 top-0 hidden h-full w-4 translate-x-full cursor-ew-resize sm:flex"
+          >
+            <span
+              className={`absolute left-1/2 top-[38%] h-12 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors ${
+                isResizingWidth ? 'bg-primary' : 'bg-gray-600 hover:bg-gray-500'
+              }`}
+            />
+          </button>
+        )}
         {messages.map((message, index) => {
           if (message.type === 'system') {
             const isActive = index === lastSystemIndex;
