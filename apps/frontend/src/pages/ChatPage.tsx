@@ -199,6 +199,7 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('chat');
+  const [agentBridgeEnabled, setAgentBridgeEnabled] = useState(true);
   const [carouselOffset, setCarouselOffset] = useState(0);
   const [carouselOpacity, setCarouselOpacity] = useState(1);
 
@@ -739,6 +740,7 @@ export function ChatPage() {
     uiSpec: activeSpec,
     messageHistory: messages,
     toolSchema: agentToolSchema,
+    enabled: agentBridgeEnabled,
     onToolCall: onToolApply,
     onAgentMessage: (text: string) => {
       const stage = activeSpec?.stage ?? currentStage;
@@ -762,10 +764,11 @@ export function ChatPage() {
 
   const handleChatInputSubmit = useCallback(
     (text: string) => {
+      if (!agentBridgeEnabled) return;
       addUserMessage(currentStage, 'input', text);
       sendUserMessageToAgent(text, currentStage);
     },
-    [addUserMessage, currentStage, sendUserMessageToAgent]
+    [addUserMessage, agentBridgeEnabled, currentStage, sendUserMessageToAgent]
   );
 
   const currentStep = STAGE_ORDER.indexOf(currentStage) + 1;
@@ -773,20 +776,25 @@ export function ChatPage() {
   const nextStage = getNextStage(currentStage);
   const hasConnectedAgent = connectedAgents.length > 0;
   const connectedAgentNames = connectedAgents.map((agent) => agent.name).join(', ');
-  const inputDisabled = !isAgentBridgeConnected || !isAgentBridgeJoined || !hasConnectedAgent;
-  const inputStatusLabel = !isAgentBridgeConnected
+  const inputDisabled = !agentBridgeEnabled || !isAgentBridgeConnected || !isAgentBridgeJoined || !hasConnectedAgent;
+  const inputStatusLabel = !agentBridgeEnabled
+    ? 'Agent connection is off'
+    : !isAgentBridgeConnected
     ? 'Relay disconnected'
     : !isAgentBridgeJoined
     ? 'Joining agent session...'
     : !hasConnectedAgent
     ? 'No external agent connected'
     : 'External agent connected';
-  const inputStatusTone: 'default' | 'warning' | 'success' = !isAgentBridgeConnected ||
+  const inputStatusTone: 'default' | 'warning' | 'success' = !agentBridgeEnabled ||
+    !isAgentBridgeConnected ||
     !isAgentBridgeJoined ||
     !hasConnectedAgent
     ? 'warning'
     : 'success';
-  const inputStatusDetail = isAgentBridgeJoined
+  const inputStatusDetail = !agentBridgeEnabled
+    ? 'Toggle Agent ON to reconnect.'
+    : isAgentBridgeJoined
     ? `session: ${agentSessionId ?? 'unknown'}${
         hasConnectedAgent ? ` · agent: ${connectedAgentNames}` : ''
       }`
@@ -876,6 +884,17 @@ export function ChatPage() {
                 Carousel
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => setAgentBridgeEnabled((prev) => !prev)}
+              className={`px-3 py-1 text-xs rounded border ${
+                agentBridgeEnabled
+                  ? 'border-blue-400 text-blue-200 hover:border-blue-300 hover:text-white'
+                  : 'border-gray-600 text-gray-400 hover:border-gray-500 hover:text-white'
+              }`}
+            >
+              Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
+            </button>
             <button
               type="button"
               onClick={handleManualReset}
@@ -1036,7 +1055,9 @@ export function ChatPage() {
         statusDetail={inputStatusDetail}
         statusTone={inputStatusTone}
         placeholder={
-          !isAgentBridgeConnected
+          !agentBridgeEnabled
+            ? 'Agent connection is off. Turn it on to reconnect.'
+            : !isAgentBridgeConnected
             ? 'Waiting for agent relay connection...'
             : !isAgentBridgeJoined
             ? 'Joining agent session...'

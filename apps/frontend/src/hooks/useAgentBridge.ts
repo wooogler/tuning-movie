@@ -16,6 +16,7 @@ interface UseAgentBridgeOptions {
   ) => UISpec | null | void;
   onAgentMessage: (text: string) => void;
   onSessionEnd: () => void;
+  enabled?: boolean;
 }
 
 interface UseAgentBridgeResult {
@@ -73,6 +74,7 @@ export function useAgentBridge({
   onToolCall,
   onAgentMessage,
   onSessionEnd,
+  enabled = true,
 }: UseAgentBridgeOptions): UseAgentBridgeResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
@@ -82,6 +84,7 @@ export function useAgentBridge({
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const sessionIdRef = useRef<string>((import.meta.env.VITE_AGENT_SESSION_ID as string) || 'default');
+  const enabledRef = useRef(enabled);
   const latestRef = useRef({
     uiSpec,
     messageHistory,
@@ -91,18 +94,25 @@ export function useAgentBridge({
     onSessionEnd,
   });
 
-  latestRef.current = {
-    uiSpec,
-    messageHistory,
-    toolSchema,
-    onToolCall,
-    onAgentMessage,
-    onSessionEnd,
-  };
+  useEffect(() => {
+    latestRef.current = {
+      uiSpec,
+      messageHistory,
+      toolSchema,
+      onToolCall,
+      onAgentMessage,
+      onSessionEnd,
+    };
+  }, [uiSpec, messageHistory, toolSchema, onToolCall, onAgentMessage, onSessionEnd]);
+
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
 
   const wsUrl = useMemo(() => buildWsUrl(), []);
 
   const sendEnvelope = useCallback((envelope: RelayEnvelope) => {
+    if (!enabledRef.current) return false;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     ws.send(JSON.stringify({ v: PROTOCOL_VERSION, ...envelope }));
@@ -247,11 +257,25 @@ export function useAgentBridge({
   }, [getSnapshotPayload, sendEnvelope]);
 
   useEffect(() => {
+    if (!enabled) {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+
+      const ws = wsRef.current;
+      if (ws && ws.readyState < WebSocket.CLOSING) {
+        ws.close(1000, 'host-connection-disabled');
+      }
+      wsRef.current = null;
+      return;
+    }
+
     let disposed = false;
     let currentWs: WebSocket | null = null;
 
     const connect = () => {
-      if (disposed) return;
+      if (disposed || !enabled) return;
 
       const ws = new WebSocket(wsUrl);
       currentWs = ws;
@@ -288,7 +312,7 @@ export function useAgentBridge({
           wsRef.current = null;
         }
 
-        if (!disposed) {
+        if (!disposed && enabled) {
           reconnectTimerRef.current = window.setTimeout(connect, 1200);
         }
       };
@@ -304,12 +328,13 @@ export function useAgentBridge({
       disposed = true;
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
       if (currentWs && currentWs.readyState < WebSocket.CLOSING) {
         currentWs.close();
       }
     };
-  }, [handleEnvelope, wsUrl]);
+  }, [enabled, handleEnvelope, wsUrl]);
 
   useEffect(() => {
     if (!isJoined) return;
