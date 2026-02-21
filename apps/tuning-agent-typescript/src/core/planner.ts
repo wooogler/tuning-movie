@@ -1,4 +1,5 @@
 import { planActionWithOpenAI, type PlannerWorkflow } from '../llm/openaiPlanner';
+import { planActionWithGemini } from '../llm/geminiPlanner';
 import type { AgentMemory } from './memory';
 import {
   getEnabledVisibleItems,
@@ -435,20 +436,28 @@ export async function planNextAction(
     };
   }
 
-  if (process.env.AGENT_ENABLE_OPENAI === 'false') {
-    fallbackReason = 'LLM_DISABLED_BY_FLAG';
-  } else if (!process.env.OPENAI_API_KEY) {
-    fallbackReason = 'LLM_DISABLED_NO_API_KEY';
+  const geminiEnabled =
+    process.env.AGENT_ENABLE_GEMINI !== 'false' && Boolean(process.env.GEMINI_API_KEY);
+  const openaiEnabled =
+    process.env.AGENT_ENABLE_OPENAI !== 'false' && Boolean(process.env.OPENAI_API_KEY);
+
+  if (!geminiEnabled && !openaiEnabled) {
+    fallbackReason = 'LLM_DISABLED_NO_PROVIDER';
   }
 
   try {
-    if (fallbackReason !== 'LLM_DISABLED_BY_FLAG' && fallbackReason !== 'LLM_DISABLED_NO_API_KEY') {
+    if (geminiEnabled || openaiEnabled) {
       const plannerTools = getPlannerToolSchema(context.toolSchema);
-      const llm = await planActionWithOpenAI({
+      const plannerInput = {
         history: buildPlannerHistory(context),
         availableTools: plannerTools,
         workflow: buildWorkflowContext(context, stage, spec, plannerTools),
-      });
+      };
+
+      const llm = geminiEnabled
+        ? await planActionWithGemini(plannerInput)
+        : await planActionWithOpenAI(plannerInput);
+
       if (!llm) {
         fallbackReason = 'LLM_EMPTY_OR_UNPARSEABLE_OUTPUT';
       } else {
