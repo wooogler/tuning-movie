@@ -36,8 +36,6 @@ interface LlmTraceEvent {
 
 type LlmTraceListener = (event: LlmTraceEvent) => void;
 
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = process.env.AGENT_GEMINI_MODEL || 'gemini-2.5-flash';
 const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
 const llmTraceListeners = new Set<LlmTraceListener>();
 
@@ -49,39 +47,11 @@ function emitLlmTrace(type: LlmTraceEvent['type'], payload: unknown): void {
   }
 }
 
-export function subscribeGeminiLlmTrace(listener: LlmTraceListener): () => void {
+export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
   llmTraceListeners.add(listener);
   return () => {
     llmTraceListeners.delete(listener);
   };
-}
-
-function isEnabled(): boolean {
-  if (process.env.AGENT_ENABLE_GEMINI === 'false') return false;
-  return Boolean(process.env.GEMINI_API_KEY);
-}
-
-function extractText(body: unknown): string | null {
-  if (!body || typeof body !== 'object') return null;
-  const record = body as Record<string, unknown>;
-
-  const candidates = Array.isArray(record.candidates) ? record.candidates : [];
-  for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object') continue;
-    const candidateRecord = candidate as Record<string, unknown>;
-    const content = candidateRecord.content;
-    if (!content || typeof content !== 'object') continue;
-    const contentRecord = content as Record<string, unknown>;
-    const parts = Array.isArray(contentRecord.parts) ? contentRecord.parts : [];
-    for (const part of parts) {
-      if (!part || typeof part !== 'object') continue;
-      const partRecord = part as Record<string, unknown>;
-      if (typeof partRecord.text === 'string' && partRecord.text.trim()) {
-        return partRecord.text.trim();
-      }
-    }
-  }
-  return null;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -143,7 +113,6 @@ function toPlannerOutput(value: Record<string, unknown>): PlannerOutput | null {
 const SYSTEM_PROMPT =
   'You are a UI agent for movie booking. Pick exactly one next step that best reflects user intent and current GUI state.\n' +
   'Constraints:\n' +
-  '- Return JSON only matching this schema: { "assistantMessage": string, "action": { "type": "tool.call" | "none", "toolName": string, "params": object, "reason": string } }\n' +
   '- Use the provided history stream as context. Infer intent from the conversation, prioritizing unresolved recent user preferences.\n' +
   '- Use the provided workflow object as process guidance (stage order, current/next stage, proceedRule, guardrails).\n' +
   '- Treat workflow.currentStage and availableTools as operational boundaries.\n' +
@@ -162,16 +131,164 @@ const SYSTEM_PROMPT =
   '- assistantMessage must be plain text only (no Markdown, no code fences, no bullet lists, no links).\n' +
   '- Keep assistantMessage short and natural.';
 
+// ── OpenAI ──────────────────────────────────────────────────────────────────
+
+const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
+const OPENAI_MODEL = process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
+
+function parseOpenAIOutputText(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const record = body as Record<string, unknown>;
+
+  if (typeof record.output_text === 'string' && record.output_text.trim()) {
+    return record.output_text.trim();
+  }
+
+  const output = Array.isArray(record.output) ? record.output : [];
+  for (const item of output) {
+    if (!item || typeof item !== 'object') continue;
+    const itemRecord = item as Record<string, unknown>;
+    const content = Array.isArray(itemRecord.content) ? itemRecord.content : [];
+    for (const part of content) {
+      if (!part || typeof part !== 'object') continue;
+      const partRecord = part as Record<string, unknown>;
+      if (typeof partRecord.text === 'string' && partRecord.text.trim()) {
+        return partRecord.text.trim();
+      }
+    }
+  }
+  return null;
+}
+
+export async function planActionWithOpenAI(input: PlannerInput): Promise<PlannerOutput | null> {
+  if (process.env.AGENT_ENABLE_OPENAI === 'false') return null;
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const body = {
+    model: OPENAI_MODEL,
+    input: [
+      {
+        role: 'system',
+        content:
+          SYSTEM_PROMPT +
+          '\n- Return JSON only via schema.',
+      },
+      {
+        role: 'user',
+        content: JSON.stringify(input),
+      },
+    ],
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'planner_decision',
+        strict: false,
+        schema: {
+          type: 'object',
+          properties: {
+            assistantMessage: { type: 'string' },
+            action: {
+              type: 'object',
+              properties: {
+                type: { type: 'string', enum: ['tool.call', 'none'] },
+                toolName: { type: 'string' },
+                params: { type: 'object', additionalProperties: true },
+                reason: { type: 'string' },
+              },
+              required: ['type', 'toolName', 'params', 'reason'],
+              additionalProperties: false,
+            },
+          },
+          required: ['assistantMessage', 'action'],
+          additionalProperties: false,
+        },
+      },
+    },
+  };
+
+  if (DEBUG_LLM) {
+    console.log('[tuning-agent-typescript][llm] planner request input:', JSON.stringify(input));
+  }
+  emitLlmTrace('request', { model: OPENAI_MODEL, input });
+
+  const response = await fetch(OPENAI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    if (DEBUG_LLM) {
+      console.error('[tuning-agent-typescript][llm] planner error response:', errorText);
+    }
+    emitLlmTrace('error', { status: response.status, errorText });
+    throw new Error(`OpenAI planner failed (${response.status}): ${errorText}`);
+  }
+
+  const payload = (await response.json()) as unknown;
+  const outputText = parseOpenAIOutputText(payload);
+  if (DEBUG_LLM) {
+    console.log('[tuning-agent-typescript][llm] planner raw output_text:', outputText);
+  }
+  emitLlmTrace('response.raw', { outputText });
+  if (!outputText) return null;
+  const parsed = parseJsonObject(outputText);
+  if (DEBUG_LLM) {
+    console.log('[tuning-agent-typescript][llm] planner parsed output:', JSON.stringify(parsed));
+  }
+  emitLlmTrace('response.parsed', { parsed });
+  if (!parsed) return null;
+
+  return toPlannerOutput(parsed);
+}
+
+// ── Gemini ──────────────────────────────────────────────────────────────────
+
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_MODEL = process.env.AGENT_GEMINI_MODEL || 'gemini-2.5-flash';
+
+function extractGeminiText(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const record = body as Record<string, unknown>;
+
+  const candidates = Array.isArray(record.candidates) ? record.candidates : [];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const candidateRecord = candidate as Record<string, unknown>;
+    const content = candidateRecord.content;
+    if (!content || typeof content !== 'object') continue;
+    const contentRecord = content as Record<string, unknown>;
+    const parts = Array.isArray(contentRecord.parts) ? contentRecord.parts : [];
+    for (const part of parts) {
+      if (!part || typeof part !== 'object') continue;
+      const partRecord = part as Record<string, unknown>;
+      if (typeof partRecord.text === 'string' && partRecord.text.trim()) {
+        return partRecord.text.trim();
+      }
+    }
+  }
+  return null;
+}
+
 export async function planActionWithGemini(input: PlannerInput): Promise<PlannerOutput | null> {
-  if (!isEnabled()) return null;
+  if (process.env.AGENT_ENABLE_GEMINI === 'false') return null;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const url = `${GEMINI_API_BASE}/${DEFAULT_MODEL}:generateContent?key=${apiKey}`;
+  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+  const geminiSystemPrompt =
+    SYSTEM_PROMPT +
+    '\n- Return JSON only matching this schema: { "assistantMessage": string, "action": { "type": "tool.call" | "none", "toolName": string, "params": object, "reason": string } }';
 
   const body = {
     systemInstruction: {
-      parts: [{ text: SYSTEM_PROMPT }],
+      parts: [{ text: geminiSystemPrompt }],
     },
     contents: [
       {
@@ -187,7 +304,7 @@ export async function planActionWithGemini(input: PlannerInput): Promise<Planner
   if (DEBUG_LLM) {
     console.log('[tuning-agent-typescript][llm:gemini] planner request input:', JSON.stringify(input));
   }
-  emitLlmTrace('request', { model: DEFAULT_MODEL, input });
+  emitLlmTrace('request', { model: GEMINI_MODEL, input });
 
   const response = await fetch(url, {
     method: 'POST',
@@ -207,7 +324,7 @@ export async function planActionWithGemini(input: PlannerInput): Promise<Planner
   }
 
   const payload = (await response.json()) as unknown;
-  const outputText = extractText(payload);
+  const outputText = extractGeminiText(payload);
   if (DEBUG_LLM) {
     console.log('[tuning-agent-typescript][llm:gemini] planner raw output:', outputText);
   }

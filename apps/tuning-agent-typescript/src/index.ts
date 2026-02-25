@@ -2,8 +2,7 @@ import { executePlannedAction } from './core/executor';
 import { AgentMemory } from './core/memory';
 import { applyStateUpdated, applyUserMessage, fromSnapshot } from './core/perception';
 import { planNextAction } from './core/planner';
-import { subscribeLlmTrace } from './llm/openaiPlanner';
-import { subscribeGeminiLlmTrace } from './llm/geminiPlanner';
+import { subscribeLlmTrace } from './llm/llmPlanner';
 import { shouldResync } from './core/verifier';
 import { isActionSafe } from './policies/safetyPolicy';
 import { RelayClient } from './runtime/relayClient';
@@ -32,7 +31,6 @@ const llmTraceHandler = (event: { type: string; payload: unknown }) => {
   monitor.pushEvent(`llm.${event.type}`, event.payload);
 };
 const unsubscribeLlmTrace = subscribeLlmTrace(llmTraceHandler);
-const unsubscribeGeminiLlmTrace = subscribeGeminiLlmTrace(llmTraceHandler);
 
 let actionInFlight = false;
 let lastActionFingerprint = '';
@@ -518,7 +516,7 @@ async function main(): Promise<void> {
 process.on('SIGINT', () => {
   monitor.pushEvent('runtime.signal', { signal: 'SIGINT' });
   unsubscribeLlmTrace();
-  unsubscribeGeminiLlmTrace();
+
   relay.close();
   monitor.close();
   process.exit(0);
@@ -526,7 +524,7 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   monitor.pushEvent('runtime.signal', { signal: 'SIGTERM' });
   unsubscribeLlmTrace();
-  unsubscribeGeminiLlmTrace();
+
   relay.close();
   monitor.close();
   process.exit(0);
