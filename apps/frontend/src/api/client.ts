@@ -91,4 +91,12 @@ export const api = {
   getBooking: (id: string) => fetchApi<{ booking: Booking }>(`/bookings/${id}`),
   cancelBooking: (id: string) =>
     fetchApi<{ booking: Booking }>(`/bookings/${id}`, { method: 'DELETE' }),
+
+  // Agent config
+  getAgentModel: () => fetchApi<{ model: 'openai' | 'gemini' }>('/agent/config/model'),
+  setAgentModel: (model: 'openai' | 'gemini') =>
+    fetchApi<{ model: 'openai' | 'gemini' }>('/agent/config/model', {
+      method: 'PUT',
+      body: JSON.stringify({ model }),
+    }),
 };

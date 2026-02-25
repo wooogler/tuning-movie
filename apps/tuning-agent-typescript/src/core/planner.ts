@@ -1,4 +1,5 @@
 import { planActionWithOpenAI, planActionWithGemini, type PlannerWorkflow } from '../llm/llmPlanner';
+import { refreshModelEnvVars } from './envRefresh';
 import type { AgentMemory } from './memory';
 import {
   getEnabledVisibleItems,
@@ -434,6 +435,8 @@ export async function planNextAction(
       fallbackReason: 'EMPTY_USER_REQUEST',
     };
   }
+
+  refreshModelEnvVars();
 
   const geminiEnabled =
     process.env.AGENT_ENABLE_GEMINI !== 'false' && Boolean(process.env.GEMINI_API_KEY);

@@ -216,6 +216,8 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('chat');
   const [agentBridgeEnabled, setAgentBridgeEnabled] = useState(true);
+  const [agentModel, setAgentModel] = useState<'openai' | 'gemini'>('openai');
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [carouselOffset, setCarouselOffset] = useState(0);
   const [carouselOpacity, setCarouselOpacity] = useState(1);
   const [chatWidthPx, setChatWidthPx] = useState(DEFAULT_CHAT_WIDTH_PX);
@@ -465,6 +467,16 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
       loadStageData('movie', { booking: {} });
     }
   }, [loadStageData]);
+
+  useEffect(() => {
+    api.getAgentModel().then((res) => setAgentModel(res.model)).catch(() => {});
+  }, []);
+
+  const handleModelToggle = useCallback((model: 'openai' | 'gemini') => {
+    setAgentModel(model);
+    setModelPickerOpen(false);
+    api.setAgentModel(model).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handleWindowResize = () => {
@@ -1006,11 +1018,43 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
               className={`px-3 py-1 text-xs rounded border ${
                 agentBridgeEnabled
                   ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
-                  : 'border-dark-border text-fg-muted hover:border-primary hover:text-fg-strong'
+                  : 'border-primary/40 text-primary/80 hover:border-primary hover:text-primary'
               }`}
             >
               Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
             </button>
+            {agentBridgeEnabled && (
+              <div className="relative flex">
+                <button
+                  type="button"
+                  onClick={() => setModelPickerOpen((prev) => !prev)}
+                  className="px-3 py-1 text-xs rounded border border-info-border text-info-label hover:border-info-label hover:text-info-text transition-colors"
+                >
+                  {agentModel === 'openai' ? 'gpt-5.2' : 'gemini-2.5-flash'}
+                </button>
+                {modelPickerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setModelPickerOpen(false)} />
+                    <div className="absolute left-0 top-full z-20 mt-1 flex flex-col gap-1">
+                      {([['openai', 'gpt-5.2'], ['gemini', 'gemini-2.5-flash']] as const).map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => handleModelToggle(id)}
+                          className={`px-3 py-1 text-xs rounded border whitespace-nowrap transition-colors ${
+                            agentModel === id
+                              ? 'border-info-label text-info-text bg-info-bg'
+                              : 'border-info-border text-info-label bg-dark hover:border-info-label hover:text-info-text'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={handleManualReset}

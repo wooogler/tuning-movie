@@ -11,6 +11,7 @@ import { seatRoutes } from './routes/seats';
 import { ticketRoutes } from './routes/tickets';
 import { bookingRoutes } from './routes/bookings';
 import { agentRelayRoutes } from './routes/agentRelay';
+import { agentConfigRoutes } from './routes/agentConfig';
 
 const fastify = Fastify({
   logger: true,
@@ -31,6 +32,7 @@ const start = async () => {
     await fastify.register(ticketRoutes);
     await fastify.register(bookingRoutes);
     await fastify.register(agentRelayRoutes);
+    await fastify.register(agentConfigRoutes);
 
     // Health check
     fastify.get('/health', async () => {
