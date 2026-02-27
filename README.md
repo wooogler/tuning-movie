@@ -76,70 +76,76 @@ npm run db:seed
 cd ../..
 ```
 
-#### 4. Start Development Servers
+#### 4. Configure LLM Provider
 
-##### Option 1: Run System Only (Recommended for normal app dev)
-
-```bash
-npm run dev
-```
-
-This runs backend + frontend together (`dev:system`).
-
-##### Option 2: Run System + External Agent Test Remote
+Copy and edit the root `.env` file. Set your API keys and choose which model to enable:
 
 ```bash
-npm run dev:all
+# OpenAI
+OPENAI_API_KEY=sk-...
+AGENT_OPENAI_MODEL=gpt-5.2
+AGENT_ENABLE_OPENAI=true
+
+# Gemini
+GEMINI_API_KEY=...
+AGENT_GEMINI_MODEL=gemini-2.5-flash
+AGENT_ENABLE_GEMINI=false
 ```
 
-This runs backend + frontend + `agent-test` together.
-Logs are prefixed with service labels (`[backend]`, `[frontend]`, `[agent-test]`) for easier tracing.
-Startup is sequenced: backend launches first, then frontend/agent-test start only after backend health is ready.
+Set one provider to `true` and the other to `false`. You can also switch models at runtime from the frontend UI when the agent is ON.
 
-##### Option 3: Run Individually
+#### 5. Start Development Servers
 
-**Backend only**
+The project uses an orchestrator that starts services in the right order (backend first, then the rest after health check passes). Logs are prefixed with service labels (`[backend]`, `[frontend]`, etc.).
+
+| Command | Services | Use case |
+|---------|----------|----------|
+| `npm run dev` | backend + frontend + agent (v1) + monitor | **Default** &mdash; full stack with AI agent and monitoring dashboard |
+| `npm run dev:stack:agent` | backend + frontend + agent (v1) | AI agent without monitor |
+| `npm run dev:stack:agent-v2` | backend + frontend + agent (v2) + monitor | Experimental agent version |
+| `npm run dev:stack:system` | backend + frontend | UI/API dev only, no agent |
+| `npm run dev:stack:all` | backend + frontend + agent-test | Manual testing with test console |
+
+You can also run any service individually:
+
 ```bash
-npm run dev:backend
+npm run dev:backend      # Backend only
+npm run dev:frontend     # Frontend only
+npm run dev:agent        # Agent v1 only
+npm run dev:agent-v2     # Agent v2 only
+npm run dev:monitor      # Monitor dashboard only
+npm run dev:agent-test   # Agent test console only
 ```
 
-**Frontend only**
-```bash
-npm run dev:frontend
-```
+#### 6. Open in Browser
 
-#### 5. Open in Browser
-
-Frontend: http://localhost:5173
-Backend API: http://localhost:3000
-Agent Test Remote: http://localhost:3400 (when running `dev:all` or `dev:agent-test`)
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:3000
+- Agent Monitor: http://localhost:5174 (when running with monitor)
+- Agent Test Console: http://localhost:3400 (when running `dev:stack:all` or `dev:agent-test`)
 
 ## 📁 Project Structure
 
 ```
 tuning-movie/
 ├── apps/
-│   ├── frontend/          # React frontend
-│   │   ├── src/
-│   │   │   ├── api/       # API client
-│   │   │   ├── components/# React components
-│   │   │   ├── pages/     # Chat-based booking page
-│   │   │   ├── renderer/  # Declarative rendering engine
-│   │   │   ├── spec/      # Agent-facing UI spec and modifiers
-│   │   │   ├── store/     # Chat message store
-│   │   │   └── types/     # TypeScript types
-│   │   └── package.json
-│   ├── backend/           # Fastify backend
-│       ├── src/
-│       │   ├── db/        # Database setup and schema
-│       │   ├── routes/    # API routes
-│       │   └── types/     # TypeScript types
-│       └── package.json
-│   └── agent-test/        # External agent test remote server
-├── docs/                  # Project documentation
-├── package.json           # Root package.json (monorepo setup)
+│   ├── frontend/                  # React chat-style booking UI
+│   ├── backend/                   # Fastify REST API + SQLite + WebSocket relay
+│   ├── tuning-agent-typescript/   # AI agent v1 (LLM planner + prompts)
+│   ├── tuning-agent-v2/           # AI agent v2 (experimental fork of v1)
+│   ├── agent-monitor/             # Real-time agent monitoring dashboard
+│   └── agent-test/                # Manual agent test console
+├── scripts/
+│   ├── dev-orchestrator.mjs       # Multi-service dev runner
+│   ├── run-tuning-agent-typescript.sh
+│   └── run-tuning-agent-v2.sh
+├── docs/                          # Project documentation
+├── .env                           # Shared environment config
+├── package.json                   # Monorepo root
 └── README.md
 ```
+
+The two agent workspaces (`tuning-agent-typescript` and `tuning-agent-v2`) are independent copies. All LLM calls, prompts, and planning logic live inside each agent's `src/llm/` and `src/core/planner.ts`. You can modify v2 freely without affecting the original.
 
 ## 🛠️ Development
 
@@ -147,16 +153,31 @@ tuning-movie/
 
 **Root Level**
 ```bash
-npm run dev              # Alias of dev:system
-npm run dev:system       # Run frontend + backend together
-npm run dev:all          # Run frontend + backend + agent-test together
-npm run dev:frontend     # Run frontend only
-npm run dev:backend      # Run backend only
-npm run dev:agent-test   # Run external agent test remote
-npm run build            # Build entire project
-npm run build:frontend   # Build frontend only
-npm run build:backend    # Build backend only
-npm run build:agent-test # Build agent-test only
+# Dev stacks (orchestrated)
+npm run dev                      # Default: backend + frontend + agent v1 + monitor
+npm run dev:stack:system         # backend + frontend only
+npm run dev:stack:agent          # backend + frontend + agent v1
+npm run dev:stack:agent-monitor  # backend + frontend + agent v1 + monitor
+npm run dev:stack:agent-v2       # backend + frontend + agent v2
+npm run dev:stack:agent-v2-monitor # backend + frontend + agent v2 + monitor
+npm run dev:stack:all            # backend + frontend + agent-test
+
+# Individual services
+npm run dev:backend              # Backend only
+npm run dev:frontend             # Frontend only
+npm run dev:agent                # Agent v1 only
+npm run dev:agent-v2             # Agent v2 only
+npm run dev:monitor              # Monitor dashboard only
+npm run dev:agent-test           # Agent test console only
+
+# Build
+npm run build                    # Build all workspaces
+npm run build:backend
+npm run build:frontend
+npm run build:agent              # Build agent v1
+npm run build:agent-v2           # Build agent v2
+npm run build:monitor
+npm run build:agent-test
 ```
 
 **Backend (apps/backend)**
