@@ -157,7 +157,9 @@ function buildWorkflowContext(
   context: PerceivedContext,
   stage: Stage,
   spec: UISpecLike,
-  plannerTools: ToolSchemaItem[]
+  plannerTools: ToolSchemaItem[],
+  preferences: string[],
+  constraints: string[]
 ): PlannerWorkflow {
   const selectedId = getSelectedId(spec);
   const selectedListCount = getSelectedListIds(spec).length;
@@ -195,6 +197,8 @@ function buildWorkflowContext(
     proceedRule,
     availableToolNames: plannerTools.map((tool) => tool.name),
     guardrails,
+    constraints,
+    preferences,
   };
 }
 
@@ -453,7 +457,7 @@ export async function planNextAction(
       const plannerInput = {
         history: buildPlannerHistory(context),
         availableTools: plannerTools,
-        workflow: buildWorkflowContext(context, stage, spec, plannerTools),
+        workflow: buildWorkflowContext(context, stage, spec, plannerTools, memory.getPreferences(), memory.getConstraints()),
       };
 
       const llm = geminiEnabled

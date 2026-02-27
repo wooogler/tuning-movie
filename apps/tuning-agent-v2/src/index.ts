@@ -3,6 +3,8 @@ import { AgentMemory } from './core/memory';
 import { applyStateUpdated, applyUserMessage, fromSnapshot } from './core/perception';
 import { planNextAction } from './core/planner';
 import { subscribeLlmTrace } from './llm/llmPlanner';
+import { extractPreferencesAndConstraints, type ExtractionContext } from './llm/llmExtractor';
+import { toUISpecLike, getEnabledVisibleItems, getSelectedId } from './core/uiModel';
 import { shouldResync } from './core/verifier';
 import { isActionSafe } from './policies/safetyPolicy';
 import { RelayClient } from './runtime/relayClient';
@@ -337,6 +339,64 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       code: outcome.code,
       reason: action.reason,
     });
+
+    // Fire-and-forget: extract preferences/constraints from this turn
+    const extractionUserText = planningContext.lastUserMessage?.text ?? '';
+    if (extractionUserText.trim() || outcome.ok) {
+      void (async () => {
+        try {
+          const spec = toUISpecLike(planningContext.uiSpec);
+          const visibleItems = spec
+            ? getEnabledVisibleItems(spec).map((item) => ({
+                id: item.id,
+                value: item.value,
+                disabled: item.isDisabled,
+              }))
+            : [];
+          const selectedId = spec ? getSelectedId(spec) : null;
+          const selectedValue = spec?.state?.selected?.value;
+          const selectedItem =
+            selectedId && typeof selectedValue === 'string'
+              ? { id: selectedId, value: selectedValue }
+              : null;
+
+          const extractionCtx: ExtractionContext = {
+            userMessage: extractionUserText,
+            currentStage: planningContext.stage ?? '',
+            messageHistory: planningContext.messageHistoryTail,
+            visibleItems,
+            selectedItem,
+            actionType: action.type,
+            toolName: action.type === 'tool.call' ? (action.payload.toolName as string) : '',
+            actionParams: (action.payload as Record<string, unknown>) ?? {},
+            outcomeOk: outcome.ok,
+            existingPreferences: memory.getPreferences(),
+            existingConstraints: memory.getConstraints(),
+          };
+          const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
+          if (extractionResult.supersededPreferences.length > 0) {
+            memory.removePreferences(extractionResult.supersededPreferences);
+          }
+          if (extractionResult.newPreferences.length > 0) {
+            memory.appendPreferences(extractionResult.newPreferences);
+          }
+          if (extractionResult.newConstraints.length > 0) {
+            memory.appendConstraints(extractionResult.newConstraints);
+          }
+          monitor.pushEvent('extraction.completed', {
+            newPreferences: extractionResult.newPreferences,
+            supersededPreferences: extractionResult.supersededPreferences,
+            newConstraints: extractionResult.newConstraints,
+            preferences: memory.getPreferences(),
+            constraints: memory.getConstraints(),
+          });
+        } catch (extractionError) {
+          monitor.pushEvent('extraction.failed', {
+            message: extractionError instanceof Error ? extractionError.message : String(extractionError),
+          });
+        }
+      })();
+    }
 
     if (!outcome.ok) {
       await maybeSendAssistantMessage(
