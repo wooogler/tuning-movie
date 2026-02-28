@@ -152,6 +152,13 @@ function buildPlannerHistory(
   return context.messageHistoryTail.slice();
 }
 
+function sliceRecent(list: string[], maxItems: number): string[] {
+  if (!Number.isFinite(maxItems) || maxItems <= 0) return [];
+  const limit = Math.floor(maxItems);
+  if (limit <= 0) return [];
+  return list.slice(-limit);
+}
+
 function validateLlmAction(
   context: PerceivedContext,
   spec: UISpecLike,
@@ -252,11 +259,11 @@ export async function planNextAction(
 
   try {
     const plannerTools = getPlannerToolSchema(context.toolSchema);
-    const plannerCpEnabled = context.plannerCpEnabled !== false;
-    const plannerPreferences = plannerCpEnabled ? memory.getPreferences() : [];
-    const plannerConstraints = plannerCpEnabled ? memory.getConstraints() : [];
-    const plannerConflicts = plannerCpEnabled ? memory.getConflicts() : [];
-    const plannerCandidates = plannerCpEnabled ? memory.getCandidates() : [];
+    const plannerCpMemoryLimit = Math.max(0, Math.floor(context.plannerCpMemoryLimit ?? 0));
+    const plannerPreferences = sliceRecent(memory.getPreferences(), plannerCpMemoryLimit);
+    const plannerConstraints = sliceRecent(memory.getConstraints(), plannerCpMemoryLimit);
+    const plannerConflicts = sliceRecent(memory.getConflicts(), plannerCpMemoryLimit);
+    const plannerCandidates = sliceRecent(memory.getCandidates(), plannerCpMemoryLimit);
     const plannerInput = {
       history: buildPlannerHistory(context),
       availableTools: plannerTools,

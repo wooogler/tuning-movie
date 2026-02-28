@@ -6,6 +6,11 @@ import type {
   UserMessagePayload,
 } from '../types';
 
+const DEFAULT_CP_MEMORY_LIMIT = Math.max(
+  0,
+  Number.parseInt(process.env.AGENT_DEFAULT_CP_MEMORY_LIMIT || '10', 10) || 10
+);
+
 function pickStage(uiSpec: unknown): string | null {
   if (!uiSpec || typeof uiSpec !== 'object') return null;
   const record = uiSpec as Record<string, unknown>;
@@ -22,14 +27,34 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function normalizeCpMemoryLimit(raw: unknown, fallback: number): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.max(0, Math.floor(raw));
+  }
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  if (Number.isFinite(parsed)) {
+    return Math.max(0, parsed);
+  }
+  return fallback;
+}
+
 export function fromSnapshot(payload: SnapshotStatePayload): PerceivedContext {
+  const fallbackFromLegacyToggle =
+    typeof payload.plannerCpEnabled === 'boolean'
+      ? payload.plannerCpEnabled
+        ? DEFAULT_CP_MEMORY_LIMIT
+        : 0
+      : DEFAULT_CP_MEMORY_LIMIT;
   return {
     sessionId: payload.sessionId ?? null,
     stage: pickStage(payload.uiSpec),
     uiSpec: payload.uiSpec ?? null,
     messageHistoryTail: safeArray(payload.messageHistory).slice(),
     toolSchema: safeArray<ToolSchemaItem>(payload.toolSchema),
-    plannerCpEnabled: payload.plannerCpEnabled !== false,
+    plannerCpMemoryLimit: normalizeCpMemoryLimit(
+      payload.plannerCpMemoryLimit,
+      fallbackFromLegacyToggle
+    ),
     lastUserMessage: null,
     lastUpdatedAt: nowIso(),
   };
@@ -39,16 +64,22 @@ export function applyStateUpdated(
   previous: PerceivedContext,
   payload: StateUpdatedPayload
 ): PerceivedContext {
+  const fallbackFromLegacyToggle =
+    typeof payload.plannerCpEnabled === 'boolean'
+      ? payload.plannerCpEnabled
+        ? previous.plannerCpMemoryLimit
+        : 0
+      : previous.plannerCpMemoryLimit;
   return {
     ...previous,
     stage: pickStage(payload.uiSpec),
     uiSpec: payload.uiSpec ?? null,
     messageHistoryTail: safeArray(payload.messageHistory).slice(),
     toolSchema: safeArray<ToolSchemaItem>(payload.toolSchema),
-    plannerCpEnabled:
-      typeof payload.plannerCpEnabled === 'boolean'
-        ? payload.plannerCpEnabled
-        : previous.plannerCpEnabled,
+    plannerCpMemoryLimit: normalizeCpMemoryLimit(
+      payload.plannerCpMemoryLimit,
+      fallbackFromLegacyToggle
+    ),
     lastUpdatedAt: nowIso(),
   };
 }

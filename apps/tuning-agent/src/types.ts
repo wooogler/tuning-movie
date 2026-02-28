@@ -25,6 +25,7 @@ export interface SnapshotStatePayload {
   uiSpec: unknown | null;
   messageHistory: unknown[];
   toolSchema: ToolSchemaItem[];
+  plannerCpMemoryLimit?: number;
   plannerCpEnabled?: boolean;
 }
 
@@ -33,6 +34,7 @@ export interface StateUpdatedPayload {
   uiSpec: unknown | null;
   messageHistory: unknown[];
   toolSchema: ToolSchemaItem[];
+  plannerCpMemoryLimit?: number;
   plannerCpEnabled?: boolean;
 }
 
@@ -42,7 +44,7 @@ export interface PerceivedContext {
   uiSpec: unknown | null;
   messageHistoryTail: unknown[];
   toolSchema: ToolSchemaItem[];
-  plannerCpEnabled: boolean;
+  plannerCpMemoryLimit: number;
   lastUserMessage: UserMessagePayload | null;
   lastUpdatedAt: string;
 }

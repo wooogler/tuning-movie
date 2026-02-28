@@ -10,10 +10,10 @@ type Theme = 'dark' | 'light';
 const THEME_STORAGE_KEY = 'tuning-movie-theme';
 
 function getInitialTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark';
+  if (typeof window === 'undefined') return 'light';
 
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark';
+  return storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'light';
 }
 
 function App() {

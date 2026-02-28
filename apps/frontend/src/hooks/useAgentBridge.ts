@@ -9,7 +9,7 @@ interface UseAgentBridgeOptions {
   uiSpec: UISpec | null;
   messageHistory: ChatMessage[];
   toolSchema: ToolDefinition[];
-  plannerCpEnabled?: boolean;
+  plannerCpMemoryLimit?: number;
   onToolCall: (
     toolName: string,
     params: Record<string, unknown>,
@@ -72,7 +72,7 @@ export function useAgentBridge({
   uiSpec,
   messageHistory,
   toolSchema,
-  plannerCpEnabled = true,
+  plannerCpMemoryLimit = 10,
   onToolCall,
   onAgentMessage,
   onSessionEnd,
@@ -91,23 +91,34 @@ export function useAgentBridge({
     uiSpec,
     messageHistory,
     toolSchema,
-    plannerCpEnabled,
+    plannerCpMemoryLimit,
     onToolCall,
     onAgentMessage,
     onSessionEnd,
   });
+
+  const normalizeCpMemoryLimit = useCallback((value: unknown): number => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.floor(value));
+    }
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, parsed);
+    }
+    return 0;
+  }, []);
 
   useEffect(() => {
     latestRef.current = {
       uiSpec,
       messageHistory,
       toolSchema,
-      plannerCpEnabled,
+      plannerCpMemoryLimit,
       onToolCall,
       onAgentMessage,
       onSessionEnd,
     };
-  }, [uiSpec, messageHistory, toolSchema, plannerCpEnabled, onToolCall, onAgentMessage, onSessionEnd]);
+  }, [uiSpec, messageHistory, toolSchema, plannerCpMemoryLimit, onToolCall, onAgentMessage, onSessionEnd]);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -130,9 +141,9 @@ export function useAgentBridge({
       uiSpec: current.uiSpec,
       messageHistory: current.messageHistory,
       toolSchema: current.toolSchema,
-      plannerCpEnabled: current.plannerCpEnabled,
+      plannerCpMemoryLimit: normalizeCpMemoryLimit(current.plannerCpMemoryLimit),
     };
-  }, []);
+  }, [normalizeCpMemoryLimit]);
 
   const handleEnvelope = useCallback((message: RelayEnvelope) => {
     const { onToolCall: applyTool, onAgentMessage: postAgentMessage } = latestRef.current;
@@ -351,10 +362,10 @@ export function useAgentBridge({
         uiSpec: latestRef.current.uiSpec,
         messageHistory: latestRef.current.messageHistory,
         toolSchema: latestRef.current.toolSchema,
-        plannerCpEnabled: latestRef.current.plannerCpEnabled,
+        plannerCpMemoryLimit: normalizeCpMemoryLimit(latestRef.current.plannerCpMemoryLimit),
       },
     });
-  }, [isJoined, uiSpec, messageHistory, toolSchema, plannerCpEnabled, sendEnvelope]);
+  }, [isJoined, uiSpec, messageHistory, toolSchema, plannerCpMemoryLimit, sendEnvelope, normalizeCpMemoryLimit]);
 
   const sendUserMessageToAgent = useCallback(
     (text: string, stage: Stage) => {

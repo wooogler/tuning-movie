@@ -17,5 +17,5 @@ export interface SnapshotPayload {
   uiSpec: UISpec | null;
   messageHistory: ChatMessage[];
   toolSchema: ToolDefinition[];
-  plannerCpEnabled: boolean;
+  plannerCpMemoryLimit: number;
 }

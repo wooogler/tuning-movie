@@ -216,7 +216,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [viewMode] = useState<ViewMode>('chat');
   const [agentBridgeEnabled, setAgentBridgeEnabled] = useState(true);
-  const [plannerCpEnabled, setPlannerCpEnabled] = useState(true);
+  const [plannerCpMemoryLimit, setPlannerCpMemoryLimit] = useState(10);
   const [agentModel, setAgentModel] = useState<'openai' | 'gemini'>('openai');
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [carouselOffset, setCarouselOffset] = useState(0);
@@ -227,6 +227,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const initialized = useRef(false);
   const previousStageRef = useRef<Stage>(currentStage);
   const chatResizeSessionRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const pendingAgentToggleResetReasonRef = useRef<string | null>(null);
 
   const getMaxChatWidth = useCallback(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_WIDTH_PX;
@@ -858,7 +859,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     uiSpec: activeSpec,
     messageHistory: messages,
     toolSchema: agentToolSchema,
-    plannerCpEnabled,
+    plannerCpMemoryLimit,
     enabled: agentBridgeEnabled,
     onToolCall: onToolApply,
     onAgentMessage: (text: string) => {
@@ -881,6 +882,21 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     handleBookAnotherLocal();
   }, [sendSessionResetToAgent, handleBookAnotherLocal]);
 
+  const handleAgentBridgeToggle = useCallback(() => {
+    setModelPickerOpen(false);
+
+    const nextEnabled = !agentBridgeEnabled;
+    if (agentBridgeEnabled) {
+      pendingAgentToggleResetReasonRef.current = null;
+      sendSessionResetToAgent('host-agent-toggle-off');
+    } else {
+      pendingAgentToggleResetReasonRef.current = 'host-agent-toggle-on';
+    }
+
+    setAgentBridgeEnabled(nextEnabled);
+    handleSessionReset();
+  }, [agentBridgeEnabled, handleSessionReset, sendSessionResetToAgent]);
+
   const handleChatInputSubmit = useCallback(
     (text: string) => {
       if (!agentBridgeEnabled) return;
@@ -895,6 +911,24 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const nextStage = getNextStage(currentStage);
   const hasConnectedAgent = connectedAgents.length > 0;
   const connectedAgentNames = connectedAgents.map((agent) => agent.name).join(', ');
+
+  useEffect(() => {
+    const pendingReason = pendingAgentToggleResetReasonRef.current;
+    if (!pendingReason) return;
+    if (!agentBridgeEnabled || !isAgentBridgeConnected || !isAgentBridgeJoined || !hasConnectedAgent) {
+      return;
+    }
+
+    sendSessionResetToAgent(pendingReason);
+    pendingAgentToggleResetReasonRef.current = null;
+  }, [
+    agentBridgeEnabled,
+    hasConnectedAgent,
+    isAgentBridgeConnected,
+    isAgentBridgeJoined,
+    sendSessionResetToAgent,
+  ]);
+
   const inputDisabled = !agentBridgeEnabled || !isAgentBridgeConnected || !isAgentBridgeJoined || !hasConnectedAgent;
   const inputStatusLabel = !agentBridgeEnabled
     ? 'Agent connection is off'
@@ -992,7 +1026,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
             </button>
             <button
               type="button"
-              onClick={() => setAgentBridgeEnabled((prev) => !prev)}
+              onClick={handleAgentBridgeToggle}
               className={`px-3 py-1 text-xs rounded border ${
                 agentBridgeEnabled
                   ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
@@ -1001,18 +1035,32 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
             >
               Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
             </button>
-            <button
-              type="button"
-              onClick={() => setPlannerCpEnabled((prev) => !prev)}
-              disabled={!agentBridgeEnabled}
-              className={`px-3 py-1 text-xs rounded border ${
-                plannerCpEnabled
-                  ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
-                  : 'border-primary/40 text-primary/80 hover:border-primary hover:text-primary'
-              } disabled:cursor-not-allowed disabled:opacity-50`}
+            <label
+              className={`flex items-center gap-2 px-3 py-1 text-xs rounded border ${
+                agentBridgeEnabled
+                  ? 'border-info-border text-info-label'
+                  : 'border-info-border/50 text-info-label/60'
+              }`}
             >
-              CP Memory {plannerCpEnabled ? 'ON' : 'OFF'}
-            </button>
+              <span>CP Memory</span>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={plannerCpMemoryLimit}
+                disabled={!agentBridgeEnabled}
+                onChange={(event) => {
+                  const parsed = Number.parseInt(event.target.value, 10);
+                  if (!Number.isFinite(parsed)) {
+                    setPlannerCpMemoryLimit(0);
+                    return;
+                  }
+                  setPlannerCpMemoryLimit(Math.max(0, parsed));
+                }}
+                className="w-16 rounded border border-info-border bg-dark px-2 py-0.5 text-xs text-info-text disabled:cursor-not-allowed disabled:opacity-60"
+                title="0 disables CP memory injection. N injects the latest N memory items per list."
+              />
+            </label>
             {agentBridgeEnabled && (
               <div className="relative flex">
                 <button

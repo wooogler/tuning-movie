@@ -67,6 +67,10 @@ interface PerceptionWaiter {
 const perceptionWaiters = new Set<PerceptionWaiter>();
 
 const RETRY_DELAY_MS = 1200;
+const DEFAULT_CP_MEMORY_LIMIT = Math.max(
+  0,
+  Number.parseInt(process.env.AGENT_DEFAULT_CP_MEMORY_LIMIT || '10', 10) || 10
+);
 
 function syncMonitorMemoryState(): void {
   monitor.updateMemory(
@@ -84,6 +88,22 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function resolvePlannerCpMemoryLimit(payload: Record<string, unknown>, fallback: number): number {
+  const rawLimit = payload.plannerCpMemoryLimit;
+  if (typeof rawLimit === 'number' && Number.isFinite(rawLimit)) {
+    return Math.max(0, Math.floor(rawLimit));
+  }
+  const parsed = Number.parseInt(String(rawLimit ?? ''), 10);
+  if (Number.isFinite(parsed)) {
+    return Math.max(0, parsed);
+  }
+  const legacyToggle = payload.plannerCpEnabled;
+  if (typeof legacyToggle === 'boolean') {
+    return legacyToggle ? fallback : 0;
+  }
+  return fallback;
+}
+
 function toSnapshotPayload(value: unknown): SnapshotStatePayload {
   const payload = asRecord(value);
   return {
@@ -91,6 +111,7 @@ function toSnapshotPayload(value: unknown): SnapshotStatePayload {
     uiSpec: payload.uiSpec ?? null,
     messageHistory: Array.isArray(payload.messageHistory) ? payload.messageHistory : [],
     toolSchema: Array.isArray(payload.toolSchema) ? payload.toolSchema : [],
+    plannerCpMemoryLimit: resolvePlannerCpMemoryLimit(payload, DEFAULT_CP_MEMORY_LIMIT),
     plannerCpEnabled:
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
   };
@@ -103,6 +124,7 @@ function toStateUpdatedPayload(value: unknown): StateUpdatedPayload {
     uiSpec: payload.uiSpec ?? null,
     messageHistory: Array.isArray(payload.messageHistory) ? payload.messageHistory : [],
     toolSchema: Array.isArray(payload.toolSchema) ? payload.toolSchema : [],
+    plannerCpMemoryLimit: resolvePlannerCpMemoryLimit(payload, DEFAULT_CP_MEMORY_LIMIT),
     plannerCpEnabled:
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
   };
