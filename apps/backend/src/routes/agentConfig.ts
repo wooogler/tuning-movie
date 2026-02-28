@@ -3,6 +3,10 @@ import fs from 'fs';
 import path from 'path';
 
 type ModelId = 'openai' | 'gemini';
+interface RuntimeAgentConfig {
+  guiAdaptationEnabled?: boolean;
+}
+
 const OPENAI_ENABLED_KEY = 'AGENT_ENABLE_OPENAI';
 const GEMINI_ENABLED_KEY = 'AGENT_ENABLE_GEMINI';
 const GUI_ADAPTATION_ENABLED_KEY = 'AGENT_ENABLE_GUI_ADAPTATION';
@@ -16,6 +20,44 @@ function getEnvFilePath(): string {
     if (fs.existsSync(p)) return p;
   }
   return candidates[0];
+}
+
+function getRuntimeConfigPath(): string {
+  const candidates = [
+    path.resolve(process.cwd(), '.runtime/agent-config.json'),
+    path.resolve(process.cwd(), 'apps/backend/.runtime/agent-config.json'),
+    path.resolve(__dirname, '../../.runtime/agent-config.json'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return candidates[candidates.length - 1];
+}
+
+function readRuntimeConfig(): RuntimeAgentConfig {
+  const filePath = getRuntimeConfigPath();
+  if (!fs.existsSync(filePath)) return {};
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as RuntimeAgentConfig;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function writeRuntimeConfig(partial: RuntimeAgentConfig): void {
+  const filePath = getRuntimeConfigPath();
+  const current = readRuntimeConfig();
+  const next: RuntimeAgentConfig = {
+    ...current,
+    ...partial,
+  };
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
 }
 
 function parseBoolean(value: unknown): boolean | null {
@@ -84,11 +126,16 @@ function setModelInEnv(model: ModelId): void {
 }
 
 function readGuiAdaptationEnabled(): boolean {
+  const runtime = readRuntimeConfig();
+  if (typeof runtime.guiAdaptationEnabled === 'boolean') {
+    return runtime.guiAdaptationEnabled;
+  }
   return readBooleanFromEnv(GUI_ADAPTATION_ENABLED_KEY, true);
 }
 
 function setGuiAdaptationEnabled(enabled: boolean): void {
-  setBooleanValuesInEnv([{ key: GUI_ADAPTATION_ENABLED_KEY, enabled }]);
+  writeRuntimeConfig({ guiAdaptationEnabled: enabled });
+  process.env[GUI_ADAPTATION_ENABLED_KEY] = enabled ? 'true' : 'false';
 }
 
 export async function agentConfigRoutes(fastify: FastifyInstance) {
