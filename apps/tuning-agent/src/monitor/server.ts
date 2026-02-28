@@ -30,6 +30,10 @@ interface MonitorState {
   lastTrigger: string | null;
   lastPlan: PlannedAction | null;
   lastOutcome: ActionOutcome | null;
+  memoryPreferences: string[];
+  memoryConstraints: string[];
+  memoryConflicts: string[];
+  memoryCandidates: string[];
   actionCount: number;
   pendingUserMessages: number;
 }
@@ -79,6 +83,10 @@ export class AgentMonitorServer {
       lastTrigger: null,
       lastPlan: null,
       lastOutcome: null,
+      memoryPreferences: [],
+      memoryConstraints: [],
+      memoryConflicts: [],
+      memoryCandidates: [],
       actionCount: 0,
       pendingUserMessages: 0,
     };
@@ -185,6 +193,20 @@ export class AgentMonitorServer {
     this.updateState({
       lastOutcome: outcome,
       actionCount: this.state.actionCount + 1,
+    });
+  }
+
+  updateMemory(
+    preferences: string[],
+    constraints: string[],
+    conflicts: string[],
+    candidates: string[]
+  ): void {
+    this.updateState({
+      memoryPreferences: preferences.slice(),
+      memoryConstraints: constraints.slice(),
+      memoryConflicts: conflicts.slice(),
+      memoryCandidates: candidates.slice(),
     });
   }
 

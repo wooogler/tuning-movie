@@ -9,6 +9,7 @@ type MonitorEvent = {
 
 type MonitorState = {
   startedAt: string;
+  agentName?: string;
   relayUrl: string;
   sessionId: string;
   phase: string;
@@ -21,6 +22,10 @@ type MonitorState = {
   lastTrigger: string | null;
   lastPlan: unknown;
   lastOutcome: unknown;
+  memoryPreferences: string[];
+  memoryConstraints: string[];
+  memoryConflicts?: string[];
+  memoryCandidates?: string[];
   actionCount: number;
   pendingUserMessages: number;
 };
@@ -38,9 +43,12 @@ type EventPayload = {
   event: MonitorEvent;
 };
 
+type LlmComponent = 'planner' | 'extractor' | 'unknown';
+
 type LlmInteraction = {
   id: number;
   timestamp: string;
+  component: LlmComponent;
   request: unknown;
   raw: unknown;
   parsed: unknown;
@@ -69,17 +77,63 @@ function shortTime(value: string): string {
   return new Date(value).toLocaleTimeString();
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function getLlmEventType(event: MonitorEvent): 'request' | 'response.raw' | 'response.parsed' | 'error' | null {
+  if (!event.type.startsWith('llm.')) return null;
+
+  let suffix = event.type.slice(4);
+  if (suffix.startsWith('planner.')) suffix = suffix.slice('planner.'.length);
+  else if (suffix.startsWith('extractor.')) suffix = suffix.slice('extractor.'.length);
+  else if (suffix.startsWith('unknown.')) suffix = suffix.slice('unknown.'.length);
+
+  if (suffix === 'request') return 'request';
+  if (suffix === 'response.raw') return 'response.raw';
+  if (suffix === 'response.parsed') return 'response.parsed';
+  if (suffix === 'error') return 'error';
+  return null;
+}
+
+function getLlmComponent(event: MonitorEvent): LlmComponent {
+  if (event.type.startsWith('llm.planner.')) return 'planner';
+  if (event.type.startsWith('llm.extractor.')) return 'extractor';
+  if (event.type.startsWith('llm.unknown.')) return 'unknown';
+
+  const payload = asRecord(event.payload);
+  const component = payload?.component;
+  if (component === 'planner' || component === 'extractor' || component === 'unknown') {
+    return component;
+  }
+
+  // Backward compatibility for older monitor streams (`llm.request` etc.)
+  return 'planner';
+}
+
 function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
   const interactions: LlmInteraction[] = [];
-  let current: LlmInteraction | null = null;
+  const currentByComponent: Record<LlmComponent, LlmInteraction | null> = {
+    planner: null,
+    extractor: null,
+    unknown: null,
+  };
 
   for (const event of events) {
-    if (!event.type.startsWith('llm.')) continue;
-    if (event.type === 'llm.request') {
+    const llmEventType = getLlmEventType(event);
+    if (!llmEventType) continue;
+    const component = getLlmComponent(event);
+    let current = currentByComponent[component];
+
+    if (llmEventType === 'request') {
       if (current) interactions.push(current);
-      current = {
+      currentByComponent[component] = {
         id: event.index,
         timestamp: event.timestamp,
+        component,
         request: event.payload,
         raw: null,
         parsed: null,
@@ -92,32 +146,38 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
       current = {
         id: event.index,
         timestamp: event.timestamp,
+        component,
         request: null,
         raw: null,
         parsed: null,
         error: null,
       };
+      currentByComponent[component] = current;
     }
 
-    if (event.type === 'llm.response.raw') {
+    if (llmEventType === 'response.raw') {
       current.raw = event.payload;
-    } else if (event.type === 'llm.response.parsed') {
+    } else if (llmEventType === 'response.parsed') {
       current.parsed = event.payload;
       interactions.push(current);
-      current = null;
-    } else if (event.type === 'llm.error') {
+      currentByComponent[component] = null;
+    } else if (llmEventType === 'error') {
       current.error = event.payload;
       interactions.push(current);
-      current = null;
+      currentByComponent[component] = null;
     }
   }
 
-  if (current) interactions.push(current);
+  for (const component of ['planner', 'extractor', 'unknown'] as const) {
+    const current = currentByComponent[component];
+    if (current) interactions.push(current);
+  }
   return interactions;
 }
 
 export default function App() {
   const [tab, setTab] = useState<'agent' | 'llm'>('llm');
+  const [llmFilter, setLlmFilter] = useState<'all' | 'planner' | 'extractor'>('all');
   const [monitorState, setMonitorState] = useState<MonitorState | null>(null);
   const [events, setEvents] = useState<MonitorEvent[]>([]);
   const [connection, setConnection] = useState<'connecting' | 'live' | 'error'>('connecting');
@@ -187,6 +247,27 @@ export default function App() {
   }, []);
 
   const llmInteractions = useMemo(() => buildLlmInteractions(events), [events]);
+  const llmCounts = useMemo(
+    () =>
+      llmInteractions.reduce(
+        (acc, item) => {
+          acc.all += 1;
+          if (item.component === 'planner') acc.planner += 1;
+          if (item.component === 'extractor') acc.extractor += 1;
+          return acc;
+        },
+        { all: 0, planner: 0, extractor: 0 }
+      ),
+    [llmInteractions]
+  );
+  const filteredLlmInteractions = useMemo(
+    () =>
+      llmInteractions
+        .filter((item) => llmFilter === 'all' || item.component === llmFilter)
+        .slice()
+        .reverse(),
+    [llmInteractions, llmFilter]
+  );
   const recentEvents = useMemo(() => events.slice().reverse().slice(0, 160), [events]);
 
   async function clearMonitorEvents() {
@@ -276,16 +357,22 @@ export default function App() {
       {tab === 'agent' ? (
         <section className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Agent" value={monitorState?.agentName ?? '-'} />
             <StatCard label="Phase" value={monitorState?.phase ?? '-'} />
             <StatCard label="Stage" value={monitorState?.contextStage ?? '-'} />
             <StatCard label="Session Ready" value={String(Boolean(monitorState?.sessionReady))} />
             <StatCard label="Action In Flight" value={String(Boolean(monitorState?.actionInFlight))} />
+            <StatCard label="Preference Count" value={String(monitorState?.memoryPreferences?.length ?? 0)} />
+            <StatCard label="Constraint Count" value={String(monitorState?.memoryConstraints?.length ?? 0)} />
+            <StatCard label="Conflict Count" value={String(monitorState?.memoryConflicts?.length ?? 0)} />
+            <StatCard label="Candidate Count" value={String(monitorState?.memoryCandidates?.length ?? 0)} />
           </div>
 
           <JsonCard
             title="Runtime"
             value={{
               startedAt: monitorState?.startedAt,
+              agentName: monitorState?.agentName,
               relayUrl: monitorState?.relayUrl,
               sessionId: monitorState?.sessionId,
               relayConnected: monitorState?.relayConnected,
@@ -295,6 +382,15 @@ export default function App() {
               lastTrigger: monitorState?.lastTrigger,
               actionCount: monitorState?.actionCount,
               pendingUserMessages: monitorState?.pendingUserMessages,
+            }}
+          />
+          <JsonCard
+            title="Agent Memory"
+            value={{
+              preferences: monitorState?.memoryPreferences ?? [],
+              constraints: monitorState?.memoryConstraints ?? [],
+              conflicts: monitorState?.memoryConflicts ?? [],
+              candidates: monitorState?.memoryCandidates ?? [],
             }}
           />
           <JsonCard title="Last Plan" value={monitorState?.lastPlan ?? null} />
@@ -332,20 +428,74 @@ export default function App() {
         </section>
       ) : (
         <section className="space-y-3">
-          <div className="text-xs text-mist-300">One card per planner interaction (request → response/error).</div>
-          {llmInteractions.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-mist-300">
+              One card per LLM interaction (request → response/error) across planner/extractor.
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <button
+                className={`rounded-lg border px-2.5 py-1 ${
+                  llmFilter === 'all'
+                    ? 'border-mist-500 bg-mist-700/20 text-mist-100'
+                    : 'border-ink-700 bg-ink-900/50 text-mist-300'
+                }`}
+                onClick={() => setLlmFilter('all')}
+                type="button"
+              >
+                All ({llmCounts.all})
+              </button>
+              <button
+                className={`rounded-lg border px-2.5 py-1 ${
+                  llmFilter === 'planner'
+                    ? 'border-mist-500 bg-mist-700/20 text-mist-100'
+                    : 'border-ink-700 bg-ink-900/50 text-mist-300'
+                }`}
+                onClick={() => setLlmFilter('planner')}
+                type="button"
+              >
+                Planner ({llmCounts.planner})
+              </button>
+              <button
+                className={`rounded-lg border px-2.5 py-1 ${
+                  llmFilter === 'extractor'
+                    ? 'border-mist-500 bg-mist-700/20 text-mist-100'
+                    : 'border-ink-700 bg-ink-900/50 text-mist-300'
+                }`}
+                onClick={() => setLlmFilter('extractor')}
+                type="button"
+              >
+                Extractor ({llmCounts.extractor})
+              </button>
+            </div>
+          </div>
+          {filteredLlmInteractions.length === 0 ? (
             <section className="rounded-2xl border border-ink-700/70 bg-ink-900/50 p-4 text-sm text-mist-300">
-              No LLM interactions yet.
+              No LLM interactions for selected filter.
             </section>
           ) : (
-            llmInteractions.map((item) => {
+            filteredLlmInteractions.map((item) => {
               const status = item.error ? 'error' : item.parsed ? 'completed' : 'pending';
+              const componentLabel =
+                item.component === 'extractor' ? 'Extractor' : item.component === 'planner' ? 'Planner' : 'Unknown';
               return (
                 <article key={item.id} className="rounded-2xl border border-ink-700/70 bg-ink-900/50 p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="text-mist-300">
-                      #{item.id} · {shortTime(item.timestamp)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-1 font-semibold ${
+                          item.component === 'extractor'
+                            ? 'bg-cyan-500/15 text-cyan-300'
+                            : item.component === 'planner'
+                              ? 'bg-mist-500/20 text-mist-100'
+                              : 'bg-ink-700/60 text-mist-300'
+                        }`}
+                      >
+                        {componentLabel}
+                      </span>
+                      <span className="text-mist-300">
+                        #{item.id} · {shortTime(item.timestamp)}
+                      </span>
+                    </div>
                     <span
                       className={`rounded-full px-2 py-1 font-semibold ${
                         status === 'completed'

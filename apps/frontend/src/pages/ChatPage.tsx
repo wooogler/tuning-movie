@@ -214,8 +214,9 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('chat');
+  const [viewMode] = useState<ViewMode>('chat');
   const [agentBridgeEnabled, setAgentBridgeEnabled] = useState(true);
+  const [plannerCpEnabled, setPlannerCpEnabled] = useState(true);
   const [agentModel, setAgentModel] = useState<'openai' | 'gemini'>('openai');
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [carouselOffset, setCarouselOffset] = useState(0);
@@ -857,6 +858,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     uiSpec: activeSpec,
     messageHistory: messages,
     toolSchema: agentToolSchema,
+    plannerCpEnabled,
     enabled: agentBridgeEnabled,
     onToolCall: onToolApply,
     onAgentMessage: (text: string) => {
@@ -977,30 +979,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
             <div className="text-sm text-fg-muted">
               Step {currentStep} of {STAGE_ORDER.length}
             </div>
-            <div className="flex items-center rounded-lg border border-dark-border bg-dark-light p-1">
-              <button
-                type="button"
-                onClick={() => setViewMode('chat')}
-                className={`px-2 py-1 text-xs rounded ${
-                  viewMode === 'chat'
-                    ? 'bg-primary text-primary-fg font-semibold'
-                    : 'text-fg hover:text-fg-strong'
-                }`}
-              >
-                Chat
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('carousel')}
-                className={`px-2 py-1 text-xs rounded ${
-                  viewMode === 'carousel'
-                    ? 'bg-primary text-primary-fg font-semibold'
-                    : 'text-fg hover:text-fg-strong'
-                }`}
-              >
-                Carousel
-              </button>
-            </div>
             <button
               type="button"
               onClick={onThemeToggle}
@@ -1022,6 +1000,18 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
               }`}
             >
               Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPlannerCpEnabled((prev) => !prev)}
+              disabled={!agentBridgeEnabled}
+              className={`px-3 py-1 text-xs rounded border ${
+                plannerCpEnabled
+                  ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
+                  : 'border-primary/40 text-primary/80 hover:border-primary hover:text-primary'
+              } disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              CP Memory {plannerCpEnabled ? 'ON' : 'OFF'}
             </button>
             {agentBridgeEnabled && (
               <div className="relative flex">

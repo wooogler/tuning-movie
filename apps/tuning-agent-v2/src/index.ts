@@ -28,7 +28,7 @@ const monitorWebPort = Number(process.env.AGENT_MONITOR_WEB_PORT || 3501);
 
 const memory = new AgentMemory();
 const relay = new RelayClient({ relayUrl, sessionId, agentName, requestTimeoutMs: 12000 });
-const monitor = new AgentMonitorServer({ port: monitorPort, relayUrl, sessionId });
+const monitor = new AgentMonitorServer({ port: monitorPort, relayUrl, sessionId, agentName });
 const llmTraceHandler = (event: { type: string; payload: unknown }) => {
   monitor.pushEvent(`llm.${event.type}`, event.payload);
 };
@@ -45,6 +45,10 @@ let deferredReplanTrigger: string | null = null;
 let userTurnAwaitingStateUpdate = false;
 
 const RETRY_DELAY_MS = 1200;
+
+function syncMonitorMemoryState(): void {
+  monitor.updateMemory(memory.getPreferences(), memory.getConstraints());
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -383,6 +387,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
           if (extractionResult.newConstraints.length > 0) {
             memory.appendConstraints(extractionResult.newConstraints);
           }
+          syncMonitorMemoryState();
           monitor.pushEvent('extraction.completed', {
             newPreferences: extractionResult.newPreferences,
             supersededPreferences: extractionResult.supersededPreferences,
@@ -455,6 +460,7 @@ function upsertContext(next: PerceivedContext): void {
 
 function resetRuntimeState(): void {
   memory.reset();
+  syncMonitorMemoryState();
   actionInFlight = false;
   planningInFlight = false;
   deferredReplanRequested = false;
@@ -563,6 +569,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
 async function main(): Promise<void> {
   await monitor.start();
   monitor.updateState({ phase: 'monitor-ready' });
+  syncMonitorMemoryState();
   monitor.pushEvent('runtime.start', {
     relayUrl,
     sessionId,

@@ -5,6 +5,7 @@ interface MonitorOptions {
   port: number;
   relayUrl: string;
   sessionId: string;
+  agentName: string;
 }
 
 interface MonitorEvent {
@@ -16,6 +17,7 @@ interface MonitorEvent {
 
 interface MonitorState {
   startedAt: string;
+  agentName: string;
   relayUrl: string;
   sessionId: string;
   phase: string;
@@ -28,6 +30,8 @@ interface MonitorState {
   lastTrigger: string | null;
   lastPlan: PlannedAction | null;
   lastOutcome: ActionOutcome | null;
+  memoryPreferences: string[];
+  memoryConstraints: string[];
   actionCount: number;
   pendingUserMessages: number;
 }
@@ -64,6 +68,7 @@ export class AgentMonitorServer {
     this.port = options.port;
     this.state = {
       startedAt: nowIso(),
+      agentName: options.agentName,
       relayUrl: options.relayUrl,
       sessionId: options.sessionId,
       phase: 'booting',
@@ -76,6 +81,8 @@ export class AgentMonitorServer {
       lastTrigger: null,
       lastPlan: null,
       lastOutcome: null,
+      memoryPreferences: [],
+      memoryConstraints: [],
       actionCount: 0,
       pendingUserMessages: 0,
     };
@@ -182,6 +189,13 @@ export class AgentMonitorServer {
     this.updateState({
       lastOutcome: outcome,
       actionCount: this.state.actionCount + 1,
+    });
+  }
+
+  updateMemory(preferences: string[], constraints: string[]): void {
+    this.updateState({
+      memoryPreferences: preferences.slice(),
+      memoryConstraints: constraints.slice(),
     });
   }
 

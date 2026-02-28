@@ -2,7 +2,13 @@ import { executePlannedAction } from './core/executor';
 import { AgentMemory } from './core/memory';
 import { applyStateUpdated, applyUserMessage, fromSnapshot } from './core/perception';
 import { planNextAction } from './core/planner';
-import { subscribeLlmTrace } from './llm/llmPlanner';
+import { subscribeLlmTrace as subscribePlannerLlmTrace } from './llm/llmPlanner';
+import {
+  extractPreferencesAndConstraints,
+  subscribeLlmTrace as subscribeExtractorLlmTrace,
+  type ExtractionContext,
+} from './llm/llmExtractor';
+import { toUISpecLike, getEnabledVisibleItems, getSelectedId } from './core/uiModel';
 import { shouldResync } from './core/verifier';
 import { isActionSafe } from './policies/safetyPolicy';
 import { RelayClient } from './runtime/relayClient';
@@ -18,7 +24,7 @@ import type {
 
 const relayUrl = process.env.AGENT_RELAY_URL || 'ws://localhost:3000/agent/ws';
 const sessionId = process.env.AGENT_SESSION_ID || 'default';
-const agentName = process.env.AGENT_NAME || 'tuning-agent-typescript';
+const agentName = process.env.AGENT_NAME || 'tuning-agent';
 const studyId = process.env.AGENT_STUDY_ID || 'pilot-01';
 const participantId = process.env.AGENT_PARTICIPANT_ID || 'P01';
 const monitorPort = Number(process.env.AGENT_MONITOR_PORT || 3500);
@@ -27,10 +33,18 @@ const monitorWebPort = Number(process.env.AGENT_MONITOR_WEB_PORT || 3501);
 const memory = new AgentMemory();
 const relay = new RelayClient({ relayUrl, sessionId, agentName, requestTimeoutMs: 12000 });
 const monitor = new AgentMonitorServer({ port: monitorPort, relayUrl, sessionId, agentName });
-const llmTraceHandler = (event: { type: string; payload: unknown }) => {
-  monitor.pushEvent(`llm.${event.type}`, event.payload);
+const llmTraceHandler = (event: { component?: string; type: string; payload: unknown }) => {
+  const component =
+    typeof event.component === 'string' && event.component.trim() ? event.component.trim() : 'unknown';
+  monitor.pushEvent(`llm.${component}.${event.type}`, event.payload);
 };
-const unsubscribeLlmTrace = subscribeLlmTrace(llmTraceHandler);
+const unsubscribePlannerLlmTrace = subscribePlannerLlmTrace(llmTraceHandler);
+const unsubscribeExtractorLlmTrace = subscribeExtractorLlmTrace(llmTraceHandler);
+
+function unsubscribeAllLlmTraces(): void {
+  unsubscribePlannerLlmTrace();
+  unsubscribeExtractorLlmTrace();
+}
 
 let actionInFlight = false;
 let lastActionFingerprint = '';
@@ -41,8 +55,27 @@ let planningInFlight = false;
 let deferredReplanRequested = false;
 let deferredReplanTrigger: string | null = null;
 let userTurnAwaitingStateUpdate = false;
+let fatalErrorMessage: string | null = null;
+let perceptionVersion = 0;
+
+interface PerceptionWaiter {
+  afterVersion: number;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}
+
+const perceptionWaiters = new Set<PerceptionWaiter>();
 
 const RETRY_DELAY_MS = 1200;
+
+function syncMonitorMemoryState(): void {
+  monitor.updateMemory(
+    memory.getPreferences(),
+    memory.getConstraints(),
+    memory.getConflicts(),
+    memory.getCandidates()
+  );
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -58,6 +91,8 @@ function toSnapshotPayload(value: unknown): SnapshotStatePayload {
     uiSpec: payload.uiSpec ?? null,
     messageHistory: Array.isArray(payload.messageHistory) ? payload.messageHistory : [],
     toolSchema: Array.isArray(payload.toolSchema) ? payload.toolSchema : [],
+    plannerCpEnabled:
+      typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
   };
 }
 
@@ -68,6 +103,8 @@ function toStateUpdatedPayload(value: unknown): StateUpdatedPayload {
     uiSpec: payload.uiSpec ?? null,
     messageHistory: Array.isArray(payload.messageHistory) ? payload.messageHistory : [],
     toolSchema: Array.isArray(payload.toolSchema) ? payload.toolSchema : [],
+    plannerCpEnabled:
+      typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
   };
 }
 
@@ -105,6 +142,54 @@ function requestDeferredReplan(trigger: string): void {
   deferredReplanTrigger = trigger;
   monitor.updateState({ pendingUserMessages: 1 });
   monitor.pushEvent('planner.deferred_replan', { trigger });
+}
+
+function markPerceptionUpdated(): void {
+  perceptionVersion += 1;
+  for (const waiter of Array.from(perceptionWaiters)) {
+    if (perceptionVersion > waiter.afterVersion) {
+      perceptionWaiters.delete(waiter);
+      waiter.resolve();
+    }
+  }
+}
+
+function waitForPerceptionAdvance(afterVersion: number): Promise<void> {
+  if (perceptionVersion > afterVersion) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    const waiter: PerceptionWaiter = { afterVersion, resolve, reject };
+    perceptionWaiters.add(waiter);
+  });
+}
+
+function rejectPerceptionWaiters(message: string): void {
+  const error = new Error(message);
+  for (const waiter of Array.from(perceptionWaiters)) {
+    perceptionWaiters.delete(waiter);
+    waiter.reject(error);
+  }
+}
+
+function enterFatalState(reason: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  fatalErrorMessage = `${reason}: ${message}`;
+  monitor.updateState({
+    phase: 'error',
+    actionInFlight: false,
+    pendingUserMessages: 0,
+  });
+  monitor.pushEvent('runtime.fatal', {
+    reason,
+    message,
+  });
+  console.error(`[tuning-agent] fatal ${reason}: ${message}`);
+}
+
+function isControlFlowCancellation(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message === 'session-reset' || message === 'terminated-by-signal';
 }
 
 function buildAgentMessageAction(text: string): import('./types').PlannedAction {
@@ -148,7 +233,7 @@ async function ensureRelayConnected(): Promise<void> {
         message: error instanceof Error ? error.message : String(error),
       });
       console.warn(
-        `[tuning-agent-typescript] relay connect failed, retrying in ${RETRY_DELAY_MS}ms: ${
+        `[tuning-agent-v2] relay connect failed, retrying in ${RETRY_DELAY_MS}ms: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -180,9 +265,9 @@ async function ensureSessionReady(reason: string): Promise<void> {
 
         if (!connectedOnce) {
           connectedOnce = true;
-          console.log(`[tuning-agent-typescript] connected to ${relayUrl} (sessionId=${sessionId})`);
-          console.log(`[tuning-agent-typescript] monitor API available at http://localhost:${monitorPort}`);
-          console.log(`[tuning-agent-typescript] monitor UI available at http://localhost:${monitorWebPort}`);
+          console.log(`[tuning-agent-v2] connected to ${relayUrl} (sessionId=${sessionId})`);
+          console.log(`[tuning-agent-v2] monitor API available at http://localhost:${monitorPort}`);
+          console.log(`[tuning-agent-v2] monitor UI available at http://localhost:${monitorWebPort}`);
         }
         return;
       } catch (error) {
@@ -194,14 +279,14 @@ async function ensureSessionReady(reason: string): Promise<void> {
           });
           monitor.pushEvent('session.waiting_host', { reason });
           console.log(
-            `[tuning-agent-typescript] waiting for host connection (${reason}); retrying in ${RETRY_DELAY_MS}ms`
+            `[tuning-agent-v2] waiting for host connection (${reason}); retrying in ${RETRY_DELAY_MS}ms`
           );
           await sleep(RETRY_DELAY_MS);
           continue;
         }
 
         console.warn(
-          `[tuning-agent-typescript] session bootstrap failed, retrying in ${RETRY_DELAY_MS}ms: ${
+          `[tuning-agent-v2] session bootstrap failed, retrying in ${RETRY_DELAY_MS}ms: ${
             error instanceof Error ? error.message : String(error)
           }`
         );
@@ -221,6 +306,14 @@ async function ensureSessionReady(reason: string): Promise<void> {
 }
 
 async function maybePlanAndExecute(trigger: string): Promise<void> {
+  if (fatalErrorMessage) {
+    monitor.pushEvent('planner.blocked_fatal', {
+      trigger,
+      fatalError: fatalErrorMessage,
+    });
+    return;
+  }
+
   if (actionInFlight || planningInFlight) {
     if (trigger === 'state.updated') {
       monitor.pushEvent('planner.skip_replan_while_busy', { trigger });
@@ -244,19 +337,12 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     const decisionExplainText = decision.explainText ?? '';
 
     if (!action) {
-      const shouldSendNoActionMessage =
-        trigger === 'user.message' ||
-        trigger === 'state.updated:user-message' ||
-        trigger === 'state.updated:stage-change';
-      if (shouldSendNoActionMessage) {
-        await maybeSendAssistantMessage(
-          planningContext,
-          decision.explainText ??
-            'I could not find a single valid next action from the current state. Please share your preference in a bit more detail.'
-        );
+      if (decisionExplainText.trim()) {
+        await maybeSendAssistantMessage(planningContext, decisionExplainText);
       }
       monitor.pushEvent('planner.no_action', {
         source: decision.source,
+        explainText: decision.explainText ?? null,
         fallbackReason: decision.fallbackReason ?? null,
       });
       return;
@@ -290,7 +376,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         reason: action.reason,
       });
       monitor.pushEvent('action.blocked', { trigger, action });
-      console.warn(`[tuning-agent-typescript] action blocked by safety policy (${trigger})`);
+      console.warn(`[tuning-agent-v2] action blocked by safety policy (${trigger})`);
       return;
     }
 
@@ -298,6 +384,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     monitor.updateState({ actionInFlight: true, phase: 'executing-action' });
     lastActionFingerprint = actionFingerprint;
     lastActionAt = now;
+    const preActionPerceptionVersion = perceptionVersion;
 
     if (action.type !== 'agent.message') {
       await maybeSendAssistantMessage(
@@ -338,6 +425,74 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       reason: action.reason,
     });
 
+    // Strong chaining: wait for latest host perception, then update CP memory.
+    const shouldExtract = Boolean(planningContext.lastUserMessage?.text?.trim()) || outcome.ok;
+    if (shouldExtract) {
+      const shouldWaitForPerception = action.type === 'tool.call' && outcome.ok;
+      if (shouldWaitForPerception) {
+        monitor.pushEvent('extraction.waiting_perception', {
+          afterVersion: preActionPerceptionVersion,
+          actionType: action.type,
+          toolName: action.type === 'tool.call' ? (action.payload.toolName as string) : null,
+        });
+        await waitForPerceptionAdvance(preActionPerceptionVersion);
+      }
+
+      const latestContext = memory.getContext() ?? planningContext;
+      const spec = toUISpecLike(latestContext.uiSpec);
+      const visibleItems = spec
+        ? getEnabledVisibleItems(spec).map((item) => ({
+            id: item.id,
+            value: item.value,
+            disabled: item.isDisabled,
+          }))
+        : [];
+      const selectedId = spec ? getSelectedId(spec) : null;
+      const selectedValue = spec?.state?.selected?.value;
+      const selectedItem =
+        selectedId && typeof selectedValue === 'string' ? { id: selectedId, value: selectedValue } : null;
+
+      const extractionCtx: ExtractionContext = {
+        userMessage: latestContext.lastUserMessage?.text ?? '',
+        currentStage: latestContext.stage ?? '',
+        messageHistory: latestContext.messageHistoryTail,
+        visibleItems,
+        selectedItem,
+        actionType: action.type,
+        toolName: action.type === 'tool.call' ? (action.payload.toolName as string) : '',
+        actionParams: (action.payload as Record<string, unknown>) ?? {},
+        outcomeOk: outcome.ok,
+        existingPreferences: memory.getPreferences(),
+        existingConstraints: memory.getConstraints(),
+        existingConflicts: memory.getConflicts(),
+        existingCandidates: memory.getCandidates(),
+      };
+
+      try {
+        const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
+        memory.setPreferences(extractionResult.updatedPreferences);
+        memory.setConstraints(extractionResult.updatedConstraints);
+        memory.setConflicts(extractionResult.updatedConflicts);
+        memory.setCandidates(extractionResult.updatedCandidates);
+        syncMonitorMemoryState();
+        monitor.pushEvent('extraction.completed', {
+          updatedPreferences: extractionResult.updatedPreferences,
+          updatedConstraints: extractionResult.updatedConstraints,
+          updatedConflicts: extractionResult.updatedConflicts,
+          updatedCandidates: extractionResult.updatedCandidates,
+          preferences: memory.getPreferences(),
+          constraints: memory.getConstraints(),
+          conflicts: memory.getConflicts(),
+          candidates: memory.getCandidates(),
+        });
+      } catch (extractionError) {
+        monitor.pushEvent('extraction.failed', {
+          message: extractionError instanceof Error ? extractionError.message : String(extractionError),
+        });
+        throw extractionError;
+      }
+    }
+
     if (!outcome.ok) {
       await maybeSendAssistantMessage(
         planningContext,
@@ -370,13 +525,25 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     monitor.pushEvent('action.exception', {
       message: error instanceof Error ? error.message : String(error),
     });
-    console.error(
-      `[tuning-agent-typescript] execute failed: ${error instanceof Error ? error.message : String(error)}`
-    );
+    if (isControlFlowCancellation(error)) {
+      monitor.pushEvent('planner.cancelled', {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    if (!fatalErrorMessage) {
+      enterFatalState('plan-or-action-cycle', error);
+    }
   } finally {
     actionInFlight = false;
     planningInFlight = false;
     monitor.updateState({ actionInFlight: false, phase: 'ready' });
+    if (fatalErrorMessage) {
+      deferredReplanRequested = false;
+      deferredReplanTrigger = null;
+      monitor.updateState({ pendingUserMessages: 0, phase: 'error' });
+      return;
+    }
     if (deferredReplanRequested) {
       const deferredTrigger = deferredReplanTrigger ?? trigger;
       deferredReplanRequested = false;
@@ -394,12 +561,16 @@ function upsertContext(next: PerceivedContext): void {
 }
 
 function resetRuntimeState(): void {
+  rejectPerceptionWaiters('session-reset');
   memory.reset();
+  syncMonitorMemoryState();
   actionInFlight = false;
   planningInFlight = false;
   deferredReplanRequested = false;
   deferredReplanTrigger = null;
   userTurnAwaitingStateUpdate = false;
+  fatalErrorMessage = null;
+  perceptionVersion = 0;
   lastActionFingerprint = '';
   lastActionAt = 0;
   monitor.updateState({
@@ -429,6 +600,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
         next.lastUserMessage = previous.lastUserMessage;
       }
       upsertContext(next);
+      markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
       await maybePlanAndExecute('snapshot.state');
       return;
@@ -439,6 +611,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       const next = applyStateUpdated(current, toStateUpdatedPayload(envelope.payload));
       const stageChanged = next.stage !== current.stage;
       upsertContext(next);
+      markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
 
       if (userTurnAwaitingStateUpdate) {
@@ -503,6 +676,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
 async function main(): Promise<void> {
   await monitor.start();
   monitor.updateState({ phase: 'monitor-ready' });
+  syncMonitorMemoryState();
   monitor.pushEvent('runtime.start', {
     relayUrl,
     sessionId,
@@ -515,7 +689,8 @@ async function main(): Promise<void> {
 
 process.on('SIGINT', () => {
   monitor.pushEvent('runtime.signal', { signal: 'SIGINT' });
-  unsubscribeLlmTrace();
+  rejectPerceptionWaiters('terminated-by-signal');
+  unsubscribeAllLlmTraces();
 
   relay.close();
   monitor.close();
@@ -523,7 +698,8 @@ process.on('SIGINT', () => {
 });
 process.on('SIGTERM', () => {
   monitor.pushEvent('runtime.signal', { signal: 'SIGTERM' });
-  unsubscribeLlmTrace();
+  rejectPerceptionWaiters('terminated-by-signal');
+  unsubscribeAllLlmTraces();
 
   relay.close();
   monitor.close();
@@ -534,8 +710,8 @@ void main().catch((error) => {
   monitor.pushEvent('runtime.fatal', {
     message: error instanceof Error ? error.message : String(error),
   });
-  unsubscribeLlmTrace();
+  unsubscribeAllLlmTraces();
   monitor.close();
-  console.error(`[tuning-agent-typescript] fatal: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`[tuning-agent-v2] fatal: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 });

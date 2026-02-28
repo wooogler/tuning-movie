@@ -9,6 +9,7 @@ interface UseAgentBridgeOptions {
   uiSpec: UISpec | null;
   messageHistory: ChatMessage[];
   toolSchema: ToolDefinition[];
+  plannerCpEnabled?: boolean;
   onToolCall: (
     toolName: string,
     params: Record<string, unknown>,
@@ -71,6 +72,7 @@ export function useAgentBridge({
   uiSpec,
   messageHistory,
   toolSchema,
+  plannerCpEnabled = true,
   onToolCall,
   onAgentMessage,
   onSessionEnd,
@@ -89,6 +91,7 @@ export function useAgentBridge({
     uiSpec,
     messageHistory,
     toolSchema,
+    plannerCpEnabled,
     onToolCall,
     onAgentMessage,
     onSessionEnd,
@@ -99,11 +102,12 @@ export function useAgentBridge({
       uiSpec,
       messageHistory,
       toolSchema,
+      plannerCpEnabled,
       onToolCall,
       onAgentMessage,
       onSessionEnd,
     };
-  }, [uiSpec, messageHistory, toolSchema, onToolCall, onAgentMessage, onSessionEnd]);
+  }, [uiSpec, messageHistory, toolSchema, plannerCpEnabled, onToolCall, onAgentMessage, onSessionEnd]);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -126,6 +130,7 @@ export function useAgentBridge({
       uiSpec: current.uiSpec,
       messageHistory: current.messageHistory,
       toolSchema: current.toolSchema,
+      plannerCpEnabled: current.plannerCpEnabled,
     };
   }, []);
 
@@ -346,9 +351,10 @@ export function useAgentBridge({
         uiSpec: latestRef.current.uiSpec,
         messageHistory: latestRef.current.messageHistory,
         toolSchema: latestRef.current.toolSchema,
+        plannerCpEnabled: latestRef.current.plannerCpEnabled,
       },
     });
-  }, [isJoined, uiSpec, messageHistory, toolSchema, sendEnvelope]);
+  }, [isJoined, uiSpec, messageHistory, toolSchema, plannerCpEnabled, sendEnvelope]);
 
   const sendUserMessageToAgent = useCallback(
     (text: string, stage: Stage) => {
