@@ -15,6 +15,8 @@ export const theaters = sqliteTable('theaters', {
   name: text('name').notNull(),
   location: text('location').notNull(),
   screenCount: integer('screen_count').notNull(),
+  distanceKm: real('distance_km').notNull(),
+  amenities: text('amenities').notNull(), // JSON string array
 });
 
 export const showings = sqliteTable('showings', {

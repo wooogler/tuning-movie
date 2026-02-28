@@ -37,6 +37,7 @@ import { StageRenderer } from '../renderer';
 import { useToolHandler, useAgentBridge } from '../hooks';
 import { agentTools, type ToolDefinition } from '../agent/tools';
 import type { Movie, Theater, Showing, TicketType, Booking } from '../types';
+import { getFixedCurrentDate } from '../utils/studyDate';
 
 interface StageContext {
   booking?: BookingContext;
@@ -62,6 +63,7 @@ const stageInteractionTools: Record<Stage, string[]> = {
 const DEFAULT_CHAT_WIDTH_PX = 768;
 const MIN_CHAT_WIDTH_PX = 360;
 const CHAT_WIDTH_VIEWPORT_PADDING_PX = 48;
+const guiAdaptationTools = ['filter', 'sort', 'highlight', 'augment', 'clearModification'] as const;
 
 function canUseNextTool(spec: UISpec): boolean {
   switch (spec.stage) {
@@ -84,21 +86,26 @@ function canUseNextTool(spec: UISpec): boolean {
   }
 }
 
-function buildToolSchemaForStage(spec: UISpec | null, fallbackStage: Stage): ToolDefinition[] {
+function buildToolSchemaForStage(
+  spec: UISpec | null,
+  fallbackStage: Stage,
+  guiAdaptationEnabled: boolean
+): ToolDefinition[] {
   if (!spec) {
     return agentTools.filter((tool) => tool.name === 'postMessage');
   }
 
   const stage = spec.stage ?? fallbackStage;
   const allowed = new Set<string>([
-    'filter',
-    'sort',
-    'highlight',
-    'augment',
-    'clearModification',
     ...(stageInteractionTools[stage] ?? ['postMessage']),
     'postMessage',
   ]);
+
+  if (guiAdaptationEnabled) {
+    for (const toolName of guiAdaptationTools) {
+      allowed.add(toolName);
+    }
+  }
 
   if (!spec.visibleItems.some((item) => !item.isDisabled)) {
     allowed.delete('select');
@@ -218,6 +225,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const [agentBridgeEnabled, setAgentBridgeEnabled] = useState(true);
   const [plannerCpMemoryLimit, setPlannerCpMemoryLimit] = useState(10);
   const [agentModel, setAgentModel] = useState<'openai' | 'gemini'>('openai');
+  const [guiAdaptationEnabled, setGuiAdaptationEnabled] = useState(true);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [carouselOffset, setCarouselOffset] = useState(0);
   const [carouselOpacity, setCarouselOpacity] = useState(1);
@@ -322,7 +330,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
             }
             const data = await api.getDates(bookingCtx.movie.id, bookingCtx.theater.id);
             setBackendData({ dates: data.dates });
-            const dateItems = createDateItems(new Date(), 14, data.dates);
+            const dateItems = createDateItems(getFixedCurrentDate(), 14, data.dates);
             const spec = withBookingContext(
               generateDateSpec(dateItems, bookingCtx.movie.id, bookingCtx.theater.id),
               bookingCtx
@@ -474,11 +482,23 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     api.getAgentModel().then((res) => setAgentModel(res.model)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    api.getGuiAdaptationConfig().then((res) => setGuiAdaptationEnabled(res.enabled)).catch(() => {});
+  }, []);
+
   const handleModelToggle = useCallback((model: 'openai' | 'gemini') => {
     setAgentModel(model);
     setModelPickerOpen(false);
     api.setAgentModel(model).catch(() => {});
   }, []);
+
+  const handleGuiAdaptationToggle = useCallback(() => {
+    const nextEnabled = !guiAdaptationEnabled;
+    setGuiAdaptationEnabled(nextEnabled);
+    api.setGuiAdaptationConfig(nextEnabled).catch(() => {
+      setGuiAdaptationEnabled(!nextEnabled);
+    });
+  }, [guiAdaptationEnabled]);
 
   useEffect(() => {
     const handleWindowResize = () => {
@@ -844,8 +864,8 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   }, [resetChat, movies, addSystemMessage, setUiSpec, loadStageData]);
 
   const agentToolSchema = useMemo(
-    () => buildToolSchemaForStage(activeSpec, currentStage),
-    [activeSpec, currentStage]
+    () => buildToolSchemaForStage(activeSpec, currentStage, guiAdaptationEnabled),
+    [activeSpec, currentStage, guiAdaptationEnabled]
   );
 
   const {
@@ -1034,6 +1054,17 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
               }`}
             >
               Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
+            </button>
+            <button
+              type="button"
+              onClick={handleGuiAdaptationToggle}
+              className={`px-3 py-1 text-xs rounded border ${
+                guiAdaptationEnabled
+                  ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
+                  : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
+              }`}
+            >
+              GUI Adaptation {guiAdaptationEnabled ? 'ON' : 'OFF'}
             </button>
             <label
               className={`flex items-center gap-2 px-3 py-1 text-xs rounded border ${

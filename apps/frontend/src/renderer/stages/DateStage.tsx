@@ -8,6 +8,7 @@ import { useState, useMemo } from 'react';
 import type { DateItem } from '../../spec';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
+import { getFixedCurrentDate } from '../../utils/studyDate';
 
 interface CalendarDay {
   date: string; // YYYY-MM-DD
@@ -27,7 +28,7 @@ function generateCalendarDays(
   highlightedIds?: string[]
 ): CalendarDay[] {
   const days: CalendarDay[] = [];
-  const today = new Date();
+  const today = getFixedCurrentDate();
   const todayStr = today.toISOString().split('T')[0];
 
   // First day of the month
@@ -106,10 +107,10 @@ export function DateStage({
 }: StageProps<DateItem>) {
   const canProceed = !!spec.state.selected;
 
-  // Current viewed month (initialized to today)
-  const today = new Date();
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  // Current viewed month (initialized to fixed study date)
+  const fixedCurrentDate = getFixedCurrentDate();
+  const [viewYear, setViewYear] = useState(fixedCurrentDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(fixedCurrentDate.getMonth());
 
   // Generate calendar days for current view
   const calendarDays = useMemo(

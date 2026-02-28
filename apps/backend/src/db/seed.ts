@@ -2,6 +2,7 @@ import '../env';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
+import { FIXED_CURRENT_DATE, getFixedCurrentDateUtc } from '../studyDate';
 
 const dbPath = process.env.DATABASE_URL || 'tuning-movie.db';
 const sqlite = new Database(dbPath);
@@ -25,7 +26,9 @@ function createTables() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       location TEXT NOT NULL,
-      screen_count INTEGER NOT NULL
+      screen_count INTEGER NOT NULL,
+      distance_km REAL NOT NULL,
+      amenities TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS showings (
@@ -77,6 +80,22 @@ function createTables() {
       quantity INTEGER NOT NULL
     );
   `);
+
+  const theaterColumnNames = new Set(
+    (
+      sqlite.prepare('PRAGMA table_info(theaters)').all() as Array<{
+        name: string;
+      }>
+    ).map((column) => column.name)
+  );
+
+  if (!theaterColumnNames.has('distance_km')) {
+    sqlite.exec('ALTER TABLE theaters ADD COLUMN distance_km REAL NOT NULL DEFAULT 0');
+  }
+
+  if (!theaterColumnNames.has('amenities')) {
+    sqlite.exec("ALTER TABLE theaters ADD COLUMN amenities TEXT NOT NULL DEFAULT '[]'");
+  }
 
   console.log('Tables created/verified');
 }
@@ -135,9 +154,46 @@ async function seed() {
 
   // Insert theaters
   const theatersData = [
-    { id: 't1', name: 'AMC Lincoln Square', location: 'New York, NY', screenCount: 12 },
-    { id: 't2', name: 'Regal LA Live', location: 'Los Angeles, CA', screenCount: 10 },
-    { id: 't3', name: 'Alamo Drafthouse', location: 'Austin, TX', screenCount: 15 },
+    {
+      id: 't1',
+      name: 'AMC Lincoln Square 13',
+      location: 'Upper West Side, New York, NY',
+      screenCount: 13,
+      distanceKm: 2.3,
+      amenities: JSON.stringify(['IMAX', 'Dolby Cinema', 'Recliner Seats']),
+    },
+    {
+      id: 't2',
+      name: 'AMC Empire 25',
+      location: 'Times Square, New York, NY',
+      screenCount: 25,
+      distanceKm: 4.1,
+      amenities: JSON.stringify(['IMAX', '4DX', 'Reserved Seating']),
+    },
+    {
+      id: 't3',
+      name: 'Regal Union Square',
+      location: 'Union Square, New York, NY',
+      screenCount: 14,
+      distanceKm: 1.7,
+      amenities: JSON.stringify(['RPX', 'Stadium Seating', 'Wheelchair Access']),
+    },
+    {
+      id: 't4',
+      name: 'Alamo Drafthouse Downtown Brooklyn',
+      location: 'Downtown Brooklyn, New York, NY',
+      screenCount: 9,
+      distanceKm: 6.0,
+      amenities: JSON.stringify(['In-Theater Dining', 'Luxury Recliners', 'No-Ads Policy']),
+    },
+    {
+      id: 't5',
+      name: 'Nitehawk Williamsburg',
+      location: 'Williamsburg, New York, NY',
+      screenCount: 7,
+      distanceKm: 5.4,
+      amenities: JSON.stringify(['In-Theater Dining', 'Indie Screenings', 'Cocktail Bar']),
+    },
   ];
 
   for (const theater of theatersData) {
@@ -158,7 +214,7 @@ async function seed() {
   console.log('Inserted ticket types');
 
   // Generate showings for next 14 days (updated to match frontend calendar range)
-  const today = new Date();
+  const fixedCurrentDate = getFixedCurrentDateUtc();
   const showingsData: Array<{
     id: string;
     movieId: string;
@@ -174,21 +230,23 @@ async function seed() {
 
   // Each theater shows different movies
   const theaterMovies: Record<string, string[]> = {
-    t1: ['m1', 'm2'], // AMC shows Dune and Oppenheimer
-    t2: ['m1', 'm3'], // Regal shows Dune and Holdovers
-    t3: ['m2', 'm3'], // Alamo shows Oppenheimer and Holdovers
+    t1: ['m1', 'm2'], // Lincoln Square
+    t2: ['m1', 'm2', 'm3'], // Empire 25
+    t3: ['m1', 'm3'], // Union Square
+    t4: ['m2', 'm3'], // Downtown Brooklyn
+    t5: ['m3'], // Williamsburg
   };
 
   const SHOWING_DAYS = 14;
-  const startDateStr = today.toISOString().split('T')[0];
-  const endDate = new Date(today);
-  endDate.setDate(endDate.getDate() + SHOWING_DAYS - 1);
+  const startDateStr = FIXED_CURRENT_DATE;
+  const endDate = new Date(fixedCurrentDate);
+  endDate.setUTCDate(endDate.getUTCDate() + SHOWING_DAYS - 1);
   const endDateStr = endDate.toISOString().split('T')[0];
   console.log(`Generating showings from ${startDateStr} to ${endDateStr} (${SHOWING_DAYS} days)`);
 
   for (let dayOffset = 0; dayOffset < SHOWING_DAYS; dayOffset++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() + dayOffset);
+    const date = new Date(fixedCurrentDate);
+    date.setUTCDate(date.getUTCDate() + dayOffset);
     const dateStr = date.toISOString().split('T')[0];
 
     for (const [theaterId, movieIds] of Object.entries(theaterMovies)) {

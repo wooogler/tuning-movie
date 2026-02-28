@@ -83,6 +83,8 @@ export interface TheaterItem extends DataItem {
   id: string;
   name: string;
   location: string;
+  distanceKm: number;
+  amenities: string[];
 }
 
 export function generateTheaterSpec(
@@ -93,6 +95,8 @@ export function generateTheaterSpec(
     id: t.id,
     name: t.name,
     location: t.location,
+    distanceKm: t.distanceKm,
+    amenities: t.amenities,
   }));
 
   return createSpec({

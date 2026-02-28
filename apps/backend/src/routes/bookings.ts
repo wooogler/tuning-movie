@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, bookings, bookingSeats, bookingTickets, seats, showings, ticketTypes } from '../db';
+import { getFixedCurrentDateUtc } from '../studyDate';
 
 interface BookingRequest {
   showingId: string;
@@ -99,7 +100,7 @@ export async function bookingRoutes(fastify: FastifyInstance) {
     }, 0);
 
     const bookingId = randomUUID();
-    const now = new Date().toISOString();
+    const now = getFixedCurrentDateUtc().toISOString();
 
     try {
       db.transaction((tx) => {

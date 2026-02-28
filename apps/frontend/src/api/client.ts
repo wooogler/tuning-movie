@@ -99,4 +99,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ model }),
     }),
+  getGuiAdaptationConfig: () => fetchApi<{ enabled: boolean }>('/agent/config/gui-adaptation'),
+  setGuiAdaptationConfig: (enabled: boolean) =>
+    fetchApi<{ enabled: boolean }>('/agent/config/gui-adaptation', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
 };

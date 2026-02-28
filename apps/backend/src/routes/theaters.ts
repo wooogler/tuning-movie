@@ -2,11 +2,32 @@ import { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { db, theaters, showings } from '../db';
 
+type TheaterRow = typeof theaters.$inferSelect;
+
+function parseAmenities(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string');
+    }
+  } catch {
+    // Ignore parse errors and return an empty list.
+  }
+  return [];
+}
+
+function toTheaterResponse(row: TheaterRow) {
+  return {
+    ...row,
+    amenities: parseAmenities(row.amenities),
+  };
+}
+
 export async function theaterRoutes(fastify: FastifyInstance) {
   // Get all theaters
   fastify.get('/theaters', async () => {
     const result = db.select().from(theaters).all();
-    return { theaters: result };
+    return { theaters: result.map(toTheaterResponse) };
   });
 
   // Get theaters by movie ID
@@ -28,7 +49,7 @@ export async function theaterRoutes(fastify: FastifyInstance) {
       .all()
       .filter((t) => theaterIds.includes(t.id));
 
-    return { theaters: availableTheaters };
+    return { theaters: availableTheaters.map(toTheaterResponse) };
   });
 
   // Get theater by ID
@@ -40,6 +61,6 @@ export async function theaterRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: 'Theater not found' });
     }
 
-    return { theater };
+    return { theater: toTheaterResponse(theater) };
   });
 }
