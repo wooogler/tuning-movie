@@ -15,13 +15,6 @@ import type { PerceivedContext, PlanDecision, PlannedAction, ToolSchemaItem } fr
 type Stage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'ticket' | 'confirm';
 const STAGE_ORDER: Stage[] = ['movie', 'theater', 'date', 'time', 'seat', 'ticket', 'confirm'];
 
-function containsEndIntent(text: string): boolean {
-  const normalized = text.toLowerCase();
-  const englishEndIntent = /\b(end|finish|quit|exit|stop)\b/u;
-  const koreanEndIntent = /(종료|끝내|끝낼|그만|마칠)/u;
-  return englishEndIntent.test(normalized) || koreanEndIntent.test(text);
-}
-
 function hasTool(toolSchema: ToolSchemaItem[], toolName: string): boolean {
   return toolSchema.some((tool) => tool.name === toolName);
 }
@@ -159,39 +152,6 @@ function buildPlannerHistory(
   return context.messageHistoryTail.slice();
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function isLikelyInternalId(id: string): boolean {
-  // Keep natural words untouched; mask technical ids like m1, time_2, seat-a12.
-  return /[0-9_-]/.test(id);
-}
-
-function sanitizeAssistantMessage(text: string, spec: UISpecLike): string | undefined {
-  let next = text.trim();
-  if (!next) return undefined;
-
-  const visibleItemIds = getEnabledVisibleItems(spec).map((item) => item.id);
-  for (const id of visibleItemIds) {
-    const trimmedId = id.trim();
-    if (!trimmedId || !isLikelyInternalId(trimmedId)) continue;
-    const escaped = escapeRegExp(trimmedId);
-    next = next.replace(new RegExp(`\\(\\s*${escaped}\\s*\\)`, 'gu'), '');
-    next = next.replace(new RegExp(`\\[\\s*${escaped}\\s*\\]`, 'gu'), '');
-    next = next.replace(new RegExp(`\\{\\s*${escaped}\\s*\\}`, 'gu'), '');
-    next = next.replace(new RegExp(`\\b${escaped}\\b`, 'gu'), '');
-  }
-
-  next = next
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s+([,.;!?])/g, '$1')
-    .replace(/,\s*,+/g, ', ')
-    .trim();
-
-  return next || undefined;
-}
-
 function validateLlmAction(
   context: PerceivedContext,
   spec: UISpecLike,
@@ -205,7 +165,7 @@ function validateLlmAction(
     };
   }
 ): PlanDecision | null {
-  const explainText = sanitizeAssistantMessage(decision.assistantMessage, spec);
+  const explainText = decision.assistantMessage.trim() || undefined;
   if (decision.action.type === 'none') {
     return {
       action: null,
@@ -217,8 +177,7 @@ function validateLlmAction(
   const toolName = decision.action.toolName;
 
   if (toolName === 'postMessage') {
-    const rawText = typeof decision.action.params.text === 'string' ? decision.action.params.text.trim() : '';
-    const text = sanitizeAssistantMessage(rawText, spec);
+    const text = typeof decision.action.params.text === 'string' ? decision.action.params.text.trim() : '';
     return {
       action: {
         type: 'agent.message',
@@ -262,30 +221,6 @@ export async function planNextAction(
 ): Promise<PlanDecision> {
   if (!context.sessionId) {
     return { action: null, source: 'rule', fallbackReason: 'NO_SESSION' };
-  }
-
-  if (context.lastUserMessage && containsEndIntent(context.lastUserMessage.text)) {
-    return {
-      action: {
-        type: 'session.end',
-        reason: 'User requested to end the session.',
-        payload: { reason: 'user-requested' },
-      },
-      explainText: 'I will end the session as requested.',
-      source: 'rule',
-      fallbackReason: 'USER_REQUESTED_END',
-    };
-  }
-
-  const recentFailures = memory.countRecentFailures(context.stage);
-  if (recentFailures >= 3) {
-    return {
-      action: null,
-      explainText:
-        'I am seeing repeated failures at this stage. Please provide more specific preferences and I will try again.',
-      source: 'rule',
-      fallbackReason: 'REPEATED_FAILURES_GUARD',
-    };
   }
 
   const stage = toStage(context.stage);
@@ -361,16 +296,6 @@ export async function planNextAction(
           : undefined,
         source: 'rule',
         fallbackReason: 'LLM_VALIDATION_REJECTED',
-      };
-    }
-
-    // Do not allow autonomous tool actions before the user gives any intent.
-    if (!hasUserRequest && validated.action?.type === 'tool.call') {
-      return {
-        action: null,
-        explainText: validated.explainText,
-        source: 'llm',
-        fallbackReason: 'NO_USER_REQUEST_TOOL_BLOCKED',
       };
     }
 
