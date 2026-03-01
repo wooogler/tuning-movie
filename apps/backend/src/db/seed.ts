@@ -109,17 +109,6 @@ function addDaysUtc(date: Date, days: number): Date {
   return result;
 }
 
-function getUpcomingWeekendDates(baseDateUtc: Date): { saturday: string; sunday: string } {
-  const weekday = baseDateUtc.getUTCDay();
-  const daysUntilSaturday = (6 - weekday + 7) % 7;
-  const saturday = addDaysUtc(baseDateUtc, daysUntilSaturday);
-  const sunday = addDaysUtc(saturday, 1);
-  return {
-    saturday: toIsoDate(saturday),
-    sunday: toIsoDate(sunday),
-  };
-}
-
 function makeShowingId(movieId: string, theaterId: string, date: string, time: string): string {
   return `s_${movieId}_${theaterId}_${date.replace(/-/g, '')}_${time.replace(':', '')}`;
 }
@@ -139,6 +128,7 @@ type TheaterId = 'ta' | 'tb' | 'tc' | 'td';
 type SeatStatus = 'available' | 'occupied';
 
 interface DailySchedule {
+  weekday: string[];
   saturday: string[];
   sunday: string[];
 }
@@ -161,88 +151,118 @@ const MOVIE_SCREEN_NUMBER: Record<MovieId, number> = {
   m8: 8,
 };
 
-const WEEKEND_SCHEDULE: Record<MovieId, Record<TheaterId, DailySchedule>> = {
+const SHOWTIME_SCHEDULE: Record<MovieId, Record<TheaterId, DailySchedule>> = {
   m1: {
-    ta: { saturday: ['14:00', '17:00', '19:30', '21:00'], sunday: ['14:00', '19:00'] },
-    tb: { saturday: ['15:00', '19:00'], sunday: ['18:30'] },
-    tc: { saturday: [], sunday: [] },
-    td: { saturday: ['17:00'], sunday: [] },
+    ta: { weekday: ['17:00', '20:00'], saturday: ['14:00', '17:00', '19:30', '21:00'], sunday: ['14:00', '19:00'] },
+    tb: { weekday: ['18:30'], saturday: ['15:00', '19:00'], sunday: ['18:30'] },
+    tc: { weekday: [], saturday: [], sunday: [] },
+    td: { weekday: ['18:00'], saturday: ['17:00'], sunday: [] },
   },
   m2: {
-    ta: { saturday: ['19:00'], sunday: [] },
-    tb: { saturday: ['15:00', '18:30'], sunday: ['19:00'] },
-    tc: { saturday: ['19:00', '21:00'], sunday: ['18:00'] },
-    td: { saturday: [], sunday: [] },
+    ta: { weekday: ['19:00'], saturday: ['19:00'], sunday: [] },
+    tb: { weekday: ['17:30'], saturday: ['15:00', '18:30'], sunday: ['19:00'] },
+    tc: { weekday: ['19:30'], saturday: ['19:00', '21:00'], sunday: ['18:00'] },
+    td: { weekday: [], saturday: [], sunday: [] },
   },
   m3: {
-    ta: { saturday: ['15:00', '18:30', '21:00'], sunday: ['14:00', '18:00', '20:30'] },
-    tb: { saturday: ['14:00', '19:00'], sunday: ['15:00', '18:30'] },
-    tc: { saturday: ['18:00', '20:30'], sunday: ['14:00', '19:00', '21:00'] },
-    td: { saturday: ['16:00', '19:00'], sunday: ['15:00', '18:00'] },
+    ta: { weekday: ['18:30', '20:30'], saturday: ['15:00', '18:30', '21:00'], sunday: ['14:00', '18:00', '20:30'] },
+    tb: { weekday: ['18:00'], saturday: ['14:00', '19:00'], sunday: ['15:00', '18:30'] },
+    tc: { weekday: ['19:00'], saturday: ['18:00', '20:30'], sunday: ['14:00', '19:00', '21:00'] },
+    td: { weekday: ['18:00'], saturday: ['16:00', '19:00'], sunday: ['15:00', '18:00'] },
   },
   m4: {
-    ta: { saturday: ['14:00', '17:30', '19:30', '21:00'], sunday: ['14:00', '19:30'] },
-    tb: { saturday: ['15:00', '19:30'], sunday: ['19:00'] },
-    tc: { saturday: [], sunday: [] },
-    td: { saturday: ['18:00'], sunday: [] },
+    ta: { weekday: ['17:30', '20:00'], saturday: ['14:00', '17:30', '19:30', '21:00'], sunday: ['14:00', '19:30'] },
+    tb: { weekday: ['19:00'], saturday: ['15:00', '19:30'], sunday: ['19:00'] },
+    tc: { weekday: [], saturday: [], sunday: [] },
+    td: { weekday: ['19:00'], saturday: ['18:00'], sunday: [] },
   },
   m5: {
-    ta: { saturday: ['20:00'], sunday: [] },
-    tb: { saturday: ['16:00', '19:00'], sunday: ['18:30'] },
-    tc: { saturday: ['19:30', '21:00'], sunday: ['19:00'] },
-    td: { saturday: [], sunday: [] },
+    ta: { weekday: ['20:00'], saturday: ['20:00'], sunday: [] },
+    tb: { weekday: ['18:30'], saturday: ['16:00', '19:00'], sunday: ['18:30'] },
+    tc: { weekday: ['20:00'], saturday: ['19:30', '21:00'], sunday: ['19:00'] },
+    td: { weekday: [], saturday: [], sunday: [] },
   },
   m6: {
-    ta: { saturday: ['15:00', '18:00', '20:30'], sunday: ['14:00', '18:30', '21:00'] },
-    tb: { saturday: ['14:00', '18:30'], sunday: ['15:00', '19:00'] },
-    tc: { saturday: ['18:00', '20:00'], sunday: ['14:00', '18:30', '20:30'] },
-    td: { saturday: ['15:00', '19:00'], sunday: ['14:00', '18:00'] },
+    ta: { weekday: ['18:00', '20:30'], saturday: ['15:00', '18:00', '20:30'], sunday: ['14:00', '18:30', '21:00'] },
+    tb: { weekday: ['18:30'], saturday: ['14:00', '18:30'], sunday: ['15:00', '19:00'] },
+    tc: { weekday: ['19:00'], saturday: ['18:00', '20:00'], sunday: ['14:00', '18:30', '20:30'] },
+    td: { weekday: ['18:30'], saturday: ['15:00', '19:00'], sunday: ['14:00', '18:00'] },
   },
   m7: {
-    ta: { saturday: ['16:00', '19:00'], sunday: ['15:00', '20:00'] },
-    tb: { saturday: ['18:00', '20:30'], sunday: ['19:00'] },
-    tc: { saturday: [], sunday: ['17:00'] },
-    td: { saturday: [], sunday: [] },
+    ta: { weekday: ['19:00'], saturday: ['16:00', '19:00'], sunday: ['15:00', '20:00'] },
+    tb: { weekday: ['19:30'], saturday: ['18:00', '20:30'], sunday: ['19:00'] },
+    tc: { weekday: ['18:30'], saturday: [], sunday: ['17:00'] },
+    td: { weekday: [], saturday: [], sunday: [] },
   },
   m8: {
-    ta: { saturday: ['14:30', '18:00'], sunday: ['13:00', '17:00'] },
-    tb: { saturday: ['15:00', '19:30'], sunday: ['14:00', '18:00'] },
-    tc: { saturday: ['17:00'], sunday: ['15:00', '19:00'] },
-    td: { saturday: [], sunday: ['16:00'] },
+    ta: { weekday: ['18:00'], saturday: ['14:30', '18:00'], sunday: ['13:00', '17:00'] },
+    tb: { weekday: ['18:30'], saturday: ['15:00', '19:30'], sunday: ['14:00', '18:00'] },
+    tc: { weekday: ['19:00'], saturday: ['17:00'], sunday: ['15:00', '19:00'] },
+    td: { weekday: ['18:00'], saturday: [], sunday: ['16:00'] },
   },
 };
 
-function buildShowings(saturday: string, sunday: string): ShowingSeed[] {
+const AVAILABILITY_DAYS: Record<MovieId, Record<TheaterId, number>> = {
+  m1: { ta: 14, tb: 12, tc: 0, td: 9 },
+  // Comedy short-run title: ends on 2026-03-13 (3 days from 2026-03-11)
+  m2: { ta: 3, tb: 3, tc: 3, td: 0 },
+  m3: { ta: 8, tb: 7, tc: 10, td: 8 },
+  m4: { ta: 14, tb: 12, tc: 0, td: 9 },
+  // Action short-run title: ends on 2026-03-13 (3 days from 2026-03-11)
+  m5: { ta: 3, tb: 3, tc: 3, td: 0 },
+  m6: { ta: 11, tb: 10, tc: 12, td: 9 },
+  m7: { ta: 10, tb: 9, tc: 8, td: 0 },
+  m8: { ta: 13, tb: 11, tc: 10, td: 8 },
+};
+
+function getDateWeekdayUtc(date: string): number {
+  return new Date(`${date}T00:00:00.000Z`).getUTCDay();
+}
+
+function getShowtimesForDate(schedule: DailySchedule, date: string): string[] {
+  const weekday = getDateWeekdayUtc(date);
+  if (weekday === 6) return schedule.saturday;
+  if (weekday === 0) return schedule.sunday;
+  return schedule.weekday;
+}
+
+function maxAvailabilityDays(): number {
+  let maxDays = 0;
+  for (const byTheater of Object.values(AVAILABILITY_DAYS)) {
+    for (const days of Object.values(byTheater)) {
+      if (days > maxDays) maxDays = days;
+    }
+  }
+  return maxDays;
+}
+
+function buildShowings(baseDateUtc: Date): ShowingSeed[] {
   const showings: ShowingSeed[] = [];
 
-  for (const movieId of Object.keys(WEEKEND_SCHEDULE) as MovieId[]) {
-    const byTheater = WEEKEND_SCHEDULE[movieId];
+  for (const movieId of Object.keys(SHOWTIME_SCHEDULE) as MovieId[]) {
+    const byTheater = SHOWTIME_SCHEDULE[movieId];
 
     for (const theaterId of Object.keys(byTheater) as TheaterId[]) {
       const schedule = byTheater[theaterId];
+      const availabilityDays = AVAILABILITY_DAYS[movieId][theaterId] ?? 0;
+      if (availabilityDays <= 0) continue;
 
-      for (const time of schedule.saturday) {
-        showings.push({
-          id: makeShowingId(movieId, theaterId, saturday, time),
-          movieId,
-          theaterId,
-          screenNumber: MOVIE_SCREEN_NUMBER[movieId],
-          date: saturday,
-          time,
-          totalSeats: 48,
-        });
-      }
+      for (let dayOffset = 0; dayOffset < availabilityDays; dayOffset++) {
+        const date = toIsoDate(addDaysUtc(baseDateUtc, dayOffset));
+        const showtimes = getShowtimesForDate(schedule, date);
+        if (showtimes.length === 0) continue;
 
-      for (const time of schedule.sunday) {
-        showings.push({
-          id: makeShowingId(movieId, theaterId, sunday, time),
-          movieId,
-          theaterId,
-          screenNumber: MOVIE_SCREEN_NUMBER[movieId],
-          date: sunday,
-          time,
-          totalSeats: 48,
-        });
+        for (const time of showtimes) {
+          showings.push({
+            id: makeShowingId(movieId, theaterId, date, time),
+            movieId,
+            theaterId,
+            screenNumber: MOVIE_SCREEN_NUMBER[movieId],
+            date,
+            time,
+            totalSeats: 48,
+          });
+        }
       }
     }
   }
@@ -254,23 +274,23 @@ function isUnpopularMovie(movieId: string): boolean {
   return movieId === 'm3' || movieId === 'm6';
 }
 
-function isTheaterASaturdayPrime(showing: ShowingSeed, saturday: string): boolean {
-  if (showing.theaterId !== 'ta' || showing.date !== saturday || showing.time !== '19:30') {
+function isTheaterASaturdayPrime(showing: ShowingSeed): boolean {
+  if (showing.theaterId !== 'ta' || getDateWeekdayUtc(showing.date) !== 6 || showing.time !== '19:30') {
     return false;
   }
   return showing.movieId === 'm1' || showing.movieId === 'm4';
 }
 
-function isTheaterBSaturdayEveningConflict(showing: ShowingSeed, saturday: string): boolean {
-  if (showing.theaterId !== 'tb' || showing.date !== saturday) return false;
+function isTheaterBSaturdayEveningConflict(showing: ShowingSeed): boolean {
+  if (showing.theaterId !== 'tb' || getDateWeekdayUtc(showing.date) !== 6) return false;
   return (
     (showing.movieId === 'm1' && showing.time === '19:00') ||
     (showing.movieId === 'm4' && showing.time === '19:30')
   );
 }
 
-function getPriceProfile(showing: ShowingSeed, saturday: string): PriceProfile {
-  if (isTheaterASaturdayPrime(showing, saturday)) {
+function getPriceProfile(showing: ShowingSeed): PriceProfile {
+  if (isTheaterASaturdayPrime(showing)) {
     return { front: 15, middle: 17, back: 18, backType: 'premium' };
   }
 
@@ -295,8 +315,8 @@ function getPriceProfile(showing: ShowingSeed, saturday: string): PriceProfile {
   return { front: 8, middle: 10, back: 10, backType: 'standard' };
 }
 
-function getSeatStatus(showing: ShowingSeed, row: string, number: number, saturday: string): SeatStatus {
-  if (isTheaterASaturdayPrime(showing, saturday)) {
+function getSeatStatus(showing: ShowingSeed, row: string, number: number): SeatStatus {
+  if (isTheaterASaturdayPrime(showing)) {
     if (row === 'A' || row === 'B') return 'available';
     if (row === 'C') return [4, 5].includes(number) ? 'available' : 'occupied';
     if (row === 'D') return [4, 5].includes(number) ? 'available' : 'occupied';
@@ -304,7 +324,7 @@ function getSeatStatus(showing: ShowingSeed, row: string, number: number, saturd
     return 'occupied';
   }
 
-  if (isTheaterBSaturdayEveningConflict(showing, saturday)) {
+  if (isTheaterBSaturdayEveningConflict(showing)) {
     if (row === 'A' || row === 'B' || row === 'C' || row === 'D') return 'available';
     if (row === 'E') return [4, 5].includes(number) ? 'available' : 'occupied';
     return 'occupied';
@@ -323,10 +343,9 @@ function getSeatStatus(showing: ShowingSeed, row: string, number: number, saturd
 function seatProfileForShowing(
   showing: ShowingSeed,
   row: string,
-  number: number,
-  saturday: string
+  number: number
 ): { type: 'standard' | 'premium'; price: number; status: SeatStatus } {
-  const priceProfile = getPriceProfile(showing, saturday);
+  const priceProfile = getPriceProfile(showing);
   const type: 'standard' | 'premium' =
     row === 'E' || row === 'F' ? priceProfile.backType : 'standard';
   const price =
@@ -339,7 +358,7 @@ function seatProfileForShowing(
   return {
     type,
     price,
-    status: getSeatStatus(showing, row, number, saturday),
+    status: getSeatStatus(showing, row, number),
   };
 }
 
@@ -358,75 +377,75 @@ async function seed() {
   const moviesData = [
     {
       id: 'm1',
-      title: 'The Hangover',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/uluhlXubGu1VxU63X9VHCLWDAYP.jpg',
+      title: 'Midnight Bachelors',
+      posterUrl: 'https://placehold.co/300x450?text=Midnight+Bachelors',
       genre: JSON.stringify(['Comedy']),
       duration: 100,
       rating: '4.5',
-      releaseDate: '2009-06-05',
+      releaseDate: '2024-06-14',
     },
     {
       id: 'm2',
-      title: 'Superbad',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/ek8e8txUyUwd2BNqj6lFEerJfbq.jpg',
+      title: 'Hall Pass High',
+      posterUrl: 'https://placehold.co/300x450?text=Hall+Pass+High',
       genre: JSON.stringify(['Comedy']),
       duration: 113,
       rating: '4.1',
-      releaseDate: '2007-08-17',
+      releaseDate: '2025-02-21',
     },
     {
       id: 'm3',
-      title: 'The Intern',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/sf6j1SbgDf2k3mS9t2qfJvM6v0x.jpg',
+      title: 'Desk for Two',
+      posterUrl: 'https://placehold.co/300x450?text=Desk+for+Two',
       genre: JSON.stringify(['Comedy', 'Drama']),
       duration: 121,
       rating: '3.8',
-      releaseDate: '2015-09-25',
+      releaseDate: '2025-08-08',
     },
     {
       id: 'm4',
-      title: 'The Dark Knight',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
+      title: 'Shadow Sentinel',
+      posterUrl: 'https://placehold.co/300x450?text=Shadow+Sentinel',
       genre: JSON.stringify(['Action']),
       duration: 152,
       rating: '4.7',
-      releaseDate: '2008-07-18',
+      releaseDate: '2024-11-22',
     },
     {
       id: 'm5',
-      title: 'John Wick 4',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/vZloFAK7NmvMGKE7VkF5UHaz0I.jpg',
+      title: 'Black Ledger: Retribution',
+      posterUrl: 'https://placehold.co/300x450?text=Black+Ledger+Retribution',
       genre: JSON.stringify(['Action']),
       duration: 169,
       rating: '4.3',
-      releaseDate: '2023-03-24',
+      releaseDate: '2025-01-17',
     },
     {
       id: 'm6',
-      title: 'Top Gun: Maverick',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/62HCnUTziyWcpDaBO2i1DX17ljH.jpg',
+      title: 'Skyline Vortex',
+      posterUrl: 'https://placehold.co/300x450?text=Skyline+Vortex',
       genre: JSON.stringify(['Action', 'Drama']),
       duration: 131,
       rating: '3.9',
-      releaseDate: '2022-05-27',
+      releaseDate: '2024-09-13',
     },
     {
       id: 'm7',
-      title: 'Gone Girl',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/ts996lKsxvjkO2yiYG0ht4qAicO.jpg',
+      title: 'Vanishing Point',
+      posterUrl: 'https://placehold.co/300x450?text=Vanishing+Point',
       genre: JSON.stringify(['Thriller']),
       duration: 149,
       rating: '4.4',
-      releaseDate: '2014-10-03',
+      releaseDate: '2025-10-03',
     },
     {
       id: 'm8',
-      title: 'La La Land',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg',
+      title: 'City of Starlight',
+      posterUrl: 'https://placehold.co/300x450?text=City+of+Starlight',
       genre: JSON.stringify(['Romance']),
       duration: 128,
       rating: '4.2',
-      releaseDate: '2016-12-09',
+      releaseDate: '2025-12-12',
     },
   ];
 
@@ -475,10 +494,15 @@ async function seed() {
   }
   console.log('Inserted theaters');
 
-  const { saturday, sunday } = getUpcomingWeekendDates(getFixedCurrentDateUtc());
-  const showingsData = buildShowings(saturday, sunday);
+  const fixedDate = getFixedCurrentDateUtc();
+  const startDate = toIsoDate(fixedDate);
+  const maxDays = maxAvailabilityDays();
+  const endDate = toIsoDate(addDaysUtc(fixedDate, Math.max(0, maxDays - 1)));
+  const showingsData = buildShowings(fixedDate);
 
-  console.log(`Generating study showings for weekend: ${saturday} (Sat), ${sunday} (Sun)`);
+  console.log(
+    `Generating study showings from ${startDate} to ${endDate} (movie/theater-specific availability)`
+  );
 
   const insertShowing = sqlite.prepare(
     'INSERT INTO showings (id, movie_id, theater_id, screen_number, date, time, total_seats) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -513,7 +537,7 @@ async function seed() {
     for (const showing of showingsData) {
       for (const row of rows) {
         for (let number = 1; number <= seatsPerRow; number++) {
-          const profile = seatProfileForShowing(showing, row, number, saturday);
+          const profile = seatProfileForShowing(showing, row, number);
 
           insertSeat.run(
             `${showing.id}-${row}${number}`,
