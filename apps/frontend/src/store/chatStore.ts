@@ -87,7 +87,6 @@ export const STAGE_ORDER: Stage[] = [
   'date',
   'time',
   'seat',
-  'ticket',
   'confirm',
 ];
 

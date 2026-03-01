@@ -14,7 +14,6 @@ export default defineConfig({
       '/theaters': 'http://localhost:3000',
       '/showings': 'http://localhost:3000',
       '/seats': 'http://localhost:3000',
-      '/ticket-types': 'http://localhost:3000',
       '/bookings': 'http://localhost:3000',
       '/agent/config': 'http://localhost:3000',
       '/agent/ws': {

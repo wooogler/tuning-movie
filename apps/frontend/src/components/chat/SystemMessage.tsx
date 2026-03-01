@@ -16,8 +16,6 @@ function getToolActionLabel(toolName: string): string {
       return 'is updating labels';
     case 'clearModification':
       return 'is clearing modifications';
-    case 'setQuantity':
-      return 'is setting quantities';
     case 'next':
       return 'is moving to the next step';
     case 'prev':
@@ -33,7 +31,6 @@ interface SystemMessageProps {
   linkedAssistantText?: string;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
-  onQuantityChange?: (typeId: string, quantity: number) => void;
   onNext?: () => void;
   onBack?: () => void;
   onConfirm?: () => void;
@@ -47,7 +44,6 @@ export function SystemMessage({
   linkedAssistantText,
   onSelect,
   onToggle,
-  onQuantityChange,
   onNext,
   onBack,
   onConfirm,
@@ -82,7 +78,6 @@ export function SystemMessage({
           spec={spec}
           onSelect={isActive && onSelect ? onSelect : () => {}}
           onToggle={isActive && onToggle ? onToggle : () => {}}
-          onQuantityChange={isActive && onQuantityChange ? onQuantityChange : () => {}}
           onNext={isActive && onNext ? onNext : () => {}}
           onBack={isActive && onBack ? onBack : undefined}
           onConfirm={isActive && onConfirm ? onConfirm : () => {}}

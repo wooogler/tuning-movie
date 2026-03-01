@@ -10,7 +10,6 @@ interface MessageListProps {
   activeSpec: UISpec | null;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
-  onQuantityChange?: (typeId: string, quantity: number) => void;
   onNext?: () => void;
   onBack?: () => void;
   onConfirm?: () => void;
@@ -24,7 +23,6 @@ export function MessageList({
   activeSpec,
   onSelect,
   onToggle,
-  onQuantityChange,
   onNext,
   onBack,
   onConfirm,
@@ -90,7 +88,6 @@ export function MessageList({
                 activeSpec={isActive ? activeSpec : null}
                 onSelect={onSelect}
                 onToggle={onToggle}
-                onQuantityChange={onQuantityChange}
                 onNext={onNext}
                 onBack={onBack}
                 onConfirm={onConfirm}

@@ -5,15 +5,13 @@ import {
   getEnabledVisibleItems,
   getSelectedId,
   getSelectedListIds,
-  getTicketMaxTotal,
-  getTicketQuantities,
   toUISpecLike,
   type UISpecLike,
 } from './uiModel';
 import type { PerceivedContext, PlanDecision, PlannedAction, ToolSchemaItem } from '../types';
 
-type Stage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'ticket' | 'confirm';
-const STAGE_ORDER: Stage[] = ['movie', 'theater', 'date', 'time', 'seat', 'ticket', 'confirm'];
+type Stage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'confirm';
+const STAGE_ORDER: Stage[] = ['movie', 'theater', 'date', 'time', 'seat', 'confirm'];
 
 function hasTool(toolSchema: ToolSchemaItem[], toolName: string): boolean {
   return toolSchema.some((tool) => tool.name === toolName);
@@ -31,7 +29,6 @@ function toStage(raw: string | null): Stage | null {
     case 'date':
     case 'time':
     case 'seat':
-    case 'ticket':
     case 'confirm':
       return raw;
     default:
@@ -74,8 +71,6 @@ function stageGoal(stage: Stage): string {
       return 'Pick one showtime.';
     case 'seat':
       return 'Select one or more seats.';
-    case 'ticket':
-      return 'Set ticket quantities to match selected seat count.';
     case 'confirm':
       return 'Submit confirmation to finalize booking.';
     default:
@@ -104,9 +99,6 @@ function buildWorkflowContext(
 ): PlannerWorkflow {
   const selectedId = getSelectedId(spec);
   const selectedListCount = getSelectedListIds(spec).length;
-  const quantities = getTicketQuantities(spec);
-  const ticketTotal = quantities.reduce((sum, quantity) => sum + quantity.count, 0);
-  const ticketMaxTotal = getTicketMaxTotal(spec);
   const canNext = hasTool(plannerTools, 'next');
   const { previousStage, nextStage } = stageTransition(stage);
 
@@ -118,8 +110,6 @@ function buildWorkflowContext(
 
   if (stage === 'seat') {
     proceedRule = `Call next only if selectedListCount > 0 (current: ${selectedListCount}).`;
-  } else if (stage === 'ticket') {
-    proceedRule = `Call next only when ticketTotal equals ticketMaxTotal and ticketMaxTotal > 0 (current: ${ticketTotal}/${ticketMaxTotal}).`;
   } else if (stage === 'confirm') {
     const bookingConfirmed = containsBookingConfirmed(context.messageHistoryTail);
     proceedRule = bookingConfirmed
@@ -207,12 +197,6 @@ function validateLlmAction(
     if (!itemId) return null;
     const selectable = new Set(getEnabledVisibleItems(spec).map((item) => item.id));
     if (!selectable.has(itemId)) return null;
-  }
-
-  if (toolName === 'setQuantity') {
-    const typeId = typeof params.typeId === 'string' ? params.typeId : '';
-    const quantity = params.quantity;
-    if (!typeId || !Number.isInteger(quantity) || Number(quantity) < 0) return null;
   }
 
   return {

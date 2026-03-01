@@ -95,11 +95,11 @@ This runtime follows:
 - Connects to relay and starts a session automatically.
 - Requests snapshot and keeps planning on `snapshot.state`, `state.updated`, and `user.message`.
 - Runs with strict turn policy:
-  - one user message -> one actionable tool execution (`select`, `next`, `setQuantity`, etc.)
+  - one user message -> one actionable tool execution (`select`, `next`, etc.)
   - `postMessage` can run multiple times to explain what the agent is doing
   - only one tool call is in flight at any time
 - LLM-first planning for tool choice:
   - chooses one next tool from current `toolSchema` based on user intent and GUI state
   - prioritizes GUI adaptation tools (`filter/sort/highlight/augment/postMessage`) first to reconfirm intent
-  - GUI execution tools (`select/setQuantity/next/prev`) require explicit user confirmation
+  - GUI execution tools (`select/next/prev`) require explicit user confirmation
 - Deterministic fallback is used only when LLM is unavailable or planner output fails validation.

@@ -20,15 +20,12 @@ import {
   generateDateSpec,
   generateTimeSpec,
   generateSeatSpec,
-  generateTicketSpec,
   generateConfirmSpec,
   createDateItems,
   selectItem,
   toggleItem,
-  setQuantity,
   type ConfirmMeta,
   type BookingContext,
-  type BookingTicketSelection,
   type UISpec,
   type Stage,
 } from '../spec';
@@ -36,7 +33,7 @@ import { MessageList, ChatInput } from '../components/chat';
 import { StageRenderer } from '../renderer';
 import { useToolHandler, useAgentBridge } from '../hooks';
 import { agentTools, type ToolDefinition } from '../agent/tools';
-import type { Movie, Theater, Showing, TicketType, Booking } from '../types';
+import type { Movie, Theater, Showing, Booking } from '../types';
 import { getFixedCurrentDate } from '../utils/studyDate';
 
 interface StageContext {
@@ -57,7 +54,6 @@ const stageInteractionTools: Record<Stage, string[]> = {
   date: ['select', 'prev'],
   time: ['select', 'prev'],
   seat: ['select', 'prev'],
-  ticket: ['setQuantity', 'prev'],
   confirm: ['prev'],
 };
 const DEFAULT_CHAT_WIDTH_PX = 768;
@@ -74,11 +70,6 @@ function canUseNextTool(spec: UISpec): boolean {
       return Boolean(spec.state.selected?.id);
     case 'seat':
       return (spec.state.selectedList?.length ?? 0) > 0;
-    case 'ticket': {
-      const maxTotal = typeof spec.meta?.maxTotal === 'number' ? spec.meta.maxTotal : 0;
-      const currentTotal = (spec.state.quantities ?? []).reduce((sum, quantity) => sum + quantity.count, 0);
-      return maxTotal > 0 && currentTotal === maxTotal;
-    }
     case 'confirm':
       return true;
     default:
@@ -158,15 +149,6 @@ function projectBookingForStage(stage: Stage, booking: BookingContext): BookingC
         date: booking.date,
         showing: booking.showing,
       };
-    case 'ticket':
-      return {
-        movie: booking.movie,
-        theater: booking.theater,
-        date: booking.date,
-        showing: booking.showing,
-        selectedSeats: booking.selectedSeats,
-        tickets: booking.tickets,
-      };
     case 'confirm':
       return {
         movie: booking.movie,
@@ -174,30 +156,10 @@ function projectBookingForStage(stage: Stage, booking: BookingContext): BookingC
         date: booking.date,
         showing: booking.showing,
         selectedSeats: booking.selectedSeats,
-        tickets: booking.tickets,
       };
     default:
       return {};
   }
-}
-
-function buildTicketSelections(
-  quantities: NonNullable<UISpec['state']['quantities']>,
-  ticketTypes: TicketType[]
-): BookingTicketSelection[] {
-  return quantities
-    .filter((q) => q.count > 0)
-    .map((q) => {
-      const ticketType = ticketTypes.find((t) => t.id === q.item.id);
-      if (!ticketType) return null;
-      return {
-        ticketTypeId: ticketType.id,
-        name: ticketType.name,
-        price: ticketType.price,
-        quantity: q.count,
-      };
-    })
-    .filter((ticket): ticket is BookingTicketSelection => ticket !== null);
 }
 
 export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
@@ -216,7 +178,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [theaters, setTheaters] = useState<Theater[]>([]);
   const [showings, setShowings] = useState<Showing[]>([]);
-  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -393,32 +354,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
             break;
           }
 
-          case 'ticket': {
-            const selectedSeats = bookingCtx.selectedSeats ?? [];
-            if (selectedSeats.length === 0) {
-              setError('No seats selected');
-              return;
-            }
-
-            const data = await api.getTicketTypes();
-            setTicketTypes(data.ticketTypes);
-            setBackendData({ ticketTypes: data.ticketTypes });
-
-            let spec = withBookingContext(
-              generateTicketSpec(data.ticketTypes, selectedSeats.map((s) => s.id)),
-              bookingCtx
-            );
-
-            for (const ticket of bookingCtx.tickets ?? []) {
-              spec = setQuantity(spec, ticket.ticketTypeId, ticket.quantity);
-            }
-
-            spec = withBookingContext(spec, bookingCtx);
-            addSystemMessage('ticket', spec);
-            setUiSpec(spec);
-            break;
-          }
-
           case 'confirm': {
             if (
               !bookingCtx.movie ||
@@ -431,16 +366,15 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
             }
 
             const selectedSeats = bookingCtx.selectedSeats ?? [];
-            const selectedTickets = bookingCtx.tickets ?? [];
-            if (selectedSeats.length === 0 || selectedTickets.length === 0) {
-              setError('Missing seats or tickets');
+            if (selectedSeats.length === 0) {
+              setError('Missing seats');
               return;
             }
-
-            const totalPrice = selectedTickets.reduce(
-              (sum, ticket) => sum + ticket.price * ticket.quantity,
-              0
-            );
+            const seatData = await api.getSeats(bookingCtx.showing.id);
+            const selectedSeatSet = new Set(selectedSeats.map((seat) => seat.id));
+            const totalPrice = seatData.seats
+              .filter((seat) => selectedSeatSet.has(seat.id))
+              .reduce((sum, seat) => sum + seat.price, 0);
 
             const meta: ConfirmMeta = {
               movie: bookingCtx.movie,
@@ -448,11 +382,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
               date: bookingCtx.date,
               time: bookingCtx.showing.time,
               seats: selectedSeats.map((seat) => seat.value),
-              tickets: selectedTickets.map((ticket) => ({
-                type: ticket.name,
-                quantity: ticket.quantity,
-                price: ticket.price,
-              })),
               totalPrice,
             };
 
@@ -556,33 +485,13 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     [activeSpec, updateActiveSpec, setUiSpec]
   );
 
-  const handleQuantityChange = useCallback(
-    (typeId: string, quantity: number) => {
-      if (!activeSpec) return;
-
-      let newSpec = setQuantity(activeSpec, typeId, quantity);
-      const bookingCtx = getBookingContext(newSpec);
-      const newTickets = buildTicketSelections(newSpec.state.quantities ?? [], ticketTypes);
-
-      newSpec = withBookingContext(newSpec, {
-        ...bookingCtx,
-        tickets: newTickets,
-      });
-
-      updateActiveSpec(newSpec);
-      setUiSpec(newSpec);
-    },
-    [activeSpec, ticketTypes, updateActiveSpec, setUiSpec]
-  );
-
   const handleConfirm = useCallback(async (context?: ToolApplyContext) => {
     if (!activeSpec) return;
 
     const bookingCtx = getBookingContext(activeSpec);
     const selectedSeats = bookingCtx.selectedSeats ?? [];
-    const selectedTickets = bookingCtx.tickets ?? [];
 
-    if (!bookingCtx.showing || selectedSeats.length === 0 || selectedTickets.length === 0) {
+    if (!bookingCtx.showing || selectedSeats.length === 0) {
       setError('Missing booking information');
       return;
     }
@@ -594,10 +503,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
       const result = await api.createBooking({
         showingId: bookingCtx.showing.id,
         seats: selectedSeats.map((seat) => seat.id),
-        tickets: selectedTickets.map((ticket) => ({
-          ticketTypeId: ticket.ticketTypeId,
-          quantity: ticket.quantity,
-        })),
         customerName: 'Guest',
         customerEmail: 'guest@example.com',
       });
@@ -632,7 +537,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
         nextBooking = {
           movie: { id: selectedMovie.id, title: selectedMovie.title },
           selectedSeats: [],
-          tickets: [],
         };
         break;
       }
@@ -651,7 +555,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
           date: undefined,
           showing: undefined,
           selectedSeats: [],
-          tickets: [],
         };
         break;
       }
@@ -666,7 +569,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
           date: selectedDate,
           showing: undefined,
           selectedSeats: [],
-          tickets: [],
         };
         break;
       }
@@ -686,7 +588,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
             time: selectedShowing.time,
           },
           selectedSeats: [],
-          tickets: [],
         };
         break;
       }
@@ -699,29 +600,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
         nextBooking = {
           ...currentBooking,
           selectedSeats,
-          tickets: [],
-        };
-        break;
-      }
-
-      case 'ticket': {
-        const selectedSeats = currentBooking.selectedSeats ?? [];
-        const selectedTickets = currentBooking.tickets ?? [];
-
-        const totalTickets = selectedTickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
-        if (selectedSeats.length === 0) {
-          setError('No seats selected');
-          return;
-        }
-        if (totalTickets !== selectedSeats.length) {
-          setError('Ticket count must match selected seat count');
-          return;
-        }
-
-        selectionLabel = `${totalTickets} ticket(s)`;
-        nextBooking = {
-          ...currentBooking,
-          tickets: selectedTickets,
         };
         break;
       }
@@ -1142,7 +1020,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
           activeSpec={activeSpec}
           onSelect={handleSelect}
           onToggle={handleToggle}
-          onQuantityChange={handleQuantityChange}
           onNext={handleNext}
           onBack={handleBack}
           onConfirm={handleConfirm}
@@ -1197,7 +1074,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
                           spec={previousSpec}
                           onSelect={() => {}}
                           onToggle={() => {}}
-                          onQuantityChange={() => {}}
                           onNext={() => {}}
                           onBack={() => {}}
                           onConfirm={() => {}}
@@ -1218,7 +1094,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
                           spec={activeSpec}
                           onSelect={handleSelect}
                           onToggle={handleToggle}
-                          onQuantityChange={handleQuantityChange}
                           onNext={handleNext}
                           onBack={handleBack}
                           onConfirm={handleConfirm}
@@ -1239,7 +1114,6 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
                           spec={nextSpec}
                           onSelect={() => {}}
                           onToggle={() => {}}
-                          onQuantityChange={() => {}}
                           onNext={() => {}}
                           onBack={() => {}}
                           onConfirm={() => {}}

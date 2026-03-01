@@ -2,7 +2,7 @@ import '../env';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
-import { FIXED_CURRENT_DATE, getFixedCurrentDateUtc } from '../studyDate';
+import { getFixedCurrentDateUtc } from '../studyDate';
 
 const dbPath = process.env.DATABASE_URL || 'tuning-movie.db';
 const sqlite = new Database(dbPath);
@@ -47,14 +47,8 @@ function createTables() {
       row TEXT NOT NULL,
       number INTEGER NOT NULL,
       type TEXT NOT NULL,
+      price INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'available'
-    );
-
-    CREATE TABLE IF NOT EXISTS ticket_types (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      price REAL NOT NULL,
-      description TEXT
     );
 
     CREATE TABLE IF NOT EXISTS bookings (
@@ -71,13 +65,6 @@ function createTables() {
       id TEXT PRIMARY KEY,
       booking_id TEXT NOT NULL REFERENCES bookings(id),
       seat_id TEXT NOT NULL REFERENCES seats(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS booking_tickets (
-      id TEXT PRIMARY KEY,
-      booking_id TEXT NOT NULL REFERENCES bookings(id),
-      ticket_type_id TEXT NOT NULL REFERENCES ticket_types(id),
-      quantity INTEGER NOT NULL
     );
   `);
 
@@ -97,53 +84,349 @@ function createTables() {
     sqlite.exec("ALTER TABLE theaters ADD COLUMN amenities TEXT NOT NULL DEFAULT '[]'");
   }
 
+  const seatColumnNames = new Set(
+    (
+      sqlite.prepare('PRAGMA table_info(seats)').all() as Array<{
+        name: string;
+      }>
+    ).map((column) => column.name)
+  );
+
+  if (!seatColumnNames.has('price')) {
+    sqlite.exec('ALTER TABLE seats ADD COLUMN price INTEGER NOT NULL DEFAULT 10');
+  }
+
   console.log('Tables created/verified');
+}
+
+function toIsoDate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function addDaysUtc(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+}
+
+function getUpcomingWeekendDates(baseDateUtc: Date): { saturday: string; sunday: string } {
+  const weekday = baseDateUtc.getUTCDay();
+  const daysUntilSaturday = (6 - weekday + 7) % 7;
+  const saturday = addDaysUtc(baseDateUtc, daysUntilSaturday);
+  const sunday = addDaysUtc(saturday, 1);
+  return {
+    saturday: toIsoDate(saturday),
+    sunday: toIsoDate(sunday),
+  };
+}
+
+function makeShowingId(movieId: string, theaterId: string, date: string, time: string): string {
+  return `s_${movieId}_${theaterId}_${date.replace(/-/g, '')}_${time.replace(':', '')}`;
+}
+
+interface ShowingSeed {
+  id: string;
+  movieId: string;
+  theaterId: string;
+  screenNumber: number;
+  date: string;
+  time: string;
+  totalSeats: number;
+}
+
+type MovieId = 'm1' | 'm2' | 'm3' | 'm4' | 'm5' | 'm6' | 'm7' | 'm8';
+type TheaterId = 'ta' | 'tb' | 'tc' | 'td';
+type SeatStatus = 'available' | 'occupied';
+
+interface DailySchedule {
+  saturday: string[];
+  sunday: string[];
+}
+
+interface PriceProfile {
+  front: number;
+  middle: number;
+  back: number;
+  backType: 'standard' | 'premium';
+}
+
+const MOVIE_SCREEN_NUMBER: Record<MovieId, number> = {
+  m1: 1,
+  m2: 2,
+  m3: 3,
+  m4: 4,
+  m5: 5,
+  m6: 6,
+  m7: 7,
+  m8: 8,
+};
+
+const WEEKEND_SCHEDULE: Record<MovieId, Record<TheaterId, DailySchedule>> = {
+  m1: {
+    ta: { saturday: ['14:00', '17:00', '19:30', '21:00'], sunday: ['14:00', '19:00'] },
+    tb: { saturday: ['15:00', '19:00'], sunday: ['18:30'] },
+    tc: { saturday: [], sunday: [] },
+    td: { saturday: ['17:00'], sunday: [] },
+  },
+  m2: {
+    ta: { saturday: ['19:00'], sunday: [] },
+    tb: { saturday: ['15:00', '18:30'], sunday: ['19:00'] },
+    tc: { saturday: ['19:00', '21:00'], sunday: ['18:00'] },
+    td: { saturday: [], sunday: [] },
+  },
+  m3: {
+    ta: { saturday: ['15:00', '18:30', '21:00'], sunday: ['14:00', '18:00', '20:30'] },
+    tb: { saturday: ['14:00', '19:00'], sunday: ['15:00', '18:30'] },
+    tc: { saturday: ['18:00', '20:30'], sunday: ['14:00', '19:00', '21:00'] },
+    td: { saturday: ['16:00', '19:00'], sunday: ['15:00', '18:00'] },
+  },
+  m4: {
+    ta: { saturday: ['14:00', '17:30', '19:30', '21:00'], sunday: ['14:00', '19:30'] },
+    tb: { saturday: ['15:00', '19:30'], sunday: ['19:00'] },
+    tc: { saturday: [], sunday: [] },
+    td: { saturday: ['18:00'], sunday: [] },
+  },
+  m5: {
+    ta: { saturday: ['20:00'], sunday: [] },
+    tb: { saturday: ['16:00', '19:00'], sunday: ['18:30'] },
+    tc: { saturday: ['19:30', '21:00'], sunday: ['19:00'] },
+    td: { saturday: [], sunday: [] },
+  },
+  m6: {
+    ta: { saturday: ['15:00', '18:00', '20:30'], sunday: ['14:00', '18:30', '21:00'] },
+    tb: { saturday: ['14:00', '18:30'], sunday: ['15:00', '19:00'] },
+    tc: { saturday: ['18:00', '20:00'], sunday: ['14:00', '18:30', '20:30'] },
+    td: { saturday: ['15:00', '19:00'], sunday: ['14:00', '18:00'] },
+  },
+  m7: {
+    ta: { saturday: ['16:00', '19:00'], sunday: ['15:00', '20:00'] },
+    tb: { saturday: ['18:00', '20:30'], sunday: ['19:00'] },
+    tc: { saturday: [], sunday: ['17:00'] },
+    td: { saturday: [], sunday: [] },
+  },
+  m8: {
+    ta: { saturday: ['14:30', '18:00'], sunday: ['13:00', '17:00'] },
+    tb: { saturday: ['15:00', '19:30'], sunday: ['14:00', '18:00'] },
+    tc: { saturday: ['17:00'], sunday: ['15:00', '19:00'] },
+    td: { saturday: [], sunday: ['16:00'] },
+  },
+};
+
+function buildShowings(saturday: string, sunday: string): ShowingSeed[] {
+  const showings: ShowingSeed[] = [];
+
+  for (const movieId of Object.keys(WEEKEND_SCHEDULE) as MovieId[]) {
+    const byTheater = WEEKEND_SCHEDULE[movieId];
+
+    for (const theaterId of Object.keys(byTheater) as TheaterId[]) {
+      const schedule = byTheater[theaterId];
+
+      for (const time of schedule.saturday) {
+        showings.push({
+          id: makeShowingId(movieId, theaterId, saturday, time),
+          movieId,
+          theaterId,
+          screenNumber: MOVIE_SCREEN_NUMBER[movieId],
+          date: saturday,
+          time,
+          totalSeats: 48,
+        });
+      }
+
+      for (const time of schedule.sunday) {
+        showings.push({
+          id: makeShowingId(movieId, theaterId, sunday, time),
+          movieId,
+          theaterId,
+          screenNumber: MOVIE_SCREEN_NUMBER[movieId],
+          date: sunday,
+          time,
+          totalSeats: 48,
+        });
+      }
+    }
+  }
+
+  return showings;
+}
+
+function isUnpopularMovie(movieId: string): boolean {
+  return movieId === 'm3' || movieId === 'm6';
+}
+
+function isTheaterASaturdayPrime(showing: ShowingSeed, saturday: string): boolean {
+  if (showing.theaterId !== 'ta' || showing.date !== saturday || showing.time !== '19:30') {
+    return false;
+  }
+  return showing.movieId === 'm1' || showing.movieId === 'm4';
+}
+
+function isTheaterBSaturdayEveningConflict(showing: ShowingSeed, saturday: string): boolean {
+  if (showing.theaterId !== 'tb' || showing.date !== saturday) return false;
+  return (
+    (showing.movieId === 'm1' && showing.time === '19:00') ||
+    (showing.movieId === 'm4' && showing.time === '19:30')
+  );
+}
+
+function getPriceProfile(showing: ShowingSeed, saturday: string): PriceProfile {
+  if (isTheaterASaturdayPrime(showing, saturday)) {
+    return { front: 15, middle: 17, back: 18, backType: 'premium' };
+  }
+
+  if (showing.theaterId === 'ta') {
+    return { front: 10, middle: 12, back: 15, backType: 'premium' };
+  }
+
+  if (showing.theaterId === 'tb') {
+    return { front: 10, middle: 12, back: 12, backType: 'standard' };
+  }
+
+  if (showing.theaterId === 'tc') {
+    if (isUnpopularMovie(showing.movieId)) {
+      return { front: 10, middle: 10, back: 10, backType: 'standard' };
+    }
+    return { front: 8, middle: 10, back: 10, backType: 'standard' };
+  }
+
+  if (isUnpopularMovie(showing.movieId)) {
+    return { front: 10, middle: 10, back: 10, backType: 'standard' };
+  }
+  return { front: 8, middle: 10, back: 10, backType: 'standard' };
+}
+
+function getSeatStatus(showing: ShowingSeed, row: string, number: number, saturday: string): SeatStatus {
+  if (isTheaterASaturdayPrime(showing, saturday)) {
+    if (row === 'A' || row === 'B') return 'available';
+    if (row === 'C') return [4, 5].includes(number) ? 'available' : 'occupied';
+    if (row === 'D') return [4, 5].includes(number) ? 'available' : 'occupied';
+    if (row === 'E') return number === 6 ? 'available' : 'occupied';
+    return 'occupied';
+  }
+
+  if (isTheaterBSaturdayEveningConflict(showing, saturday)) {
+    if (row === 'A' || row === 'B' || row === 'C' || row === 'D') return 'available';
+    if (row === 'E') return [4, 5].includes(number) ? 'available' : 'occupied';
+    return 'occupied';
+  }
+
+  if (isUnpopularMovie(showing.movieId)) {
+    if (row === 'A' || row === 'B' || row === 'C' || row === 'D') return 'available';
+    if (row === 'E' || row === 'F') {
+      return [4, 5].includes(number) ? 'available' : 'occupied';
+    }
+  }
+
+  return 'available';
+}
+
+function seatProfileForShowing(
+  showing: ShowingSeed,
+  row: string,
+  number: number,
+  saturday: string
+): { type: 'standard' | 'premium'; price: number; status: SeatStatus } {
+  const priceProfile = getPriceProfile(showing, saturday);
+  const type: 'standard' | 'premium' =
+    row === 'E' || row === 'F' ? priceProfile.backType : 'standard';
+  const price =
+    row === 'A' || row === 'B'
+      ? priceProfile.front
+      : row === 'C' || row === 'D'
+      ? priceProfile.middle
+      : priceProfile.back;
+
+  return {
+    type,
+    price,
+    status: getSeatStatus(showing, row, number, saturday),
+  };
 }
 
 async function seed() {
   console.log('Seeding database...');
 
-  // Create tables first
   createTables();
 
-  // Clear existing data
-  db.delete(schema.bookingTickets).run();
   db.delete(schema.bookingSeats).run();
   db.delete(schema.bookings).run();
   db.delete(schema.seats).run();
   db.delete(schema.showings).run();
   db.delete(schema.movies).run();
   db.delete(schema.theaters).run();
-  db.delete(schema.ticketTypes).run();
 
-  // Insert movies
   const moviesData = [
     {
       id: 'm1',
-      title: 'Dune: Part Two',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/6izwz7rsy95ARzTR3poZ8H6c5pp.jpg',
-      genre: JSON.stringify(['Sci-Fi', 'Action']),
-      duration: 166,
-      rating: 'PG-13',
-      releaseDate: '2024-02-28',
+      title: 'The Hangover',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/uluhlXubGu1VxU63X9VHCLWDAYP.jpg',
+      genre: JSON.stringify(['Comedy']),
+      duration: 100,
+      rating: '4.5',
+      releaseDate: '2009-06-05',
     },
     {
       id: 'm2',
-      title: 'Oppenheimer',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg',
-      genre: JSON.stringify(['Drama', 'History']),
-      duration: 180,
-      rating: 'R',
-      releaseDate: '2023-08-15',
+      title: 'Superbad',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/ek8e8txUyUwd2BNqj6lFEerJfbq.jpg',
+      genre: JSON.stringify(['Comedy']),
+      duration: 113,
+      rating: '4.1',
+      releaseDate: '2007-08-17',
     },
     {
       id: 'm3',
-      title: 'The Holdovers',
-      posterUrl: 'https://image.tmdb.org/t/p/w500/VHSzNBTwxV8vh7wylo7O9CLdac.jpg',
+      title: 'The Intern',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/sf6j1SbgDf2k3mS9t2qfJvM6v0x.jpg',
       genre: JSON.stringify(['Comedy', 'Drama']),
-      duration: 134,
-      rating: 'R',
-      releaseDate: '2024-01-05',
+      duration: 121,
+      rating: '3.8',
+      releaseDate: '2015-09-25',
+    },
+    {
+      id: 'm4',
+      title: 'The Dark Knight',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
+      genre: JSON.stringify(['Action']),
+      duration: 152,
+      rating: '4.7',
+      releaseDate: '2008-07-18',
+    },
+    {
+      id: 'm5',
+      title: 'John Wick 4',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/vZloFAK7NmvMGKE7VkF5UHaz0I.jpg',
+      genre: JSON.stringify(['Action']),
+      duration: 169,
+      rating: '4.3',
+      releaseDate: '2023-03-24',
+    },
+    {
+      id: 'm6',
+      title: 'Top Gun: Maverick',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/62HCnUTziyWcpDaBO2i1DX17ljH.jpg',
+      genre: JSON.stringify(['Action', 'Drama']),
+      duration: 131,
+      rating: '3.9',
+      releaseDate: '2022-05-27',
+    },
+    {
+      id: 'm7',
+      title: 'Gone Girl',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/ts996lKsxvjkO2yiYG0ht4qAicO.jpg',
+      genre: JSON.stringify(['Thriller']),
+      duration: 149,
+      rating: '4.4',
+      releaseDate: '2014-10-03',
+    },
+    {
+      id: 'm8',
+      title: 'La La Land',
+      posterUrl: 'https://image.tmdb.org/t/p/w500/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg',
+      genre: JSON.stringify(['Romance']),
+      duration: 128,
+      rating: '4.2',
+      releaseDate: '2016-12-09',
     },
   ];
 
@@ -152,47 +435,38 @@ async function seed() {
   }
   console.log('Inserted movies');
 
-  // Insert theaters
   const theatersData = [
     {
-      id: 't1',
-      name: 'AMC Lincoln Square 13',
-      location: 'Upper West Side, New York, NY',
-      screenCount: 13,
-      distanceKm: 2.3,
-      amenities: JSON.stringify(['IMAX', 'Dolby Cinema', 'Recliner Seats']),
+      id: 'ta',
+      name: 'Regal Battery Park',
+      location: 'Battery Park, Manhattan, New York, NY',
+      screenCount: 11,
+      distanceKm: 1.2,
+      amenities: JSON.stringify(['Premium Large Format', 'Reserved Seating']),
     },
     {
-      id: 't2',
-      name: 'AMC Empire 25',
-      location: 'Times Square, New York, NY',
-      screenCount: 25,
-      distanceKm: 4.1,
-      amenities: JSON.stringify(['IMAX', '4DX', 'Reserved Seating']),
-    },
-    {
-      id: 't3',
-      name: 'Regal Union Square',
-      location: 'Union Square, New York, NY',
+      id: 'tb',
+      name: 'AMC 34th Street 14',
+      location: 'Midtown, Manhattan, New York, NY',
       screenCount: 14,
-      distanceKm: 1.7,
-      amenities: JSON.stringify(['RPX', 'Stadium Seating', 'Wheelchair Access']),
+      distanceKm: 2.8,
+      amenities: JSON.stringify(['Reserved Seating']),
     },
     {
-      id: 't4',
-      name: 'Alamo Drafthouse Downtown Brooklyn',
-      location: 'Downtown Brooklyn, New York, NY',
+      id: 'tc',
+      name: 'AMC Magic Johnson Harlem 9',
+      location: 'Harlem, Manhattan, New York, NY',
       screenCount: 9,
-      distanceKm: 6.0,
-      amenities: JSON.stringify(['In-Theater Dining', 'Luxury Recliners', 'No-Ads Policy']),
+      distanceKm: 6.1,
+      amenities: JSON.stringify(['Reserved Seating']),
     },
     {
-      id: 't5',
-      name: 'Nitehawk Williamsburg',
-      location: 'Williamsburg, New York, NY',
-      screenCount: 7,
-      distanceKm: 5.4,
-      amenities: JSON.stringify(['In-Theater Dining', 'Indie Screenings', 'Cocktail Bar']),
+      id: 'td',
+      name: 'AMC Bay Plaza Cinema 13',
+      location: 'Baychester, Bronx, New York, NY',
+      screenCount: 13,
+      distanceKm: 15.4,
+      amenities: JSON.stringify(['Reserved Seating']),
     },
   ];
 
@@ -201,76 +475,15 @@ async function seed() {
   }
   console.log('Inserted theaters');
 
-  // Insert ticket types
-  const ticketTypesData = [
-    { id: 'tt1', name: 'Adult', price: 14.0, description: 'Ages 18+' },
-    { id: 'tt2', name: 'Child', price: 9.0, description: 'Ages 3-12' },
-    { id: 'tt3', name: 'Senior', price: 10.0, description: 'Ages 65+' },
-  ];
+  const { saturday, sunday } = getUpcomingWeekendDates(getFixedCurrentDateUtc());
+  const showingsData = buildShowings(saturday, sunday);
 
-  for (const ticketType of ticketTypesData) {
-    db.insert(schema.ticketTypes).values(ticketType).run();
-  }
-  console.log('Inserted ticket types');
-
-  // Generate showings for next 14 days (updated to match frontend calendar range)
-  const fixedCurrentDate = getFixedCurrentDateUtc();
-  const showingsData: Array<{
-    id: string;
-    movieId: string;
-    theaterId: string;
-    screenNumber: number;
-    date: string;
-    time: string;
-    totalSeats: number;
-  }> = [];
-
-  const times = ['10:00', '13:00', '16:00', '19:00', '22:00'];
-  let showingId = 1;
-
-  // Each theater shows different movies
-  const theaterMovies: Record<string, string[]> = {
-    t1: ['m1', 'm2'], // Lincoln Square
-    t2: ['m1', 'm2', 'm3'], // Empire 25
-    t3: ['m1', 'm3'], // Union Square
-    t4: ['m2', 'm3'], // Downtown Brooklyn
-    t5: ['m3'], // Williamsburg
-  };
-
-  const SHOWING_DAYS = 14;
-  const startDateStr = FIXED_CURRENT_DATE;
-  const endDate = new Date(fixedCurrentDate);
-  endDate.setUTCDate(endDate.getUTCDate() + SHOWING_DAYS - 1);
-  const endDateStr = endDate.toISOString().split('T')[0];
-  console.log(`Generating showings from ${startDateStr} to ${endDateStr} (${SHOWING_DAYS} days)`);
-
-  for (let dayOffset = 0; dayOffset < SHOWING_DAYS; dayOffset++) {
-    const date = new Date(fixedCurrentDate);
-    date.setUTCDate(date.getUTCDate() + dayOffset);
-    const dateStr = date.toISOString().split('T')[0];
-
-    for (const [theaterId, movieIds] of Object.entries(theaterMovies)) {
-      for (const movieId of movieIds) {
-        // Each movie has 2-3 showtimes per day
-        const movieTimes = times.slice(0, 2 + Math.floor(Math.random() * 2));
-        for (const time of movieTimes) {
-          showingsData.push({
-            id: `s${showingId++}`,
-            movieId,
-            theaterId,
-            screenNumber: Math.floor(Math.random() * 5) + 1,
-            date: dateStr,
-            time,
-            totalSeats: 100,
-          });
-        }
-      }
-    }
-  }
+  console.log(`Generating study showings for weekend: ${saturday} (Sat), ${sunday} (Sun)`);
 
   const insertShowing = sqlite.prepare(
     'INSERT INTO showings (id, movie_id, theater_id, screen_number, date, time, total_seats) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
+
   const insertAllShowings = sqlite.transaction(() => {
     for (const showing of showingsData) {
       insertShowing.run(
@@ -284,32 +497,32 @@ async function seed() {
       );
     }
   });
+
   insertAllShowings();
   console.log(`Inserted ${showingsData.length} showings`);
 
-  // Generate seats for each showing (optimized with prepared statement + transaction)
-  const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-  const seatsPerRow = 10;
+  const rows = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const seatsPerRow = 8;
   let seatCount = 0;
 
   const insertSeat = sqlite.prepare(
-    'INSERT INTO seats (id, showing_id, row, number, type, status) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT INTO seats (id, showing_id, row, number, type, price, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
 
   const insertAllSeats = sqlite.transaction(() => {
     for (const showing of showingsData) {
-      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-        for (let seatNum = 1; seatNum <= seatsPerRow; seatNum++) {
-          const seatType = rowIndex >= 8 ? 'premium' : 'standard';
-          const status = Math.random() < 0.15 ? 'occupied' : 'available';
+      for (const row of rows) {
+        for (let number = 1; number <= seatsPerRow; number++) {
+          const profile = seatProfileForShowing(showing, row, number, saturday);
 
           insertSeat.run(
-            `${showing.id}-${rows[rowIndex]}${seatNum}`,
+            `${showing.id}-${row}${number}`,
             showing.id,
-            rows[rowIndex],
-            seatNum,
-            seatType,
-            status
+            row,
+            number,
+            profile.type,
+            profile.price,
+            profile.status
           );
           seatCount++;
         }

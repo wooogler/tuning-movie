@@ -18,7 +18,6 @@ export type Stage =
   | 'date'
   | 'time'
   | 'seat'
-  | 'ticket'
   | 'confirm';
 
 // =============================================================================
@@ -41,28 +40,12 @@ export interface DisplayItem {
   isDisabled?: boolean;
 }
 
-/**
- * 수량이 있는 아이템 (티켓용)
- */
-export interface QuantityItem {
-  item: DisplayItem;
-  count: number;
-}
-
-export interface BookingTicketSelection {
-  ticketTypeId: string;
-  name: string;
-  price: number;
-  quantity: number;
-}
-
 export interface BookingContext {
   movie?: { id: string; title: string };
   theater?: { id: string; name: string };
   date?: string;
   showing?: { id: string; time: string };
   selectedSeats?: DisplayItem[];
-  tickets?: BookingTicketSelection[];
 }
 
 // =============================================================================
@@ -110,7 +93,7 @@ export interface DisplayConfig {
   valueField: string;
 
   /** 렌더링 컴포넌트 타입 */
-  component: 'buttonGroup' | 'calendar' | 'seatMap' | 'counter' | 'summary';
+  component: 'buttonGroup' | 'calendar' | 'seatMap' | 'summary';
 }
 
 // =============================================================================
@@ -142,9 +125,6 @@ export interface StateModel {
 
   /** 하이라이트된 아이템들 */
   highlighted?: DisplayItem[];
-
-  /** 티켓 수량 */
-  quantities?: QuantityItem[];
 
   /** 예약 컨텍스트 (단일 source of truth) */
   booking?: BookingContext;
@@ -209,5 +189,4 @@ export interface VisibleItem extends DataItem {
 export interface InternalState {
   selectedId?: string;
   selectedIds?: string[];
-  quantities?: Record<string, number>;
 }

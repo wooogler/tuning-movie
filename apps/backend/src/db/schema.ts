@@ -35,14 +35,8 @@ export const seats = sqliteTable('seats', {
   row: text('row').notNull(),
   number: integer('number').notNull(),
   type: text('type').notNull(), // standard, premium, couple
+  price: integer('price').notNull(),
   status: text('status').notNull().default('available'), // available, occupied, reserved
-});
-
-export const ticketTypes = sqliteTable('ticket_types', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  price: real('price').notNull(),
-  description: text('description'),
 });
 
 export const bookings = sqliteTable('bookings', {
@@ -59,11 +53,4 @@ export const bookingSeats = sqliteTable('booking_seats', {
   id: text('id').primaryKey(),
   bookingId: text('booking_id').notNull().references(() => bookings.id),
   seatId: text('seat_id').notNull().references(() => seats.id),
-});
-
-export const bookingTickets = sqliteTable('booking_tickets', {
-  id: text('id').primaryKey(),
-  bookingId: text('booking_id').notNull().references(() => bookings.id),
-  ticketTypeId: text('ticket_type_id').notNull().references(() => ticketTypes.id),
-  quantity: integer('quantity').notNull(),
 });

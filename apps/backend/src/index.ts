@@ -8,7 +8,6 @@ import { movieRoutes } from './routes/movies';
 import { theaterRoutes } from './routes/theaters';
 import { showingRoutes } from './routes/showings';
 import { seatRoutes } from './routes/seats';
-import { ticketRoutes } from './routes/tickets';
 import { bookingRoutes } from './routes/bookings';
 import { agentRelayRoutes } from './routes/agentRelay';
 import { agentConfigRoutes } from './routes/agentConfig';
@@ -29,7 +28,6 @@ const start = async () => {
     await fastify.register(theaterRoutes);
     await fastify.register(showingRoutes);
     await fastify.register(seatRoutes);
-    await fastify.register(ticketRoutes);
     await fastify.register(bookingRoutes);
     await fastify.register(agentRelayRoutes);
     await fastify.register(agentConfigRoutes);

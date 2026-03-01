@@ -17,31 +17,26 @@ GET {{baseUrl}}/theaters
 GET {{baseUrl}}/theaters/movie/m1
 
 ### Get theater by ID
-GET {{baseUrl}}/theaters/t1
+GET {{baseUrl}}/theaters/ta
 
 ### ===== SHOWINGS =====
 
 ### Get available dates for a movie at a theater
-GET {{baseUrl}}/showings/dates?movieId=m1&theaterId=t1
+GET {{baseUrl}}/showings/dates?movieId=m1&theaterId=ta
 
 ### Get available times for a specific date (use date from /showings/dates response)
-GET {{baseUrl}}/showings/times?movieId=m1&theaterId=t1&date=2026-01-27
+GET {{baseUrl}}/showings/times?movieId=m1&theaterId=ta&date=2026-03-14
 
 ### Get all showings with filters
-GET {{baseUrl}}/showings?movieId=m1&theaterId=t1&date=2026-01-27
+GET {{baseUrl}}/showings?movieId=m1&theaterId=ta&date=2026-03-14
 
 ### Get showing by ID
-GET {{baseUrl}}/showings/s1
+GET {{baseUrl}}/showings/s_m1_ta_20260314_1930
 
 ### ===== SEATS =====
 
 ### Get seats for a showing
-GET {{baseUrl}}/seats/s1
-
-### ===== TICKET TYPES =====
-
-### Get all ticket types
-GET {{baseUrl}}/ticket-types
+GET {{baseUrl}}/seats/s_m1_ta_20260314_1930
 
 ### ===== BOOKINGS =====
 
@@ -50,12 +45,8 @@ POST {{baseUrl}}/bookings
 Content-Type: application/json
 
 {
-  "showingId": "s1",
-  "seats": ["s1-A1", "s1-A2"],
-  "tickets": [
-    { "ticketTypeId": "tt1", "quantity": 1 },
-    { "ticketTypeId": "tt2", "quantity": 1 }
-  ],
+  "showingId": "s_m1_ta_20260314_1930",
+  "seats": ["s_m1_ta_20260314_1930-A1", "s_m1_ta_20260314_1930-A2"],
   "customerName": "John Doe",
   "customerEmail": "john@example.com"
 }

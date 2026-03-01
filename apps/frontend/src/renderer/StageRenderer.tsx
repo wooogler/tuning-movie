@@ -4,14 +4,13 @@
  * UISpec의 stage에 따라 적절한 Stage 컴포넌트를 렌더링
  */
 
-import type { UISpec, MovieItem, TheaterItem, DateItem, TimeItem, SeatItem, TicketItem } from '../spec';
+import type { UISpec, MovieItem, TheaterItem, DateItem, TimeItem, SeatItem } from '../spec';
 import {
   MovieStage,
   TheaterStage,
   DateStage,
   TimeStage,
   SeatStage,
-  TicketStage,
   ConfirmStage,
 } from './stages';
 
@@ -19,7 +18,6 @@ export interface StageRendererProps {
   spec: UISpec;
   onSelect: (id: string) => void;
   onToggle?: (id: string) => void;
-  onQuantityChange?: (typeId: string, quantity: number) => void;
   onNext: () => void;
   onBack?: () => void;
   onConfirm?: () => void;
@@ -29,7 +27,6 @@ export function StageRenderer({
   spec,
   onSelect,
   onToggle,
-  onQuantityChange,
   onNext,
   onBack,
   onConfirm,
@@ -80,17 +77,6 @@ export function StageRenderer({
           spec={spec as UISpec<SeatItem>}
           onSelect={onSelect}
           onToggle={onToggle ?? onSelect}
-          onNext={onNext}
-          onBack={onBack}
-        />
-      );
-
-    case 'ticket':
-      return (
-        <TicketStage
-          spec={spec as UISpec<TicketItem>}
-          onSelect={onSelect}
-          onQuantityChange={onQuantityChange ?? (() => {})}
           onNext={onNext}
           onBack={onBack}
         />

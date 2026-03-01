@@ -9,7 +9,6 @@ A movie ticket booking system API built with Fastify and TypeScript.
 - Date selection
 - Time selection
 - Seat selection
-- Ticket type and quantity selection
 - Booking confirmation
 
 ## Installation
@@ -56,9 +55,6 @@ npm start
 ### Seats
 - `GET /seats/:showingId` - Get seats for a showing
 
-### Tickets
-- `GET /ticket-types` - Get all ticket types
-
 ### Bookings
 - `POST /bookings` - Create a booking
 - `GET /bookings/:id` - Get booking by ID
@@ -71,5 +67,4 @@ npm start
 3. Select a date (`GET /showings/dates`)
 4. Select a time (`GET /showings/times`)
 5. Select seats (`GET /seats/:showingId`)
-6. Select ticket types and quantities (`GET /ticket-types`)
-7. Confirm booking (`POST /bookings`)
+6. Confirm booking (`POST /bookings`)

@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import { and, eq, inArray } from 'drizzle-orm';
-import { db, bookings, bookingSeats, bookingTickets, seats, showings, ticketTypes } from '../db';
+import { db, bookings, bookingSeats, seats, showings } from '../db';
 import { getFixedCurrentDateUtc } from '../studyDate';
 
 interface BookingRequest {
   showingId: string;
   seats: string[];
-  tickets: { ticketTypeId: string; quantity: number }[];
   customerName: string;
   customerEmail: string;
 }
@@ -16,16 +15,13 @@ export async function bookingRoutes(fastify: FastifyInstance) {
   // Create a booking
   fastify.post('/bookings', async (request, reply) => {
     const body = request.body as BookingRequest;
-    const { showingId, seats: seatIds, tickets, customerName, customerEmail } = body;
+    const { showingId, seats: seatIds, customerName, customerEmail } = body;
 
     if (!showingId || typeof showingId !== 'string') {
       return reply.code(400).send({ error: 'Invalid showingId' });
     }
     if (!Array.isArray(seatIds) || seatIds.length === 0) {
       return reply.code(400).send({ error: 'At least one seat is required' });
-    }
-    if (!Array.isArray(tickets) || tickets.length === 0) {
-      return reply.code(400).send({ error: 'At least one ticket is required' });
     }
     if (!customerName || !customerEmail) {
       return reply.code(400).send({ error: 'Customer name and email are required' });
@@ -35,24 +31,6 @@ export async function bookingRoutes(fastify: FastifyInstance) {
     if (uniqueSeatIds.length !== seatIds.length) {
       return reply.code(400).send({ error: 'Duplicate seats are not allowed' });
     }
-
-    const normalizedTicketMap = new Map<string, number>();
-    for (const ticket of tickets) {
-      if (!ticket || typeof ticket.ticketTypeId !== 'string') {
-        return reply.code(400).send({ error: 'Invalid ticket type payload' });
-      }
-      if (!Number.isInteger(ticket.quantity) || ticket.quantity <= 0) {
-        return reply.code(400).send({ error: 'Ticket quantity must be a positive integer' });
-      }
-      normalizedTicketMap.set(
-        ticket.ticketTypeId,
-        (normalizedTicketMap.get(ticket.ticketTypeId) ?? 0) + ticket.quantity
-      );
-    }
-
-    const normalizedTickets = Array.from(normalizedTicketMap.entries()).map(
-      ([ticketTypeId, quantity]) => ({ ticketTypeId, quantity })
-    );
 
     const showing = db.select().from(showings).where(eq(showings.id, showingId)).get();
     if (!showing) {
@@ -77,27 +55,7 @@ export async function bookingRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const ticketTypeIds = normalizedTickets.map((ticket) => ticket.ticketTypeId);
-    const foundTicketTypes = db
-      .select()
-      .from(ticketTypes)
-      .where(inArray(ticketTypes.id, ticketTypeIds))
-      .all();
-
-    if (foundTicketTypes.length !== ticketTypeIds.length) {
-      return reply.code(400).send({ error: 'Invalid ticket type included' });
-    }
-
-    const totalTickets = normalizedTickets.reduce((sum, ticket) => sum + ticket.quantity, 0);
-    if (totalTickets !== uniqueSeatIds.length) {
-      return reply.code(400).send({ error: 'Ticket count must match seat count' });
-    }
-
-    const ticketPriceMap = new Map(foundTicketTypes.map((ticketType) => [ticketType.id, ticketType.price]));
-    const totalPrice = normalizedTickets.reduce((sum, ticket) => {
-      const price = ticketPriceMap.get(ticket.ticketTypeId);
-      return sum + (price ?? 0) * ticket.quantity;
-    }, 0);
+    const totalPrice = selectedSeats.reduce((sum, seat) => sum + seat.price, 0);
 
     const bookingId = randomUUID();
     const now = getFixedCurrentDateUtc().toISOString();
@@ -136,16 +94,6 @@ export async function bookingRoutes(fastify: FastifyInstance) {
           }
         }
 
-        for (const ticket of normalizedTickets) {
-          tx.insert(bookingTickets)
-            .values({
-              id: randomUUID(),
-              bookingId,
-              ticketTypeId: ticket.ticketTypeId,
-              quantity: ticket.quantity,
-            })
-            .run();
-        }
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'booking_failed';
@@ -180,21 +128,10 @@ export async function bookingRoutes(fastify: FastifyInstance) {
       .where(eq(bookingSeats.bookingId, id))
       .all();
 
-    // Get associated tickets
-    const bookedTickets = db
-      .select()
-      .from(bookingTickets)
-      .where(eq(bookingTickets.bookingId, id))
-      .all();
-
     return {
       booking: {
         ...booking,
         seats: bookedSeats.map((bs) => bs.seatId),
-        tickets: bookedTickets.map((bt) => ({
-          ticketTypeId: bt.ticketTypeId,
-          quantity: bt.quantity,
-        })),
       },
     };
   });

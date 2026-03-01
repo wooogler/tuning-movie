@@ -128,12 +128,11 @@ const SYSTEM_PROMPT =
   '- If action.type="tool.call", toolName must be one of available tools.\n' +
   '- Keep assistantMessage consistent with action: if action.type="tool.call", describe the action being taken and do not ask for permission.\n' +
   '- If assistantMessage asks for confirmation or permission, action.type must be "none".\n' +
-  '- Use execution tools (select/next/prev/setQuantity) only when the latest user-originated turn commits to a concrete next action (explicit instruction or unambiguous confirmation).\n' +
+  '- Use execution tools (select/next/prev) only when the latest user-originated turn commits to a concrete next action (explicit instruction or unambiguous confirmation).\n' +
   '- Do not treat assistant-generated recommendations, options, or follow-up questions by themselves as confirmation; allow commitment actions only after a user-originated explicit or unambiguous affirmation.\n' +
   '- Choose exactly one action for this turn.\n' +
   '- select requires params.itemId from visible item ids.\n' +
   '- Never include internal item ids (for example m1, t2) in assistantMessage; refer to human-readable item values only.\n' +
-  '- setQuantity requires integer quantity >= 0.\n' +
   '- assistantMessage must be plain text only (no Markdown, no code fences, no bullet lists, no links).\n' +
   '- Keep assistantMessage short and natural.\n' +
   '- workflow.constraints = accumulated system availability facts from prior turns. Factor these into feasibility checks and action selection.\n' +

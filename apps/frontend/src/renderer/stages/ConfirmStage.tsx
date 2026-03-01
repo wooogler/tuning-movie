@@ -18,12 +18,11 @@ export function ConfirmStage({
   onBack,
 }: ConfirmStageProps) {
   const meta = spec.meta as unknown as ConfirmMeta;
-
-  // 총 가격 계산
-  const totalPrice = meta.tickets.reduce(
-    (sum, t) => sum + t.price * t.quantity,
-    0
-  );
+  const totalPrice = meta.totalPrice;
+  const formattedTotal = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(totalPrice);
 
   return (
     <div className="flex flex-col items-center gap-6">
@@ -56,31 +55,10 @@ export function ConfirmStage({
 
         <hr className="border-dark-border" />
 
-        {/* Tickets */}
-        <div className="space-y-2">
-          <span className="text-fg-muted">Tickets</span>
-          {meta.tickets
-            .filter((t) => t.quantity > 0)
-            .map((ticket, index) => (
-              <div key={index} className="flex justify-between pl-4">
-                <span className="text-fg">
-                  {ticket.type} x {ticket.quantity}
-                </span>
-                <span className="text-fg-strong">
-                  ₩{(ticket.price * ticket.quantity).toLocaleString()}
-                </span>
-              </div>
-            ))}
-        </div>
-
-        <hr className="border-dark-border" />
-
         {/* Total */}
         <div className="flex justify-between text-lg">
           <span className="text-fg-muted font-semibold">Total</span>
-          <span className="text-primary font-bold">
-            ₩{totalPrice.toLocaleString()}
-          </span>
+          <span className="text-primary font-bold">{formattedTotal}</span>
         </div>
       </div>
 

@@ -9,7 +9,6 @@ import type {
   UISpec,
   DataItem,
   DisplayItem,
-  QuantityItem,
   FilterState,
   SortState,
   HighlightState,
@@ -201,48 +200,6 @@ export function toggleItem<T extends DataItem>(
     : [...currentIds, itemId];
 
   return selectItems(spec, newIds);
-}
-
-/**
- * 티켓 수량 설정
- */
-export function setQuantity<T extends DataItem>(
-  spec: UISpec<T>,
-  typeId: string,
-  count: number
-): UISpec<T> {
-  if (!Number.isInteger(count) || count < 0) return spec;
-
-  const displayItem = spec.visibleItems.find((item) => item.id === typeId);
-
-  if (!displayItem) return spec;
-
-  const currentQuantities = spec.state.quantities ?? [];
-
-  // 기존 항목 찾기
-  const existingIndex = currentQuantities.findIndex(
-    (q) => q.item.id === typeId
-  );
-
-  let newQuantities: QuantityItem[];
-
-  if (existingIndex >= 0) {
-    // 기존 항목 업데이트
-    newQuantities = currentQuantities.map((q, i) =>
-      i === existingIndex ? { item: displayItem, count } : q
-    );
-  } else {
-    // 새 항목 추가
-    newQuantities = [...currentQuantities, { item: displayItem, count }];
-  }
-
-  return {
-    ...spec,
-    state: {
-      ...spec.state,
-      quantities: newQuantities,
-    },
-  };
 }
 
 // =============================================================================

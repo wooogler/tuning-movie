@@ -34,23 +34,13 @@ export interface Seat {
   row: string;
   number: number;
   type: 'standard' | 'premium' | 'couple';
-  status: 'available' | 'occupied' | 'selected';
-}
-
-export interface TicketType {
-  id: string;
-  name: string;
   price: number;
-  description: string;
+  status: 'available' | 'occupied' | 'selected';
 }
 
 export interface BookingRequest {
   showingId: string;
   seats: string[];
-  tickets: {
-    ticketTypeId: string;
-    quantity: number;
-  }[];
   customerName: string;
   customerEmail: string;
 }
@@ -64,8 +54,4 @@ export interface Booking {
   status: 'confirmed' | 'cancelled';
   createdAt: string;
   seats?: string[];
-  tickets?: {
-    ticketTypeId: string;
-    quantity: number;
-  }[];
 }

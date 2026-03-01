@@ -5,7 +5,6 @@ import type { ToolApplyContext } from '../components/devToolsContextShared';
 import {
   selectItem,
   toggleItem,
-  setQuantity,
   applyFilter,
   applySort,
   applyHighlight,
@@ -100,17 +99,6 @@ export function useToolHandler<T extends DataItem>({
             } else {
               newSpec = selectItem(spec, itemId);
             }
-            break;
-          }
-          case 'setQuantity': {
-            const { typeId, quantity } = params as { typeId: string; quantity: number };
-            if (typeof typeId !== 'string' || !typeId) {
-              throw new Error('setQuantity requires a valid "typeId" string');
-            }
-            if (!Number.isInteger(quantity) || quantity < 0) {
-              throw new Error('setQuantity requires "quantity" to be an integer >= 0');
-            }
-            newSpec = setQuantity(spec, typeId, quantity);
             break;
           }
           case 'next':

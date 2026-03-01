@@ -1,4 +1,4 @@
-import type { Movie, Theater, Showing, Seat, TicketType, Booking, BookingRequest } from '../types';
+import type { Movie, Theater, Showing, Seat, Booking, BookingRequest } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -78,9 +78,6 @@ export const api = {
 
   // Seats
   getSeats: (showingId: string) => fetchApi<{ seats: Seat[] }>(`/seats/${showingId}`),
-
-  // Ticket Types
-  getTicketTypes: () => fetchApi<{ ticketTypes: TicketType[] }>('/ticket-types'),
 
   // Bookings
   createBooking: (data: BookingRequest) =>

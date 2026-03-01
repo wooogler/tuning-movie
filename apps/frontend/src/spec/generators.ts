@@ -5,8 +5,8 @@
  * 백엔드 데이터를 받아 Agent가 읽을 수 있는 UISpec으로 변환
  */
 
-import type { UISpec, DataItem, StateModel, QuantityItem } from './types';
-import type { Movie, Theater, Showing, Seat, TicketType } from '../types';
+import type { UISpec, DataItem, StateModel } from './types';
+import type { Movie, Theater, Showing, Seat } from '../types';
 import { computeVisibleItems } from './modifiers';
 
 // =============================================================================
@@ -46,6 +46,7 @@ function createSpec<T extends DataItem>(
 export interface MovieItem extends DataItem {
   id: string;
   title: string;
+  displayLabel: string;
   genre: string[];
   rating: string;
   duration: number;
@@ -56,6 +57,7 @@ export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
   const items: MovieItem[] = movies.map((m) => ({
     id: m.id,
     title: m.title,
+    displayLabel: `${m.title} | ${m.genre.join('/')} | Rating ${m.rating}`,
     genre: m.genre,
     rating: m.rating,
     duration: m.duration,
@@ -69,7 +71,7 @@ export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
     items,
     modification: {},
     display: {
-      valueField: 'title',
+      valueField: 'displayLabel',
       component: 'buttonGroup',
     },
   });
@@ -226,6 +228,8 @@ export interface SeatItem extends DataItem {
   row: string;
   number: number;
   label: string;
+  type: 'standard' | 'premium' | 'couple';
+  price: number;
   status: 'available' | 'occupied';
 }
 
@@ -237,17 +241,18 @@ export function generateSeatSpec(
   showtimeId: string
 ): UISpec<SeatItem> {
   const items: SeatItem[] = seats
-    .filter((s) => s.type === 'standard')
     .map((s) => ({
       id: s.id,
       row: s.row,
       number: s.number,
-      label: `${s.row}${s.number}`,
+      label: `${s.row}${s.number} - ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(s.price)}`,
+      type: s.type,
+      price: s.price,
       status: s.status === 'available' ? 'available' : 'occupied',
     }));
 
   const rows = [...new Set(items.map((s) => s.row))].sort();
-  const seatsPerRow = Math.max(...items.map((s) => s.number));
+  const seatsPerRow = items.length > 0 ? Math.max(...items.map((s) => s.number)) : 0;
 
   return createSpec({
     stage: 'seat',
@@ -274,56 +279,6 @@ export function generateSeatSpec(
 }
 
 // =============================================================================
-// Ticket Stage
-// =============================================================================
-
-export interface TicketItem extends DataItem {
-  id: string;
-  name: string;
-  price: number;
-  priceDisplay: string;
-  description?: string;
-}
-
-export function generateTicketSpec(
-  ticketTypes: TicketType[],
-  selectedSeats: string[]
-): UISpec<TicketItem> {
-  const items: TicketItem[] = ticketTypes.map((t) => ({
-    id: t.id,
-    name: t.name,
-    price: t.price,
-    priceDisplay: `$${t.price.toFixed(2)}`,
-    description: t.description,
-  }));
-
-  // 초기 수량 (모두 0)
-  const initialQuantities: QuantityItem[] = items.map((item) => ({
-    item: { id: item.id, value: item.name },
-    count: 0,
-  }));
-
-  return createSpec({
-    stage: 'ticket',
-    title: 'Select Tickets',
-    description: 'Choose ticket types and quantities',
-    items,
-    modification: {},
-    display: {
-      valueField: 'name',
-      component: 'counter',
-    },
-    meta: {
-      maxTotal: selectedSeats.length,
-      selectedSeats,
-    },
-    initialState: {
-      quantities: initialQuantities,
-    },
-  });
-}
-
-// =============================================================================
 // Confirm Stage
 // =============================================================================
 
@@ -333,7 +288,6 @@ export interface ConfirmMeta {
   date: string;
   time: string;
   seats: string[];
-  tickets: Array<{ type: string; quantity: number; price: number }>;
   totalPrice: number;
 }
 

@@ -13,7 +13,6 @@ export {
   DateStage,
   TimeStage,
   SeatStage,
-  TicketStage,
   ConfirmStage,
   ActionBar,
 } from './stages';

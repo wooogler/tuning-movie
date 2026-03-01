@@ -24,9 +24,7 @@ export type {
   UISpec,
   DataItem,
   DisplayItem,
-  QuantityItem,
   BookingContext,
-  BookingTicketSelection,
   DisplayConfig,
   StateModel,
   ModificationState,
@@ -51,7 +49,6 @@ export {
   selectItem,
   selectItems,
   toggleItem,
-  setQuantity,
   clearModification,
   getVisibleItems, // deprecated
 } from './modifiers';
@@ -63,7 +60,6 @@ export type {
   DateItem,
   TimeItem,
   SeatItem,
-  TicketItem,
   ConfirmMeta,
 } from './generators';
 
@@ -74,6 +70,5 @@ export {
   createDateItems,
   generateTimeSpec,
   generateSeatSpec,
-  generateTicketSpec,
   generateConfirmSpec,
 } from './generators';
