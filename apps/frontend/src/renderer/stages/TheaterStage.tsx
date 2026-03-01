@@ -14,6 +14,7 @@ export function TheaterStage({
   onSelect,
   onNext,
   onBack,
+  onStartOver,
 }: StageProps<TheaterItem>) {
   const canProceed = !!spec.state.selected;
 
@@ -29,6 +30,7 @@ export function TheaterStage({
       <ActionBar
         onBack={onBack}
         onNext={onNext}
+        onStartOver={onStartOver}
         nextDisabled={!canProceed}
       />
     </div>

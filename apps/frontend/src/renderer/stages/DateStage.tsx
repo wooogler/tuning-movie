@@ -104,6 +104,7 @@ export function DateStage({
   onSelect,
   onNext,
   onBack,
+  onStartOver,
 }: StageProps<DateItem>) {
   const canProceed = !!spec.state.selected;
 
@@ -237,6 +238,7 @@ export function DateStage({
       <ActionBar
         onBack={onBack}
         onNext={onNext}
+        onStartOver={onStartOver}
         nextDisabled={!canProceed}
       />
     </div>

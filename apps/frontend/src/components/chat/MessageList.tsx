@@ -12,6 +12,7 @@ interface MessageListProps {
   onToggle?: (id: string) => void;
   onNext?: () => void;
   onBack?: () => void;
+  onStartOver?: () => void;
   onConfirm?: () => void;
   chatWidthPx?: number;
   isResizingWidth?: boolean;
@@ -25,6 +26,7 @@ export function MessageList({
   onToggle,
   onNext,
   onBack,
+  onStartOver,
   onConfirm,
   chatWidthPx = 768,
   isResizingWidth = false,
@@ -90,6 +92,7 @@ export function MessageList({
                 onToggle={onToggle}
                 onNext={onNext}
                 onBack={onBack}
+                onStartOver={onStartOver}
                 onConfirm={onConfirm}
               />
             );

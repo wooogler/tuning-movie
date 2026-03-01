@@ -33,6 +33,7 @@ interface SystemMessageProps {
   onToggle?: (id: string) => void;
   onNext?: () => void;
   onBack?: () => void;
+  onStartOver?: () => void;
   onConfirm?: () => void;
   /** Override spec for active message (to reflect live selections) */
   activeSpec?: UISpec | null;
@@ -46,6 +47,7 @@ export function SystemMessage({
   onToggle,
   onNext,
   onBack,
+  onStartOver,
   onConfirm,
   activeSpec,
 }: SystemMessageProps) {
@@ -80,6 +82,7 @@ export function SystemMessage({
           onToggle={isActive && onToggle ? onToggle : () => {}}
           onNext={isActive && onNext ? onNext : () => {}}
           onBack={isActive && onBack ? onBack : undefined}
+          onStartOver={isActive && onStartOver ? onStartOver : undefined}
           onConfirm={isActive && onConfirm ? onConfirm : () => {}}
         />
       </div>

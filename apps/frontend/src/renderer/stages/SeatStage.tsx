@@ -17,6 +17,7 @@ export function SeatStage({
   onToggle,
   onNext,
   onBack,
+  onStartOver,
 }: SeatStageProps) {
   const formatUsd = (value: number): string =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -140,6 +141,7 @@ export function SeatStage({
       <ActionBar
         onBack={onBack}
         onNext={onNext}
+        onStartOver={onStartOver}
         nextDisabled={!canProceed}
       />
     </div>

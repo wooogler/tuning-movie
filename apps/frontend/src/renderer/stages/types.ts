@@ -9,4 +9,5 @@ export interface StageProps<T = unknown> {
   onSelect: (id: string) => void;
   onNext: () => void;
   onBack?: () => void;
+  onStartOver?: () => void;
 }

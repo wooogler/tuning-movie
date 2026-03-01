@@ -50,11 +50,11 @@ interface ChatPageProps {
 
 const stageInteractionTools: Record<Stage, string[]> = {
   movie: ['select'],
-  theater: ['select', 'prev'],
-  date: ['select', 'prev'],
-  time: ['select', 'prev'],
-  seat: ['select', 'prev'],
-  confirm: ['prev'],
+  theater: ['select', 'prev', 'startOver'],
+  date: ['select', 'prev', 'startOver'],
+  time: ['select', 'prev', 'startOver'],
+  seat: ['select', 'prev', 'startOver'],
+  confirm: ['prev', 'startOver'],
 };
 const DEFAULT_CHAT_WIDTH_PX = 768;
 const MIN_CHAT_WIDTH_PX = 360;
@@ -715,11 +715,38 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     [addSystemMessage, updateActiveSpec, setUiSpec]
   );
 
+  const handleStartOver = useCallback((context?: ToolApplyContext) => {
+    if (!activeSpec) return;
+
+    if (!context) {
+      addUserMessage(currentStage, 'back', 'Start over');
+    }
+
+    const source: 'agent' | 'devtools' =
+      context?.source === 'devtools' ? 'devtools' : 'agent';
+    const transitionReason =
+      typeof context?.reason === 'string' && context.reason.trim()
+        ? context.reason.trim()
+        : 'Return to the first stage and restart the workflow.';
+
+    if (context) {
+      annotateLastAgentMessage(currentStage, {
+        toolName: 'startOver',
+        source,
+        reason: transitionReason,
+      });
+    }
+
+    setBooking(null);
+    loadStageData('movie', { booking: {} });
+  }, [activeSpec, currentStage, addUserMessage, annotateLastAgentMessage, loadStageData]);
+
   useToolHandler({
     spec: activeSpec,
     setSpec: handleSetSpec,
     onNext: handleNext,
     onBack: handleBack,
+    onStartOver: handleStartOver,
     onPostMessage: (text: string) => {
       const stage = activeSpec?.stage ?? currentStage;
       addAgentMessage(stage, text);
@@ -1022,6 +1049,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
           onToggle={handleToggle}
           onNext={handleNext}
           onBack={handleBack}
+          onStartOver={handleStartOver}
           onConfirm={handleConfirm}
           chatWidthPx={chatWidthPx}
           isResizingWidth={isResizingChatWidth}
@@ -1076,6 +1104,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
                           onToggle={() => {}}
                           onNext={() => {}}
                           onBack={() => {}}
+                          onStartOver={undefined}
                           onConfirm={() => {}}
                         />
                       </div>
@@ -1096,6 +1125,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
                           onToggle={handleToggle}
                           onNext={handleNext}
                           onBack={handleBack}
+                          onStartOver={handleStartOver}
                           onConfirm={handleConfirm}
                         />
                       </div>
@@ -1116,6 +1146,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
                           onToggle={() => {}}
                           onNext={() => {}}
                           onBack={() => {}}
+                          onStartOver={undefined}
                           onConfirm={() => {}}
                         />
                       </div>

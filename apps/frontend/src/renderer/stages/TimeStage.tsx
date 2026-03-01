@@ -14,6 +14,7 @@ export function TimeStage({
   onSelect,
   onNext,
   onBack,
+  onStartOver,
 }: StageProps<TimeItem>) {
   const canProceed = !!spec.state.selected;
 
@@ -29,6 +30,7 @@ export function TimeStage({
       <ActionBar
         onBack={onBack}
         onNext={onNext}
+        onStartOver={onStartOver}
         nextDisabled={!canProceed}
       />
     </div>

@@ -128,7 +128,7 @@ const SYSTEM_PROMPT =
   '- If action.type="tool.call", toolName must be one of available tools.\n' +
   '- Keep assistantMessage consistent with action: if action.type="tool.call", describe the action being taken and do not ask for permission.\n' +
   '- If assistantMessage asks for confirmation or permission, action.type must be "none".\n' +
-  '- Use execution tools (select/next/prev) only when the latest user-originated turn commits to a concrete next action (explicit instruction or unambiguous confirmation).\n' +
+  '- Use execution tools (select/next/prev/startOver) only when the latest user-originated turn commits to a concrete next action (explicit instruction or unambiguous confirmation).\n' +
   '- Do not treat assistant-generated recommendations, options, or follow-up questions by themselves as confirmation; allow commitment actions only after a user-originated explicit or unambiguous affirmation.\n' +
   '- Choose exactly one action for this turn.\n' +
   '- select requires params.itemId from visible item ids.\n' +

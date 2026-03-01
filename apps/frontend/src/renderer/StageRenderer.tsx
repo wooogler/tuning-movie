@@ -20,6 +20,7 @@ export interface StageRendererProps {
   onToggle?: (id: string) => void;
   onNext: () => void;
   onBack?: () => void;
+  onStartOver?: () => void;
   onConfirm?: () => void;
 }
 
@@ -29,6 +30,7 @@ export function StageRenderer({
   onToggle,
   onNext,
   onBack,
+  onStartOver,
   onConfirm,
 }: StageRendererProps) {
   switch (spec.stage) {
@@ -48,6 +50,7 @@ export function StageRenderer({
           onSelect={onSelect}
           onNext={onNext}
           onBack={onBack}
+          onStartOver={onStartOver}
         />
       );
 
@@ -58,6 +61,7 @@ export function StageRenderer({
           onSelect={onSelect}
           onNext={onNext}
           onBack={onBack}
+          onStartOver={onStartOver}
         />
       );
 
@@ -68,6 +72,7 @@ export function StageRenderer({
           onSelect={onSelect}
           onNext={onNext}
           onBack={onBack}
+          onStartOver={onStartOver}
         />
       );
 
@@ -79,6 +84,7 @@ export function StageRenderer({
           onToggle={onToggle ?? onSelect}
           onNext={onNext}
           onBack={onBack}
+          onStartOver={onStartOver}
         />
       );
 
@@ -89,6 +95,7 @@ export function StageRenderer({
           onConfirm={onConfirm ?? onNext}
           onNext={onNext}
           onBack={onBack}
+          onStartOver={onStartOver}
         />
       );
 

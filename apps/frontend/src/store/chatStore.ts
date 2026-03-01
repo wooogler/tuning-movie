@@ -19,7 +19,7 @@ export interface SystemMessageAnnotation {
 }
 
 export interface AgentMessageActionTag {
-  toolName: 'next' | 'prev';
+  toolName: 'next' | 'prev' | 'startOver';
   reason: string;
   source: 'agent' | 'devtools';
 }

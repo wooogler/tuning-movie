@@ -16,6 +16,7 @@ export function ConfirmStage({
   spec,
   onConfirm,
   onBack,
+  onStartOver,
 }: ConfirmStageProps) {
   const meta = spec.meta as unknown as ConfirmMeta;
   const totalPrice = meta.totalPrice;
@@ -65,6 +66,7 @@ export function ConfirmStage({
       <ActionBar
         onBack={onBack}
         onNext={onConfirm}
+        onStartOver={onStartOver}
         nextLabel="Confirm Booking"
       />
     </div>

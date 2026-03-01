@@ -10,7 +10,7 @@ export function shouldResync(action: PlannedAction, outcome: ActionOutcome): boo
   // Stage navigation tools are asynchronous on host side.
   // Prefer waiting for host-driven state.updated to avoid snapshot races
   // where stale stage data causes duplicate planning turns.
-  if (toolName === 'next' || toolName === 'prev') {
+  if (toolName === 'next' || toolName === 'prev' || toolName === 'startOver') {
     return false;
   }
 

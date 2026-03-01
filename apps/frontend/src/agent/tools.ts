@@ -121,6 +121,11 @@ export const interactionTools: ToolDefinition[] = [
     parameters: {},
   },
   {
+    name: 'startOver',
+    description: 'Reset the workflow and return to the first stage',
+    parameters: {},
+  },
+  {
     name: 'postMessage',
     description: 'Post an agent message to the chat timeline',
     parameters: {
@@ -152,6 +157,7 @@ export const toolCategories: Record<string, 'modification' | 'interaction'> = {
   select: 'interaction',
   next: 'interaction',
   prev: 'interaction',
+  startOver: 'interaction',
   postMessage: 'interaction',
 };
 
