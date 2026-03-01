@@ -18,4 +18,5 @@ export interface SnapshotPayload {
   messageHistory: ChatMessage[];
   toolSchema: ToolDefinition[];
   plannerCpMemoryLimit: number;
+  extractorConflictCandidateEnabled: boolean;
 }

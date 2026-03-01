@@ -42,6 +42,7 @@ interface StageContext {
 
 type ViewMode = 'chat' | 'carousel';
 type Theme = 'dark' | 'light';
+type AgentModel = 'openai' | 'gemini';
 
 interface ChatPageProps {
   theme: Theme;
@@ -60,6 +61,50 @@ const DEFAULT_CHAT_WIDTH_PX = 768;
 const MIN_CHAT_WIDTH_PX = 360;
 const CHAT_WIDTH_VIEWPORT_PADDING_PX = 48;
 const guiAdaptationTools = ['filter', 'sort', 'highlight', 'augment', 'clearModification'] as const;
+const AGENT_BRIDGE_ENABLED_STORAGE_KEY = 'tuning-movie-agent-bridge-enabled';
+const PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY = 'tuning-movie-planner-cp-memory-limit';
+const EXTRACTOR_CONFLICT_CANDIDATE_ENABLED_STORAGE_KEY =
+  'tuning-movie-extractor-conflict-candidate-enabled';
+const AGENT_MODEL_STORAGE_KEY = 'tuning-movie-agent-model';
+const GUI_ADAPTATION_ENABLED_STORAGE_KEY = 'tuning-movie-gui-adaptation-enabled';
+
+function readStorageValue(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorageValue(key: string, value: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures (private mode/quota)
+  }
+}
+
+function readStoredBoolean(key: string, fallback: boolean): boolean {
+  const stored = readStorageValue(key);
+  if (stored === 'true') return true;
+  if (stored === 'false') return false;
+  return fallback;
+}
+
+function readStoredNonNegativeInt(key: string, fallback: number): number {
+  const stored = readStorageValue(key);
+  if (stored === null) return fallback;
+  const parsed = Number.parseInt(stored, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, parsed);
+}
+
+function readStoredAgentModel(key: string, fallback: AgentModel): AgentModel {
+  const stored = readStorageValue(key);
+  return stored === 'openai' || stored === 'gemini' ? stored : fallback;
+}
 
 function canUseNextTool(spec: UISpec): boolean {
   switch (spec.stage) {
@@ -183,10 +228,22 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [viewMode] = useState<ViewMode>('chat');
-  const [agentBridgeEnabled, setAgentBridgeEnabled] = useState(true);
-  const [plannerCpMemoryLimit, setPlannerCpMemoryLimit] = useState(10);
-  const [agentModel, setAgentModel] = useState<'openai' | 'gemini'>('openai');
-  const [guiAdaptationEnabled, setGuiAdaptationEnabled] = useState(true);
+  const [agentBridgeEnabled, setAgentBridgeEnabled] = useState<boolean>(() =>
+    readStoredBoolean(AGENT_BRIDGE_ENABLED_STORAGE_KEY, true)
+  );
+  const [plannerCpMemoryLimit, setPlannerCpMemoryLimit] = useState<number>(() =>
+    readStoredNonNegativeInt(PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY, 10)
+  );
+  const [extractorConflictCandidateEnabled, setExtractorConflictCandidateEnabled] =
+    useState<boolean>(() =>
+      readStoredBoolean(EXTRACTOR_CONFLICT_CANDIDATE_ENABLED_STORAGE_KEY, true)
+    );
+  const [agentModel, setAgentModel] = useState<AgentModel>(() =>
+    readStoredAgentModel(AGENT_MODEL_STORAGE_KEY, 'openai')
+  );
+  const [guiAdaptationEnabled, setGuiAdaptationEnabled] = useState<boolean>(() =>
+    readStoredBoolean(GUI_ADAPTATION_ENABLED_STORAGE_KEY, true)
+  );
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [carouselOffset, setCarouselOffset] = useState(0);
   const [carouselOpacity, setCarouselOpacity] = useState(1);
@@ -415,7 +472,30 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     api.getGuiAdaptationConfig().then((res) => setGuiAdaptationEnabled(res.enabled)).catch(() => {});
   }, []);
 
-  const handleModelToggle = useCallback((model: 'openai' | 'gemini') => {
+  useEffect(() => {
+    writeStorageValue(AGENT_BRIDGE_ENABLED_STORAGE_KEY, String(agentBridgeEnabled));
+  }, [agentBridgeEnabled]);
+
+  useEffect(() => {
+    writeStorageValue(PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY, String(plannerCpMemoryLimit));
+  }, [plannerCpMemoryLimit]);
+
+  useEffect(() => {
+    writeStorageValue(
+      EXTRACTOR_CONFLICT_CANDIDATE_ENABLED_STORAGE_KEY,
+      String(extractorConflictCandidateEnabled)
+    );
+  }, [extractorConflictCandidateEnabled]);
+
+  useEffect(() => {
+    writeStorageValue(AGENT_MODEL_STORAGE_KEY, agentModel);
+  }, [agentModel]);
+
+  useEffect(() => {
+    writeStorageValue(GUI_ADAPTATION_ENABLED_STORAGE_KEY, String(guiAdaptationEnabled));
+  }, [guiAdaptationEnabled]);
+
+  const handleModelToggle = useCallback((model: AgentModel) => {
     setAgentModel(model);
     setModelPickerOpen(false);
     api.setAgentModel(model).catch(() => {});
@@ -785,6 +865,7 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     messageHistory: messages,
     toolSchema: agentToolSchema,
     plannerCpMemoryLimit,
+    extractorConflictCandidateEnabled,
     enabled: agentBridgeEnabled,
     onToolCall: onToolApply,
     onAgentMessage: (text: string) => {
@@ -997,6 +1078,18 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
                 title="0 disables CP memory injection. N injects the latest N memory items per list."
               />
             </label>
+            <button
+              type="button"
+              onClick={() => setExtractorConflictCandidateEnabled((prev) => !prev)}
+              className={`px-3 py-1 text-xs rounded border ${
+                extractorConflictCandidateEnabled
+                  ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
+                  : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
+              }`}
+              title="Toggle CP extraction of conflicts and candidates."
+            >
+              CP Conflict/Candidate {extractorConflictCandidateEnabled ? 'ON' : 'OFF'}
+            </button>
             {agentBridgeEnabled && (
               <div className="relative flex">
                 <button

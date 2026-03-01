@@ -244,10 +244,15 @@ export async function planNextAction(
   try {
     const plannerTools = getPlannerToolSchema(context.toolSchema);
     const plannerCpMemoryLimit = Math.max(0, Math.floor(context.plannerCpMemoryLimit ?? 0));
+    const includeConflictsAndCandidates = context.extractorConflictCandidateEnabled;
     const plannerPreferences = sliceRecent(memory.getPreferences(), plannerCpMemoryLimit);
     const plannerConstraints = sliceRecent(memory.getConstraints(), plannerCpMemoryLimit);
-    const plannerConflicts = sliceRecent(memory.getConflicts(), plannerCpMemoryLimit);
-    const plannerCandidates = sliceRecent(memory.getCandidates(), plannerCpMemoryLimit);
+    const plannerConflicts = includeConflictsAndCandidates
+      ? sliceRecent(memory.getConflicts(), plannerCpMemoryLimit)
+      : [];
+    const plannerCandidates = includeConflictsAndCandidates
+      ? sliceRecent(memory.getCandidates(), plannerCpMemoryLimit)
+      : [];
     const plannerInput = {
       history: buildPlannerHistory(context),
       availableTools: plannerTools,

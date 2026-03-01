@@ -10,6 +10,7 @@ interface UseAgentBridgeOptions {
   messageHistory: ChatMessage[];
   toolSchema: ToolDefinition[];
   plannerCpMemoryLimit?: number;
+  extractorConflictCandidateEnabled?: boolean;
   onToolCall: (
     toolName: string,
     params: Record<string, unknown>,
@@ -73,6 +74,7 @@ export function useAgentBridge({
   messageHistory,
   toolSchema,
   plannerCpMemoryLimit = 10,
+  extractorConflictCandidateEnabled = true,
   onToolCall,
   onAgentMessage,
   onSessionEnd,
@@ -92,6 +94,7 @@ export function useAgentBridge({
     messageHistory,
     toolSchema,
     plannerCpMemoryLimit,
+    extractorConflictCandidateEnabled,
     onToolCall,
     onAgentMessage,
     onSessionEnd,
@@ -114,11 +117,21 @@ export function useAgentBridge({
       messageHistory,
       toolSchema,
       plannerCpMemoryLimit,
+      extractorConflictCandidateEnabled,
       onToolCall,
       onAgentMessage,
       onSessionEnd,
     };
-  }, [uiSpec, messageHistory, toolSchema, plannerCpMemoryLimit, onToolCall, onAgentMessage, onSessionEnd]);
+  }, [
+    uiSpec,
+    messageHistory,
+    toolSchema,
+    plannerCpMemoryLimit,
+    extractorConflictCandidateEnabled,
+    onToolCall,
+    onAgentMessage,
+    onSessionEnd,
+  ]);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -142,6 +155,7 @@ export function useAgentBridge({
       messageHistory: current.messageHistory,
       toolSchema: current.toolSchema,
       plannerCpMemoryLimit: normalizeCpMemoryLimit(current.plannerCpMemoryLimit),
+      extractorConflictCandidateEnabled: Boolean(current.extractorConflictCandidateEnabled),
     };
   }, [normalizeCpMemoryLimit]);
 
@@ -363,9 +377,21 @@ export function useAgentBridge({
         messageHistory: latestRef.current.messageHistory,
         toolSchema: latestRef.current.toolSchema,
         plannerCpMemoryLimit: normalizeCpMemoryLimit(latestRef.current.plannerCpMemoryLimit),
+        extractorConflictCandidateEnabled: Boolean(
+          latestRef.current.extractorConflictCandidateEnabled
+        ),
       },
     });
-  }, [isJoined, uiSpec, messageHistory, toolSchema, plannerCpMemoryLimit, sendEnvelope, normalizeCpMemoryLimit]);
+  }, [
+    isJoined,
+    uiSpec,
+    messageHistory,
+    toolSchema,
+    plannerCpMemoryLimit,
+    extractorConflictCandidateEnabled,
+    sendEnvelope,
+    normalizeCpMemoryLimit,
+  ]);
 
   const sendUserMessageToAgent = useCallback(
     (text: string, stage: Stage) => {

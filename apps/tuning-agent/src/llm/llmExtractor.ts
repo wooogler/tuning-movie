@@ -20,6 +20,7 @@ interface ExtractionInput {
   existingConstraints: string[];
   existingConflicts: string[];
   existingCandidates: string[];
+  extractConflictCandidate: boolean;
 }
 
 interface ExtractionOutput {
@@ -36,6 +37,7 @@ interface LlmTraceEvent {
 }
 
 type LlmTraceListener = (event: LlmTraceEvent) => void;
+type ExtractionMode = 'full' | 'light';
 
 const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
 const llmTraceListeners = new Set<LlmTraceListener>();
@@ -55,7 +57,7 @@ export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
   };
 }
 
-const EXTRACTION_SYSTEM_PROMPT =
+const EXTRACTION_SYSTEM_PROMPT_FULL =
   'You maintain four memory lists for an interactive agent turn.\n' +
   '- User\'s Preferences: what the user wants, from user intent.\n' +
   '- System\'s Constraints: objective availability or limitation facts from the system state.\n' +
@@ -83,10 +85,19 @@ const EXTRACTION_SYSTEM_PROMPT =
   'Conflict rules:\n' +
   '- Add a conflict only when a specific preference cannot currently be satisfied due to constraints.\n' +
   '- Keep each conflict explicit and actionable.\n' +
+  '- Detect mismatches across any preference dimension (for example time/date, budget, brand, location, content attributes, seating).\n' +
+  '- If current options cannot satisfy a stated preference, add a conflict even when other non-matching options exist.\n' +
+  '- Use currentStage and visibleItems to decide what is currently satisfiable right now.\n' +
+  '- Keep unresolved conflicts until either preferences change or constraints/options change.\n' +
+  '- Write conflicts with both sides: desired preference + blocking constraint fact.\n' +
   '\n' +
   'Candidate rules:\n' +
   '- Candidates should represent concrete viable options available now for user choice.\n' +
-  '- Derive primarily from visibleItems and messageHistory, constrained by preferences and constraints.\n' +
+  '- Build candidates as multi-stage decision paths, not isolated single-step items, whenever enough context exists.\n' +
+  '- Combine known selections from prior stages with current/future unresolved slots (for example: already-selected context + current choice + downstream choice).\n' +
+  '- If a stage value is unresolved, keep the path candidate explicit about the unresolved slot.\n' +
+  '- Keep this representation domain-agnostic; do not rely on domain-specific templates.\n' +
+  '- Derive candidates primarily from visibleItems and messageHistory, constrained by preferences and constraints.\n' +
   '- Store candidates as natural-language memory sentences (free-form text), not structured objects and not fixed templates.\n' +
   '- Keep each candidate concise, specific, and readable; include key trade-offs when they matter.\n' +
   '- Keep one candidate per list item.\n' +
@@ -94,6 +105,33 @@ const EXTRACTION_SYSTEM_PROMPT =
   'Output rules:\n' +
   '- Do not include duplicates.\n' +
   '- Return JSON only matching this schema: { "updatedPreferences": string[], "updatedConstraints": string[], "updatedConflicts": string[], "updatedCandidates": string[] }';
+
+const EXTRACTION_SYSTEM_PROMPT_LIGHT =
+  'You maintain two memory lists for an interactive agent turn.\n' +
+  '- User\'s Preferences: what the user wants, from user intent.\n' +
+  '- System\'s Constraints: objective availability or limitation facts from the system state.\n' +
+  '\n' +
+  'Inputs include existingPreferences, existingConstraints, userMessage, messageHistory, visibleItems, selectedItem, currentStage, action metadata, and outcomeOk.\n' +
+  '\n' +
+  'Update policy:\n' +
+  '- Return the full updated list for both categories on every turn.\n' +
+  '- Start from existing lists, then revise by this turn\'s evidence.\n' +
+  '- If a previous item becomes obsolete, remove it by not including it in the updated list.\n' +
+  '- If no change is needed, return existing lists as-is.\n' +
+  '\n' +
+  'Preference rules:\n' +
+  '- Preferences must come from user intent, not inferred solely from system state.\n' +
+  '- Ignore trivial acknowledgements that add no durable intent.\n' +
+  '- Keep each item as a short standalone sentence.\n' +
+  '\n' +
+  'Constraint rules:\n' +
+  '- Constraints must be objective system facts, not user desires.\n' +
+  '- Prefer specific, durable facts over temporary UI states.\n' +
+  '- Keep each item as a short standalone sentence.\n' +
+  '\n' +
+  'Output rules:\n' +
+  '- Do not include duplicates.\n' +
+  '- Return JSON only matching this schema: { "updatedPreferences": string[], "updatedConstraints": string[] }';
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
   try {
@@ -118,18 +156,183 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   return null;
 }
 
-function toExtractionOutput(value: Record<string, unknown>): ExtractionOutput {
+const DAY_TOKEN_TO_UTC: Record<string, number> = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
+
+const UTC_DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+function normalizeDayToken(token: string): string {
+  return token.trim().toLowerCase().slice(0, 3);
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function getUtcWeekdayFromIsoDate(value: string): number | null {
+  if (!isIsoDate(value)) return null;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getUTCDay();
+}
+
+function getVisibleDateWeekdays(items: VisibleItemSummary[]): Set<number> {
+  const weekdays = new Set<number>();
+  for (const item of items) {
+    const weekdayFromId = getUtcWeekdayFromIsoDate(item.id);
+    if (weekdayFromId !== null) {
+      weekdays.add(weekdayFromId);
+      continue;
+    }
+
+    for (const match of item.value.matchAll(/\b(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/gi)) {
+      const normalized = normalizeDayToken(match[0]);
+      const mapped = DAY_TOKEN_TO_UTC[normalized];
+      if (typeof mapped === 'number') {
+        weekdays.add(mapped);
+      }
+    }
+  }
+  return weekdays;
+}
+
+function getVisibleIsoDates(items: VisibleItemSummary[]): Set<string> {
+  const dates = new Set<string>();
+  for (const item of items) {
+    if (isIsoDate(item.id)) {
+      dates.add(item.id);
+    }
+  }
+  return dates;
+}
+
+function mergeUnique(base: string[], extras: string[]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const item of [...base, ...extras]) {
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    merged.push(trimmed);
+  }
+  return merged;
+}
+
+interface TemporalPreferenceSignals {
+  wantsWeekend: boolean;
+  wantsWeekday: boolean;
+  wantedDays: Set<number>;
+  explicitDates: Set<string>;
+}
+
+function collectTemporalPreferenceSignals(preferences: string[], userMessage: string): TemporalPreferenceSignals {
+  const corpus = `${preferences.join(' ')} ${userMessage}`.toLowerCase();
+  const wantedDays = new Set<number>();
+  for (const match of corpus.matchAll(/\b(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/g)) {
+    const normalized = normalizeDayToken(match[0]);
+    const mapped = DAY_TOKEN_TO_UTC[normalized];
+    if (typeof mapped === 'number') {
+      wantedDays.add(mapped);
+    }
+  }
+  const explicitDates = new Set<string>(corpus.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? []);
+  return {
+    wantsWeekend: /\bweekend\b/.test(corpus),
+    wantsWeekday: /\bweekday\b/.test(corpus),
+    wantedDays,
+    explicitDates,
+  };
+}
+
+function applyConflictHeuristics(
+  input: ExtractionInput,
+  output: ExtractionOutput,
+  mode: ExtractionMode
+): ExtractionOutput {
+  if (mode !== 'full') return output;
+
+  const conflictsToAdd: string[] = [];
+  const preferences = output.updatedPreferences;
+
+  if (input.currentStage === 'date') {
+    const signals = collectTemporalPreferenceSignals(preferences, input.userMessage);
+    const visibleWeekdays = getVisibleDateWeekdays(input.visibleItems);
+    const visibleIsoDates = getVisibleIsoDates(input.visibleItems);
+
+    if (signals.wantsWeekend) {
+      const weekendAvailable = visibleWeekdays.has(0) || visibleWeekdays.has(6);
+      if (!weekendAvailable) {
+        conflictsToAdd.push(
+          'The user prefers a weekend date, but the currently available date options do not include Saturday or Sunday.'
+        );
+      }
+    }
+
+    if (signals.wantsWeekday) {
+      const weekdayAvailable = Array.from(visibleWeekdays).some((day) => day >= 1 && day <= 5);
+      if (!weekdayAvailable) {
+        conflictsToAdd.push(
+          'The user prefers a weekday date, but the currently available date options include only weekend dates.'
+        );
+      }
+    }
+
+    if (signals.wantedDays.size > 0) {
+      const hasRequestedDay = Array.from(signals.wantedDays).some((day) => visibleWeekdays.has(day));
+      if (!hasRequestedDay) {
+        const requestedDayLabels = Array.from(signals.wantedDays)
+          .sort((a, b) => a - b)
+          .map((day) => UTC_DAY_LABEL[day] ?? String(day))
+          .join(', ');
+        conflictsToAdd.push(
+          `The user requested specific day(s) (${requestedDayLabels}), but none of the currently available date options match those day(s).`
+        );
+      }
+    }
+
+    if (signals.explicitDates.size > 0) {
+      const hasRequestedDate = Array.from(signals.explicitDates).some((date) => visibleIsoDates.has(date));
+      if (!hasRequestedDate) {
+        const requestedDates = Array.from(signals.explicitDates).sort().join(', ');
+        conflictsToAdd.push(
+          `The user requested specific date(s) (${requestedDates}), but those date(s) are not currently available.`
+        );
+      }
+    }
+  }
+
+  return {
+    ...output,
+    updatedConflicts: mergeUnique(output.updatedConflicts, conflictsToAdd),
+  };
+}
+
+function toExtractionOutput(
+  value: Record<string, unknown>,
+  includeConflictsAndCandidates: boolean
+): ExtractionOutput {
   const updatedPreferences = Array.isArray(value.updatedPreferences)
     ? (value.updatedPreferences as unknown[]).filter((item): item is string => typeof item === 'string')
     : [];
   const updatedConstraints = Array.isArray(value.updatedConstraints)
     ? (value.updatedConstraints as unknown[]).filter((item): item is string => typeof item === 'string')
     : [];
-  const updatedConflicts = Array.isArray(value.updatedConflicts)
-    ? (value.updatedConflicts as unknown[]).filter((item): item is string => typeof item === 'string')
+  const updatedConflicts = includeConflictsAndCandidates
+    ? Array.isArray(value.updatedConflicts)
+      ? (value.updatedConflicts as unknown[]).filter((item): item is string => typeof item === 'string')
+      : []
     : [];
-  const updatedCandidates = Array.isArray(value.updatedCandidates)
-    ? (value.updatedCandidates as unknown[]).filter((item): item is string => typeof item === 'string')
+  const updatedCandidates = includeConflictsAndCandidates
+    ? Array.isArray(value.updatedCandidates)
+      ? (value.updatedCandidates as unknown[]).filter((item): item is string => typeof item === 'string')
+      : []
     : [];
   return { updatedPreferences, updatedConstraints, updatedConflicts, updatedCandidates };
 }
@@ -166,16 +369,40 @@ function parseOpenAIOutputText(body: unknown): string | null {
   return null;
 }
 
-async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutput | null> {
+async function extractWithOpenAI(
+  input: ExtractionInput,
+  mode: ExtractionMode
+): Promise<ExtractionOutput | null> {
   if (process.env.AGENT_ENABLE_OPENAI === 'false') return null;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
   const model = getOpenAIModel();
+  const includeConflictsAndCandidates = mode === 'full';
+  const schemaProperties = includeConflictsAndCandidates
+    ? {
+        updatedPreferences: { type: 'array', items: { type: 'string' } },
+        updatedConstraints: { type: 'array', items: { type: 'string' } },
+        updatedConflicts: { type: 'array', items: { type: 'string' } },
+        updatedCandidates: { type: 'array', items: { type: 'string' } },
+      }
+    : {
+        updatedPreferences: { type: 'array', items: { type: 'string' } },
+        updatedConstraints: { type: 'array', items: { type: 'string' } },
+      };
+  const requiredKeys = includeConflictsAndCandidates
+    ? ['updatedPreferences', 'updatedConstraints', 'updatedConflicts', 'updatedCandidates']
+    : ['updatedPreferences', 'updatedConstraints'];
   const body = {
     model,
     input: [
-      { role: 'system', content: EXTRACTION_SYSTEM_PROMPT + '\n- Return JSON only via schema.' },
+      {
+        role: 'system',
+        content:
+          (includeConflictsAndCandidates
+            ? EXTRACTION_SYSTEM_PROMPT_FULL
+            : EXTRACTION_SYSTEM_PROMPT_LIGHT) + '\n- Return JSON only via schema.',
+      },
       { role: 'user', content: JSON.stringify(input) },
     ],
     text: {
@@ -185,13 +412,8 @@ async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutp
         strict: false,
         schema: {
           type: 'object',
-          properties: {
-            updatedPreferences: { type: 'array', items: { type: 'string' } },
-            updatedConstraints: { type: 'array', items: { type: 'string' } },
-            updatedConflicts: { type: 'array', items: { type: 'string' } },
-            updatedCandidates: { type: 'array', items: { type: 'string' } },
-          },
-          required: ['updatedPreferences', 'updatedConstraints', 'updatedConflicts', 'updatedCandidates'],
+          properties: schemaProperties,
+          required: requiredKeys,
           additionalProperties: false,
         },
       },
@@ -201,7 +423,7 @@ async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutp
   if (DEBUG_LLM) {
     console.log('[tuning-agent-v2][extractor:openai] request:', JSON.stringify(input));
   }
-  emitLlmTrace('request', { model, input });
+  emitLlmTrace('request', { model, mode, input });
 
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
@@ -232,7 +454,7 @@ async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutp
   const parsed = parseJsonObject(outputText);
   emitLlmTrace('response.parsed', { parsed });
   if (!parsed) return null;
-  return toExtractionOutput(parsed);
+  return toExtractionOutput(parsed, includeConflictsAndCandidates);
 }
 
 // ── Gemini ──────────────────────────────────────────────────────────────────
@@ -266,17 +488,27 @@ function extractGeminiText(body: unknown): string | null {
   return null;
 }
 
-async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutput | null> {
+async function extractWithGemini(
+  input: ExtractionInput,
+  mode: ExtractionMode
+): Promise<ExtractionOutput | null> {
   if (process.env.AGENT_ENABLE_GEMINI === 'false') return null;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   const model = getGeminiModel();
   const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
+  const includeConflictsAndCandidates = mode === 'full';
 
   const body = {
     systemInstruction: {
-      parts: [{ text: EXTRACTION_SYSTEM_PROMPT }],
+      parts: [
+        {
+          text: includeConflictsAndCandidates
+            ? EXTRACTION_SYSTEM_PROMPT_FULL
+            : EXTRACTION_SYSTEM_PROMPT_LIGHT,
+        },
+      ],
     },
     contents: [
       {
@@ -292,7 +524,7 @@ async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutp
   if (DEBUG_LLM) {
     console.log('[tuning-agent-v2][extractor:gemini] request:', JSON.stringify(input));
   }
-  emitLlmTrace('request', { model, input });
+  emitLlmTrace('request', { model, mode, input });
 
   const response = await fetch(url, {
     method: 'POST',
@@ -320,7 +552,7 @@ async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutp
   const parsed = parseJsonObject(outputText);
   emitLlmTrace('response.parsed', { parsed });
   if (!parsed) return null;
-  return toExtractionOutput(parsed);
+  return toExtractionOutput(parsed, includeConflictsAndCandidates);
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -339,12 +571,15 @@ export interface ExtractionContext {
   existingConstraints: string[];
   existingConflicts: string[];
   existingCandidates: string[];
+  extractConflictCandidate?: boolean;
 }
 
 export async function extractPreferencesAndConstraints(
   ctx: ExtractionContext
 ): Promise<ExtractionOutput> {
   refreshModelEnvVars();
+  const includeConflictsAndCandidates = ctx.extractConflictCandidate !== false;
+  const mode: ExtractionMode = includeConflictsAndCandidates ? 'full' : 'light';
 
   const geminiEnabled =
     process.env.AGENT_ENABLE_GEMINI !== 'false' && Boolean(process.env.GEMINI_API_KEY);
@@ -369,15 +604,22 @@ export async function extractPreferencesAndConstraints(
     existingConstraints: ctx.existingConstraints,
     existingConflicts: ctx.existingConflicts,
     existingCandidates: ctx.existingCandidates,
+    extractConflictCandidate: includeConflictsAndCandidates,
   };
 
   const result = geminiEnabled
-    ? await extractWithGemini(input)
-    : await extractWithOpenAI(input);
+    ? await extractWithGemini(input, mode)
+    : await extractWithOpenAI(input, mode);
 
   if (!result) {
     throw new Error('EXTRACTION_INVALID_OUTPUT');
   }
 
-  return result;
+  return includeConflictsAndCandidates
+    ? applyConflictHeuristics(input, result, mode)
+    : {
+        ...result,
+        updatedConflicts: [],
+        updatedCandidates: [],
+      };
 }

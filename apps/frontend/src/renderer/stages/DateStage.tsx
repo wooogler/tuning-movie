@@ -1,10 +1,10 @@
 /**
  * DateStage Component
  *
- * 날짜 선택 Stage - Full Calendar with month navigation
+ * 날짜 선택 Stage - Full Calendar
  */
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { DateItem } from '../../spec';
 import { ActionBar } from './ActionBar';
 import type { StageProps } from './types';
@@ -108,10 +108,10 @@ export function DateStage({
 }: StageProps<DateItem>) {
   const canProceed = !!spec.state.selected;
 
-  // Current viewed month (initialized to fixed study date)
+  // Fix month view to current study month.
   const fixedCurrentDate = getFixedCurrentDate();
-  const [viewYear, setViewYear] = useState(fixedCurrentDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(fixedCurrentDate.getMonth());
+  const viewYear = fixedCurrentDate.getFullYear();
+  const viewMonth = fixedCurrentDate.getMonth();
 
   // Generate calendar days for current view
   const calendarDays = useMemo(
@@ -124,25 +124,6 @@ export function DateStage({
     ),
     [viewYear, viewMonth, spec.items, spec.state.selected?.id, spec.modification.highlight]
   );
-
-  // Month navigation
-  const goToPrevMonth = () => {
-    if (viewMonth === 0) {
-      setViewYear(viewYear - 1);
-      setViewMonth(11);
-    } else {
-      setViewMonth(viewMonth - 1);
-    }
-  };
-
-  const goToNextMonth = () => {
-    if (viewMonth === 11) {
-      setViewYear(viewYear + 1);
-      setViewMonth(0);
-    } else {
-      setViewMonth(viewMonth + 1);
-    }
-  };
 
   // Format month display
   const monthYearDisplay = new Date(viewYear, viewMonth).toLocaleString('en-US', {
@@ -157,29 +138,9 @@ export function DateStage({
 
   return (
     <div className="flex flex-col items-center gap-6">
-      {/* Month navigation header */}
-      <div className="flex items-center justify-between w-full max-w-md">
-        <button
-          onClick={goToPrevMonth}
-          className="p-2 rounded-lg bg-dark-light hover:bg-dark-lighter text-fg-strong transition-colors"
-          aria-label="Previous month"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-
+      {/* Month header */}
+      <div className="w-full max-w-md text-center">
         <div className="text-xl font-semibold text-fg-strong">{monthYearDisplay}</div>
-
-        <button
-          onClick={goToNextMonth}
-          className="p-2 rounded-lg bg-dark-light hover:bg-dark-lighter text-fg-strong transition-colors"
-          aria-label="Next month"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
       </div>
 
       {/* Calendar grid */}

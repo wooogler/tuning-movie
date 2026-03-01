@@ -114,6 +114,10 @@ function toSnapshotPayload(value: unknown): SnapshotStatePayload {
     plannerCpMemoryLimit: resolvePlannerCpMemoryLimit(payload, DEFAULT_CP_MEMORY_LIMIT),
     plannerCpEnabled:
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
+    extractorConflictCandidateEnabled:
+      typeof payload.extractorConflictCandidateEnabled === 'boolean'
+        ? payload.extractorConflictCandidateEnabled
+        : undefined,
   };
 }
 
@@ -127,6 +131,10 @@ function toStateUpdatedPayload(value: unknown): StateUpdatedPayload {
     plannerCpMemoryLimit: resolvePlannerCpMemoryLimit(payload, DEFAULT_CP_MEMORY_LIMIT),
     plannerCpEnabled:
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
+    extractorConflictCandidateEnabled:
+      typeof payload.extractorConflictCandidateEnabled === 'boolean'
+        ? payload.extractorConflictCandidateEnabled
+        : undefined,
   };
 }
 
@@ -362,6 +370,62 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       if (decisionExplainText.trim()) {
         await maybeSendAssistantMessage(planningContext, decisionExplainText);
       }
+      if (planningContext.lastUserMessage?.text?.trim()) {
+        try {
+          const spec = toUISpecLike(planningContext.uiSpec);
+          const visibleItems = spec
+            ? getEnabledVisibleItems(spec).map((item) => ({
+                id: item.id,
+                value: item.value,
+                disabled: item.isDisabled,
+              }))
+            : [];
+          const selectedId = spec ? getSelectedId(spec) : null;
+          const selectedValue = spec?.state?.selected?.value;
+          const selectedItem =
+            selectedId && typeof selectedValue === 'string' ? { id: selectedId, value: selectedValue } : null;
+
+          const extractionCtx: ExtractionContext = {
+            userMessage: planningContext.lastUserMessage.text,
+            currentStage: planningContext.stage ?? '',
+            messageHistory: planningContext.messageHistoryTail,
+            visibleItems,
+            selectedItem,
+            actionType: 'none',
+            toolName: '',
+            actionParams: {},
+            outcomeOk: true,
+            existingPreferences: memory.getPreferences(),
+            existingConstraints: memory.getConstraints(),
+            existingConflicts: memory.getConflicts(),
+            existingCandidates: memory.getCandidates(),
+            extractConflictCandidate: planningContext.extractorConflictCandidateEnabled,
+          };
+
+          const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
+          memory.setPreferences(extractionResult.updatedPreferences);
+          memory.setConstraints(extractionResult.updatedConstraints);
+          memory.setConflicts(extractionResult.updatedConflicts);
+          memory.setCandidates(extractionResult.updatedCandidates);
+          syncMonitorMemoryState();
+          monitor.pushEvent('extraction.completed', {
+            trigger: 'planner.no_action',
+            updatedPreferences: extractionResult.updatedPreferences,
+            updatedConstraints: extractionResult.updatedConstraints,
+            updatedConflicts: extractionResult.updatedConflicts,
+            updatedCandidates: extractionResult.updatedCandidates,
+            preferences: memory.getPreferences(),
+            constraints: memory.getConstraints(),
+            conflicts: memory.getConflicts(),
+            candidates: memory.getCandidates(),
+          });
+        } catch (extractionError) {
+          monitor.pushEvent('extraction.failed', {
+            trigger: 'planner.no_action',
+            message: extractionError instanceof Error ? extractionError.message : String(extractionError),
+          });
+        }
+      }
       monitor.pushEvent('planner.no_action', {
         source: decision.source,
         explainText: decision.explainText ?? null,
@@ -488,6 +552,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         existingConstraints: memory.getConstraints(),
         existingConflicts: memory.getConflicts(),
         existingCandidates: memory.getCandidates(),
+        extractConflictCandidate: latestContext.extractorConflictCandidateEnabled,
       };
 
       try {
