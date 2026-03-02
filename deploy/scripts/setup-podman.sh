@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 DEPLOY_USER=${DEPLOY_USER:-"$USER"}
-APP_DIR=${APP_DIR:-"/opt/tuning-movie"}
+APP_DIR=${APP_DIR:-"/home/sangwonlee/tuning-movie"}
 
 echo -e "${GREEN}=== TUNING-MOVIE Podman Setup ===${NC}"
 echo -e "${YELLOW}Deploy User:${NC} $DEPLOY_USER"

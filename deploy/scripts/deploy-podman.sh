@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-APP_DIR=${APP_DIR:-"/opt/tuning-movie"}
+APP_DIR=${APP_DIR:-"/home/sangwonlee/tuning-movie"}
 BACKUP_DIR=${BACKUP_DIR:-"/opt/tuning-movie-backups"}
 
 echo -e "${GREEN}=== TUNING-MOVIE Podman Deploy ===${NC}"
