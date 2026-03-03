@@ -7,6 +7,7 @@ interface StudyEndPageProps {
   theme: Theme;
   onThemeToggle: () => void;
   selectedMode: StudyModeId;
+  selectedScenarioTitle?: string | null;
   onResetMode: () => void;
 }
 
@@ -14,6 +15,7 @@ export function StudyEndPage({
   theme,
   onThemeToggle,
   selectedMode,
+  selectedScenarioTitle,
   onResetMode,
 }: StudyEndPageProps) {
   const navigate = useNavigate();
@@ -48,6 +50,9 @@ export function StudyEndPage({
 
         <div className="space-y-2 rounded-xl border border-dark-border bg-dark p-4">
           <div className="text-sm font-semibold text-fg-strong">{selectedModeOption.label}</div>
+          {selectedScenarioTitle ? (
+            <div className="text-sm text-fg-strong">Scenario: {selectedScenarioTitle}</div>
+          ) : null}
           <div className="text-sm text-fg-muted">{selectedModeOption.description}</div>
           <div className="text-xs text-fg-faint">
             Agent {selectedModeOption.config.agentEnabled ? 'ON' : 'OFF'} / GUI Adaptation{' '}

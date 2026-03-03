@@ -9,6 +9,8 @@ interface UseAgentBridgeOptions {
   uiSpec: UISpec | null;
   messageHistory: ChatMessage[];
   toolSchema: ToolDefinition[];
+  sessionId?: string;
+  studyToken?: string;
   plannerCpMemoryLimit?: number;
   extractorConflictCandidateEnabled?: boolean;
   onToolCall: (
@@ -73,6 +75,8 @@ export function useAgentBridge({
   uiSpec,
   messageHistory,
   toolSchema,
+  sessionId,
+  studyToken,
   plannerCpMemoryLimit = 10,
   extractorConflictCandidateEnabled = true,
   onToolCall,
@@ -87,7 +91,10 @@ export function useAgentBridge({
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
-  const sessionIdRef = useRef<string>((import.meta.env.VITE_AGENT_SESSION_ID as string) || 'default');
+  const sessionIdRef = useRef<string>(
+    sessionId || (import.meta.env.VITE_AGENT_SESSION_ID as string) || 'default'
+  );
+  const studyTokenRef = useRef<string>(studyToken ?? '');
   const enabledRef = useRef(enabled);
   const latestRef = useRef({
     uiSpec,
@@ -136,6 +143,14 @@ export function useAgentBridge({
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId || (import.meta.env.VITE_AGENT_SESSION_ID as string) || 'default';
+  }, [sessionId]);
+
+  useEffect(() => {
+    studyTokenRef.current = studyToken ?? '';
+  }, [studyToken]);
 
   const wsUrl = useMemo(() => buildWsUrl(), []);
 
@@ -322,6 +337,7 @@ export function useAgentBridge({
             payload: {
               role: 'host',
               sessionId: sessionIdRef.current,
+              ...(studyTokenRef.current ? { studyToken: studyTokenRef.current } : {}),
             },
           })
         );
@@ -364,7 +380,7 @@ export function useAgentBridge({
         currentWs.close();
       }
     };
-  }, [enabled, handleEnvelope, wsUrl]);
+  }, [enabled, handleEnvelope, sessionId, studyToken, wsUrl]);
 
   useEffect(() => {
     if (!isJoined) return;

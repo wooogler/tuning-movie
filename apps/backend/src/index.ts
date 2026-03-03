@@ -11,6 +11,9 @@ import { seatRoutes } from './routes/seats';
 import { bookingRoutes } from './routes/bookings';
 import { agentRelayRoutes } from './routes/agentRelay';
 import { agentConfigRoutes } from './routes/agentConfig';
+import { studyRoutes } from './routes/study';
+import { studyContextPlugin } from './plugins/studyContext';
+import { stopAllSessionAgents } from './study/agentSupervisor';
 
 const fastify = Fastify({
   logger: true,
@@ -24,6 +27,9 @@ const start = async () => {
     await fastify.register(websocket);
 
     // Register API routes
+    await fastify.register(studyRoutes);
+    // Register request hook on the root instance so it applies to all protected routes.
+    await studyContextPlugin(fastify);
     await fastify.register(movieRoutes);
     await fastify.register(theaterRoutes);
     await fastify.register(showingRoutes);
@@ -66,3 +72,10 @@ const start = async () => {
 };
 
 start();
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    stopAllSessionAgents();
+    process.exit(0);
+  });
+}

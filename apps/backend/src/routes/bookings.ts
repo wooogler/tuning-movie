@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import { and, eq, inArray } from 'drizzle-orm';
-import { db, bookings, bookingSeats, seats, showings } from '../db';
+import { bookings, bookingSeats, seats, showings } from '../db';
 import { getFixedCurrentDateUtc } from '../studyDate';
+import { getDbFromRequest } from '../study/requestDb';
 
 interface BookingRequest {
   showingId: string;
@@ -14,6 +15,7 @@ interface BookingRequest {
 export async function bookingRoutes(fastify: FastifyInstance) {
   // Create a booking
   fastify.post('/bookings', async (request, reply) => {
+    const db = getDbFromRequest(request);
     const body = request.body as BookingRequest;
     const { showingId, seats: seatIds, customerName, customerEmail } = body;
 
@@ -115,6 +117,7 @@ export async function bookingRoutes(fastify: FastifyInstance) {
   // Get booking by ID
   fastify.get('/bookings/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const db = getDbFromRequest(request);
     const booking = db.select().from(bookings).where(eq(bookings.id, id)).get();
 
     if (!booking) {
@@ -139,6 +142,7 @@ export async function bookingRoutes(fastify: FastifyInstance) {
   // Cancel booking
   fastify.delete('/bookings/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const db = getDbFromRequest(request);
     const booking = db.select().from(bookings).where(eq(bookings.id, id)).get();
 
     if (!booking) {

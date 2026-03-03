@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
-import { db, theaters, showings } from '../db';
+import { theaters, showings } from '../db';
+import { getDbFromRequest } from '../study/requestDb';
 
 type TheaterRow = typeof theaters.$inferSelect;
 
@@ -25,7 +26,8 @@ function toTheaterResponse(row: TheaterRow) {
 
 export async function theaterRoutes(fastify: FastifyInstance) {
   // Get all theaters
-  fastify.get('/theaters', async () => {
+  fastify.get('/theaters', async (request) => {
+    const db = getDbFromRequest(request);
     const result = db.select().from(theaters).all();
     return { theaters: result.map(toTheaterResponse) };
   });
@@ -33,6 +35,7 @@ export async function theaterRoutes(fastify: FastifyInstance) {
   // Get theaters by movie ID
   fastify.get('/theaters/movie/:movieId', async (request) => {
     const { movieId } = request.params as { movieId: string };
+    const db = getDbFromRequest(request);
 
     // Get unique theaters that are showing this movie
     const movieShowings = db
@@ -55,6 +58,7 @@ export async function theaterRoutes(fastify: FastifyInstance) {
   // Get theater by ID
   fastify.get('/theaters/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const db = getDbFromRequest(request);
     const theater = db.select().from(theaters).where(eq(theaters.id, id)).get();
 
     if (!theater) {

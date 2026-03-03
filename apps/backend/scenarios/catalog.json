@@ -1,0 +1,37 @@
+{
+  "scenarios": [
+    {
+      "id": "scn_budget_night",
+      "title": "Budget Night Out",
+      "story": "You are helping a narrator who wants an affordable movie night this weekend. They care most about lower ticket prices and are willing to travel farther if the total cost is better.",
+      "narratorPreferenceTypes": ["budget", "price-sensitivity", "distance-flexibility"],
+      "templateDbFile": "scn_budget_night.db",
+      "seedFilters": {
+        "includeMovieIds": ["m2", "m3", "m8"],
+        "includeTheaterIds": ["tb", "tc", "td"]
+      }
+    },
+    {
+      "id": "scn_family_weekend",
+      "title": "Family Weekend Plan",
+      "story": "You are helping a narrator coordinating a family movie plan. They prefer daytime showtimes, convenient locations, and choices with enough open seats for group seating.",
+      "narratorPreferenceTypes": ["group-seating", "daytime-preference", "convenience"],
+      "templateDbFile": "scn_family_weekend.db",
+      "seedFilters": {
+        "includeMovieIds": ["m1", "m4", "m7"],
+        "includeTheaterIds": ["ta", "tb"]
+      }
+    },
+    {
+      "id": "scn_thrill_night",
+      "title": "Late Thriller Hunt",
+      "story": "You are helping a narrator looking for a late-night thriller experience. They prioritize evening times, premium seats when available, and are less sensitive to distance.",
+      "narratorPreferenceTypes": ["late-time", "genre-focus", "premium-seat-preference"],
+      "templateDbFile": "scn_thrill_night.db",
+      "seedFilters": {
+        "includeMovieIds": ["m4", "m5", "m7"],
+        "includeTheaterIds": ["ta", "tc"]
+      }
+    }
+  ]
+}

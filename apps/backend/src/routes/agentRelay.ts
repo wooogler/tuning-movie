@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { FastifyInstance } from 'fastify';
+import { getSessionContextByToken } from '../study/sessionService';
 
 type Role = 'host' | 'agent';
 type Direction = 'in' | 'out' | 'internal';
@@ -289,10 +290,10 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
       }
 
       if (message.type === 'relay.join') {
-        const role = message.payload?.role;
-        const requestedSessionId = message.payload?.sessionId;
-        const payload = message.payload;
-        const sessionId =
+        const payload = message.payload ?? {};
+        const role = payload.role;
+        const requestedSessionId = payload.sessionId;
+        let sessionId =
           typeof requestedSessionId === 'string' && requestedSessionId.trim()
             ? requestedSessionId.trim()
             : DEFAULT_SESSION_ID;
@@ -300,6 +301,31 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
         if (role !== 'host' && role !== 'agent') {
           sendError(client.socket, 'INVALID_MESSAGE', 'relay.join payload.role must be "host" or "agent".', message.id);
           return;
+        }
+
+        if (role === 'host') {
+          const studyToken =
+            typeof payload.studyToken === 'string' ? payload.studyToken.trim() : '';
+          if (!studyToken) {
+            sendError(
+              client.socket,
+              'SESSION_NOT_ACTIVE',
+              'relay.join for host requires payload.studyToken.',
+              message.id
+            );
+            return;
+          }
+          const context = getSessionContextByToken(studyToken);
+          if (!context) {
+            sendError(
+              client.socket,
+              'SESSION_NOT_ACTIVE',
+              'Study session is invalid, finished, or expired.',
+              message.id
+            );
+            return;
+          }
+          sessionId = context.record.relaySessionId;
         }
 
         if (client.sessionId) {

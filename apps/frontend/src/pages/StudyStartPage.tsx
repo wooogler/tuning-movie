@@ -1,5 +1,8 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { api } from '../api/client';
 import { STUDY_MODE_OPTIONS, type StudyModeId } from './studyOptions';
+import type { StudySessionState } from '../study/sessionStorage';
 
 type Theme = 'dark' | 'light';
 
@@ -8,6 +11,9 @@ interface StudyStartPageProps {
   onThemeToggle: () => void;
   selectedMode: StudyModeId;
   onModeChange: (mode: StudyModeId) => void;
+  selectedScenarioId: string | null;
+  onScenarioChange: (scenarioId: string) => void;
+  onSessionCreated: (session: StudySessionState) => void;
 }
 
 export function StudyStartPage({
@@ -15,17 +21,82 @@ export function StudyStartPage({
   onThemeToggle,
   selectedMode,
   onModeChange,
+  selectedScenarioId,
+  onScenarioChange,
+  onSessionCreated,
 }: StudyStartPageProps) {
   const navigate = useNavigate();
+  const [loadingScenarios, setLoadingScenarios] = useState(true);
+  const [startingSession, setStartingSession] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scenarios, setScenarios] = useState<
+    Array<{
+      id: string;
+      title: string;
+      story: string;
+      narratorPreferenceTypes: string[];
+    }>
+  >([]);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoadingScenarios(true);
+    setError(null);
+    api.getStudyScenarios()
+      .then((result) => {
+        if (!mounted) return;
+        setScenarios(result.scenarios);
+        if (result.scenarios.length > 0) {
+          const hasSelected = selectedScenarioId
+            ? result.scenarios.some((scenario) => scenario.id === selectedScenarioId)
+            : false;
+          if (!hasSelected) {
+            onScenarioChange(result.scenarios[0].id);
+          }
+        }
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : 'Failed to load scenarios');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoadingScenarios(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [onScenarioChange, selectedScenarioId]);
+
+  const handleStartSession = async () => {
+    if (!selectedScenarioId || startingSession) return;
+    setStartingSession(true);
+    setError(null);
+    try {
+      const session = await api.createStudySession({
+        scenarioId: selectedScenarioId,
+        studyMode: selectedMode,
+      });
+      onSessionCreated(session);
+      navigate('/booking');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start study session');
+    } finally {
+      setStartingSession(false);
+    }
+  };
+
+  const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? null;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-dark px-4 py-8">
-      <div className="w-full max-w-3xl rounded-2xl border border-dark-border bg-dark-light p-6 sm:p-8">
+      <div className="w-full max-w-4xl rounded-2xl border border-dark-border bg-dark-light p-6 sm:p-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-fg-strong">User Study Setup</h1>
             <p className="mt-1 text-sm text-fg-muted">
-              Select one study mode before starting the prototype.
+              Select one TUNING mode and one scenario before starting.
             </p>
           </div>
           <button
@@ -41,41 +112,104 @@ export function StudyStartPage({
           </button>
         </div>
 
-        <div className="space-y-3">
-          {STUDY_MODE_OPTIONS.map((option) => {
-            const checked = selectedMode === option.id;
-            return (
-              <label
-                key={option.id}
-                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
-                  checked
-                    ? 'border-primary/70 bg-primary/10'
-                    : 'border-dark-border bg-dark hover:border-dark-lighter'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="study-mode"
-                  className="mt-1 h-4 w-4 accent-primary"
-                  checked={checked}
-                  onChange={() => onModeChange(option.id)}
-                />
-                <div>
-                  <div className="text-sm font-medium text-fg-strong">{option.label}</div>
-                  <div className="mt-1 text-sm text-fg-muted">{option.description}</div>
-                </div>
-              </label>
-            );
-          })}
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">
+              TUNING Mode
+            </h2>
+            {STUDY_MODE_OPTIONS.map((option) => {
+              const checked = selectedMode === option.id;
+              return (
+                <label
+                  key={option.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+                    checked
+                      ? 'border-primary/70 bg-primary/10'
+                      : 'border-dark-border bg-dark hover:border-dark-lighter'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="study-mode"
+                    className="mt-1 h-4 w-4 accent-primary"
+                    checked={checked}
+                    onChange={() => onModeChange(option.id)}
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-fg-strong">{option.label}</div>
+                    <div className="mt-1 text-sm text-fg-muted">{option.description}</div>
+                  </div>
+                </label>
+              );
+            })}
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">
+              Scenario
+            </h2>
+            {loadingScenarios ? (
+              <div className="rounded-xl border border-dark-border bg-dark p-4 text-sm text-fg-muted">
+                Loading scenarios...
+              </div>
+            ) : scenarios.length === 0 ? (
+              <div className="rounded-xl border border-dark-border bg-dark p-4 text-sm text-fg-muted">
+                No scenarios available.
+              </div>
+            ) : (
+              scenarios.map((scenario) => {
+                const checked = selectedScenarioId === scenario.id;
+                return (
+                  <label
+                    key={scenario.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+                      checked
+                        ? 'border-primary/70 bg-primary/10'
+                        : 'border-dark-border bg-dark hover:border-dark-lighter'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="study-scenario"
+                      className="mt-1 h-4 w-4 accent-primary"
+                      checked={checked}
+                      onChange={() => onScenarioChange(scenario.id)}
+                    />
+                    <div>
+                      <div className="text-sm font-medium text-fg-strong">{scenario.title}</div>
+                      <div className="mt-1 text-sm text-fg-muted">{scenario.story}</div>
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </section>
         </div>
+
+        {selectedScenario && (
+          <div className="mt-5 rounded-xl border border-dark-border bg-dark p-4">
+            <div className="text-sm font-semibold text-fg-strong">{selectedScenario.title}</div>
+            <div className="mt-2 text-sm text-fg-muted">{selectedScenario.story}</div>
+            <div className="mt-3 text-xs text-fg-faint">
+              Preference types: {selectedScenario.narratorPreferenceTypes.join(', ')}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
+            {error}
+          </div>
+        )}
 
         <div className="mt-8 flex flex-wrap justify-end gap-3">
           <button
             type="button"
-            onClick={() => navigate('/booking')}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-hover"
+            onClick={handleStartSession}
+            disabled={loadingScenarios || startingSession || !selectedScenarioId}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Start Prototype
+            {startingSession ? 'Starting...' : 'Start Prototype'}
           </button>
         </div>
       </div>

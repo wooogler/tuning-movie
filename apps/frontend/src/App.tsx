@@ -4,6 +4,13 @@ import { ChatPage } from './pages/ChatPage';
 import { StudyStartPage } from './pages/StudyStartPage';
 import { StudyEndPage } from './pages/StudyEndPage';
 import { DEFAULT_STUDY_MODE, type StudyModeId } from './pages/studyOptions';
+import { api } from './api/client';
+import {
+  clearStoredStudySession,
+  getStoredStudySession,
+  setStoredStudySession,
+  type StudySessionState,
+} from './study/sessionStorage';
 import { DevToolsProvider } from './components/DevToolsContext';
 import { DevTools } from './components/DevTools';
 import './App.css';
@@ -21,7 +28,18 @@ function getInitialTheme(): Theme {
 
 function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  const [studyMode, setStudyMode] = useState<StudyModeId>(DEFAULT_STUDY_MODE);
+  const [studyMode, setStudyMode] = useState<StudyModeId>(() =>
+    getStoredStudySession()?.studyMode ?? DEFAULT_STUDY_MODE
+  );
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() =>
+    getStoredStudySession()?.scenario.id ?? null
+  );
+  const [selectedScenarioTitle, setSelectedScenarioTitle] = useState<string | null>(() =>
+    getStoredStudySession()?.scenario.title ?? null
+  );
+  const [studySession, setStudySession] = useState<StudySessionState | null>(() =>
+    getStoredStudySession()
+  );
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -33,8 +51,32 @@ function App() {
   };
 
   const handleStudyReset = () => {
+    clearStoredStudySession();
     setStudyMode(DEFAULT_STUDY_MODE);
+    setSelectedScenarioId(null);
+    setSelectedScenarioTitle(null);
+    setStudySession(null);
   };
+
+  const handleStudySessionCreated = (session: StudySessionState) => {
+    setStoredStudySession(session);
+    setStudySession(session);
+    setStudyMode(session.studyMode);
+    setSelectedScenarioId(session.scenario.id);
+    setSelectedScenarioTitle(session.scenario.title);
+  };
+
+  const handleStudySessionCleared = () => {
+    clearStoredStudySession();
+    setStudySession(null);
+  };
+
+  useEffect(() => {
+    if (!studySession) return;
+    api.getCurrentStudySession().catch(() => {
+      handleStudyReset();
+    });
+  }, [studySession]);
 
   return (
     <BrowserRouter>
@@ -50,18 +92,25 @@ function App() {
                     onThemeToggle={handleThemeToggle}
                     selectedMode={studyMode}
                     onModeChange={setStudyMode}
+                    selectedScenarioId={selectedScenarioId}
+                    onScenarioChange={setSelectedScenarioId}
+                    onSessionCreated={handleStudySessionCreated}
                   />
                 }
               />
               <Route
                 path="/booking"
-                element={
+                element={studySession ? (
                   <ChatPage
                     theme={theme}
                     onThemeToggle={handleThemeToggle}
                     studyModePreset={studyMode}
+                    studySession={studySession}
+                    onStudySessionCleared={handleStudySessionCleared}
                   />
-                }
+                ) : (
+                  <Navigate to="/" replace />
+                )}
               />
               <Route
                 path="/end"
@@ -70,6 +119,7 @@ function App() {
                     theme={theme}
                     onThemeToggle={handleThemeToggle}
                     selectedMode={studyMode}
+                    selectedScenarioTitle={selectedScenarioTitle}
                     onResetMode={handleStudyReset}
                   />
                 }

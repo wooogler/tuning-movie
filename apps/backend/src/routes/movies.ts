@@ -1,10 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
-import { db, movies } from '../db';
+import { movies } from '../db';
+import { getDbFromRequest } from '../study/requestDb';
 
 export async function movieRoutes(fastify: FastifyInstance) {
   // Get all movies
   fastify.get('/movies', async (request, reply) => {
+    const db = getDbFromRequest(request);
     const result = db.select().from(movies).all();
     return {
       movies: result.map((m) => ({
@@ -17,6 +19,7 @@ export async function movieRoutes(fastify: FastifyInstance) {
   // Get movie by ID
   fastify.get('/movies/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const db = getDbFromRequest(request);
     const movie = db.select().from(movies).where(eq(movies.id, id)).get();
 
     if (!movie) {

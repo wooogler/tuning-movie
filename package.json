@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev:stack:agent-monitor",
+    "dev": "npm run dev:stack:system",
     "dev:backend": "npm run dev --workspace=apps/backend",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "dev:agent": "bash scripts/run-tuning-agent.sh",
@@ -31,7 +31,8 @@
     "start:agent": "bash scripts/run-tuning-agent.sh start",
     "start:agent-ts": "bash scripts/run-tuning-agent-typescript.sh start",
     "start:agent-v2": "bash scripts/run-tuning-agent-v2.sh start",
-    "db:seed": "npm run db:seed --workspace=apps/backend"
+    "db:seed": "npm run db:seed --workspace=apps/backend",
+    "db:seed:scenarios": "npm run db:seed:scenarios --workspace=apps/backend"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

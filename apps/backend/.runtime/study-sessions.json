@@ -1,0 +1,81 @@
+{
+  "sessions": [
+    {
+      "sessionId": "st_ea70e88bc68c4a8a9982751d26ff1790",
+      "relaySessionId": "relay_st_ea70e88bc68c4a8a9982751d26ff1790",
+      "participantId": "P-ff1790",
+      "scenarioId": "scn_budget_night",
+      "studyMode": "gui-only",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_ea70e88bc68c4a8a9982751d26ff1790.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:08:14.058Z",
+      "expiresAt": "2026-03-03T23:08:14.058Z"
+    },
+    {
+      "sessionId": "st_ab8c3623ee9d4997b9e94d1ff6f738c3",
+      "relaySessionId": "relay_st_ab8c3623ee9d4997b9e94d1ff6f738c3",
+      "participantId": "P-f738c3",
+      "scenarioId": "scn_family_weekend",
+      "studyMode": "gui-only",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_ab8c3623ee9d4997b9e94d1ff6f738c3.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:08:14.122Z",
+      "expiresAt": "2026-03-03T23:08:14.122Z"
+    },
+    {
+      "sessionId": "st_554f29860ec8467a84cc6c4de199777a",
+      "relaySessionId": "relay_st_554f29860ec8467a84cc6c4de199777a",
+      "participantId": "P-99777a",
+      "scenarioId": "scn_family_weekend",
+      "studyMode": "gui-only",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_554f29860ec8467a84cc6c4de199777a.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:09:56.181Z",
+      "expiresAt": "2026-03-03T23:09:56.181Z"
+    },
+    {
+      "sessionId": "st_931df3a940a24602884106f9ea9b5851",
+      "relaySessionId": "relay_st_931df3a940a24602884106f9ea9b5851",
+      "participantId": "P-9b5851",
+      "scenarioId": "scn_budget_night",
+      "studyMode": "gui-only",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_931df3a940a24602884106f9ea9b5851.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:10:20.793Z",
+      "expiresAt": "2026-03-03T23:10:20.793Z"
+    },
+    {
+      "sessionId": "st_73869fa5a1434f5882c6f1f862f44591",
+      "relaySessionId": "relay_st_73869fa5a1434f5882c6f1f862f44591",
+      "participantId": "P-f44591",
+      "scenarioId": "scn_budget_night",
+      "studyMode": "basic-tuning",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_73869fa5a1434f5882c6f1f862f44591.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:10:21.832Z",
+      "expiresAt": "2026-03-03T23:10:21.832Z"
+    },
+    {
+      "sessionId": "st_d9028469b41748219c03fb4fec0d5314",
+      "relaySessionId": "relay_st_d9028469b41748219c03fb4fec0d5314",
+      "participantId": "P-0d5314",
+      "scenarioId": "scn_budget_night",
+      "studyMode": "gui-only",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_d9028469b41748219c03fb4fec0d5314.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:11:11.669Z",
+      "expiresAt": "2026-03-03T23:11:11.669Z"
+    },
+    {
+      "sessionId": "st_2b7c9bb23ef04e54bb74efcf816b8904",
+      "relaySessionId": "relay_st_2b7c9bb23ef04e54bb74efcf816b8904",
+      "participantId": "P-6b8904",
+      "scenarioId": "scn_budget_night",
+      "studyMode": "basic-tuning",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_2b7c9bb23ef04e54bb74efcf816b8904.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:11:12.702Z",
+      "expiresAt": "2026-03-03T23:11:12.702Z"
+    }
+  ]
+}

@@ -1,4 +1,16 @@
 import type { Movie, Theater, Showing, Seat, Booking, BookingRequest } from '../types';
+import type { StudyModeId } from '../pages/studyOptions';
+import {
+  getStoredStudySession,
+  type StudySessionState,
+  type StudyScenarioSummary,
+} from '../study/sessionStorage';
+
+interface StudySessionInfo extends Omit<StudySessionState, 'studyToken'> {
+  story: string;
+  narratorPreferenceTypes: string[];
+  status: 'active' | 'finished' | 'expired';
+}
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -24,15 +36,25 @@ async function getErrorMessage(response: Response): Promise<string> {
   return `${defaultMessage}: ${text.slice(0, 120)}`;
 }
 
-async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
+interface FetchApiOptions extends RequestInit {
+  includeStudyToken?: boolean;
+}
+
+async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise<T> {
+  const session = getStoredStudySession();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+  if (options?.includeStudyToken !== false && session?.studyToken) {
+    headers['x-study-session-token'] = session.studyToken;
+  }
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Network request failed';
@@ -50,6 +72,37 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
 }
 
 export const api = {
+  // Study scenarios/sessions
+  getStudyScenarios: () =>
+    fetchApi<{
+      scenarios: Array<
+        StudyScenarioSummary & {
+          story: string;
+          narratorPreferenceTypes: string[];
+        }
+      >;
+    }>('/study/scenarios', {
+      includeStudyToken: false,
+    }),
+  createStudySession: (data: {
+    scenarioId: string;
+    studyMode: StudyModeId;
+    participantId?: string;
+  }) =>
+    fetchApi<StudySessionState>('/study/sessions', {
+      method: 'POST',
+      includeStudyToken: false,
+      body: JSON.stringify(data),
+    }),
+  getCurrentStudySession: () => fetchApi<StudySessionInfo>('/study/sessions/me'),
+  finishStudySession: () =>
+    fetchApi<{ sessionId: string; status: 'finished' | 'expired'; finishedAt: string | null }>(
+      '/study/sessions/finish',
+      {
+        method: 'POST',
+      }
+    ),
+
   // Movies
   getMovies: () => fetchApi<{ movies: Movie[] }>('/movies'),
   getMovie: (id: string) => fetchApi<{ movie: Movie }>(`/movies/${id}`),

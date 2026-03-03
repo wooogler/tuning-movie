@@ -37,6 +37,7 @@ import { agentTools, type ToolDefinition } from '../agent/tools';
 import { getStudyModeConfig, type StudyModeId } from './studyOptions';
 import type { Movie, Theater, Showing, Booking } from '../types';
 import { getFixedCurrentDate } from '../utils/studyDate';
+import type { StudySessionState } from '../study/sessionStorage';
 
 interface StageContext {
   booking?: BookingContext;
@@ -50,6 +51,8 @@ interface ChatPageProps {
   theme: Theme;
   onThemeToggle: () => void;
   studyModePreset?: StudyModeId;
+  studySession?: StudySessionState | null;
+  onStudySessionCleared?: () => void;
 }
 
 const stageInteractionTools: Record<Stage, string[]> = {
@@ -210,7 +213,13 @@ function projectBookingForStage(stage: Stage, booking: BookingContext): BookingC
   }
 }
 
-export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProps) {
+export function ChatPage({
+  theme,
+  onThemeToggle,
+  studyModePreset,
+  studySession,
+  onStudySessionCleared,
+}: ChatPageProps) {
   const navigate = useNavigate();
 
   const messages = useChatStore((s) => s.messages);
@@ -264,6 +273,7 @@ export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProp
     () => (studyModePreset ? getStudyModeConfig(studyModePreset) : null),
     [studyModePreset]
   );
+  const sessionLocked = Boolean(studySession);
 
   const getMaxChatWidth = useCallback(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_WIDTH_PX;
@@ -877,7 +887,9 @@ export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProp
     toolSchema: agentToolSchema,
     plannerCpMemoryLimit,
     extractorConflictCandidateEnabled,
-    enabled: agentBridgeEnabled,
+    sessionId: studySession?.relaySessionId,
+    studyToken: studySession?.studyToken,
+    enabled: agentBridgeEnabled && Boolean(studySession),
     onToolCall: onToolApply,
     onAgentMessage: (text: string) => {
       const stage = activeSpec?.stage ?? currentStage;
@@ -894,7 +906,7 @@ export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProp
     handleSessionReset();
   }, [handleSessionReset, loading, sendSessionResetToAgent]);
 
-  const handleFinishStudy = useCallback(() => {
+  const handleFinishStudy = useCallback(async () => {
     if (loading) return;
     const confirmed = window.confirm('Finish this study session and go to the end screen?');
     if (!confirmed) return;
@@ -904,9 +916,23 @@ export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProp
     setError(null);
     setUiSpec(null);
 
+    try {
+      await api.finishStudySession();
+    } catch {
+      // Best-effort finish request; local teardown still proceeds.
+    }
+
+    onStudySessionCleared?.();
     sendSessionResetToAgent('host-finish-study');
     navigate('/end');
-  }, [loading, navigate, resetChat, sendSessionResetToAgent, setUiSpec]);
+  }, [
+    loading,
+    navigate,
+    onStudySessionCleared,
+    resetChat,
+    sendSessionResetToAgent,
+    setUiSpec,
+  ]);
 
   const handleBookAnother = useCallback(() => {
     sendSessionResetToAgent('host-book-another');
@@ -1082,22 +1108,24 @@ export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProp
             <button
               type="button"
               onClick={handleAgentBridgeToggle}
+              disabled={sessionLocked}
               className={`px-3 py-1 text-xs rounded border ${
                 agentBridgeEnabled
                   ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
                   : 'border-primary/40 text-primary/80 hover:border-primary hover:text-primary'
-              }`}
+              } disabled:cursor-not-allowed disabled:opacity-60`}
             >
               Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
             </button>
             <button
               type="button"
               onClick={handleGuiAdaptationToggle}
+              disabled={sessionLocked}
               className={`px-3 py-1 text-xs rounded border ${
                 guiAdaptationEnabled
                   ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
                   : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
-              }`}
+              } disabled:cursor-not-allowed disabled:opacity-60`}
             >
               GUI Adaptation {guiAdaptationEnabled ? 'ON' : 'OFF'}
             </button>
@@ -1114,7 +1142,7 @@ export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProp
                 min={0}
                 step={1}
                 value={plannerCpMemoryLimit}
-                disabled={!agentBridgeEnabled}
+                disabled={!agentBridgeEnabled || sessionLocked}
                 onChange={(event) => {
                   const parsed = Number.parseInt(event.target.value, 10);
                   if (!Number.isFinite(parsed)) {
@@ -1130,11 +1158,12 @@ export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProp
             <button
               type="button"
               onClick={() => setExtractorConflictCandidateEnabled((prev) => !prev)}
+              disabled={sessionLocked}
               className={`px-3 py-1 text-xs rounded border ${
                 extractorConflictCandidateEnabled
                   ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
                   : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
-              }`}
+              } disabled:cursor-not-allowed disabled:opacity-60`}
               title="Toggle CP extraction of conflicts and candidates."
             >
               CP Conflict/Candidate {extractorConflictCandidateEnabled ? 'ON' : 'OFF'}
@@ -1144,7 +1173,8 @@ export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProp
                 <button
                   type="button"
                   onClick={() => setModelPickerOpen((prev) => !prev)}
-                  className="px-3 py-1 text-xs rounded border border-info-border text-info-label hover:border-info-label hover:text-info-text transition-colors"
+                  disabled={sessionLocked}
+                  className="px-3 py-1 text-xs rounded border border-info-border text-info-label hover:border-info-label hover:text-info-text transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {agentModel === 'openai' ? 'gpt-5.2' : 'gemini-2.5-flash'}
                 </button>
