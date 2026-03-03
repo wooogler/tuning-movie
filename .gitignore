@@ -6,5 +6,6 @@ dist/
 *.db
 logs/
 apps/backend/logs/
+apps/backend/.runtime/study-sessions.json
 deploy/ssl/*.pem
 *.tar.gz

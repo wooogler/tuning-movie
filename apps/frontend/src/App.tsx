@@ -67,11 +67,6 @@ function App() {
     setSelectedScenarioTitle(session.scenario.title);
   };
 
-  const handleStudySessionCleared = () => {
-    clearStoredStudySession();
-    setStudySession(null);
-  };
-
   useEffect(() => {
     if (!studySession) return;
     api.getCurrentStudySession()
@@ -146,7 +141,6 @@ function App() {
                     onThemeToggle={handleThemeToggle}
                     studyModePreset={studyMode}
                     studySession={studySession}
-                    onStudySessionCleared={handleStudySessionCleared}
                   />
                 ) : (
                   <Navigate to="/" replace />

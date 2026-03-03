@@ -53,7 +53,6 @@ interface ChatPageProps {
   onThemeToggle: () => void;
   studyModePreset?: StudyModeId;
   studySession?: StudySessionState | null;
-  onStudySessionCleared?: () => void;
 }
 
 const stageInteractionTools: Record<Stage, string[]> = {
@@ -67,6 +66,10 @@ const stageInteractionTools: Record<Stage, string[]> = {
 const DEFAULT_CHAT_WIDTH_PX = 768;
 const MIN_CHAT_WIDTH_PX = 360;
 const CHAT_WIDTH_VIEWPORT_PADDING_PX = 48;
+const DEFAULT_SCENARIO_PANEL_WIDTH_PX = 620;
+const MIN_SCENARIO_PANEL_WIDTH_PX = 280;
+const MAX_SCENARIO_PANEL_WIDTH_PX = 620;
+const MIN_MAIN_CONTENT_WIDTH_PX = 700;
 const guiAdaptationTools = ['filter', 'sort', 'highlight', 'augment', 'clearModification'] as const;
 const AGENT_BRIDGE_ENABLED_STORAGE_KEY = 'tuning-movie-agent-bridge-enabled';
 const PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY = 'tuning-movie-planner-cp-memory-limit';
@@ -219,7 +222,6 @@ export function ChatPage({
   onThemeToggle,
   studyModePreset,
   studySession,
-  onStudySessionCleared,
 }: ChatPageProps) {
   const navigate = useNavigate();
 
@@ -264,11 +266,18 @@ export function ChatPage({
   const [carouselOpacity, setCarouselOpacity] = useState(1);
   const [chatWidthPx, setChatWidthPx] = useState(DEFAULT_CHAT_WIDTH_PX);
   const [isResizingChatWidth, setIsResizingChatWidth] = useState(false);
+  const [scenarioPanelWidthPx, setScenarioPanelWidthPx] = useState(
+    DEFAULT_SCENARIO_PANEL_WIDTH_PX
+  );
+  const [isResizingScenarioPanelWidth, setIsResizingScenarioPanelWidth] = useState(false);
 
   const initialized = useRef(false);
   const appliedStudyModePresetRef = useRef<StudyModeId | null>(null);
   const previousStageRef = useRef<Stage>(currentStage);
   const chatResizeSessionRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const scenarioPanelResizeSessionRef = useRef<{ startX: number; startWidth: number } | null>(
+    null
+  );
   const pendingAgentToggleResetReasonRef = useRef<string | null>(null);
   const studyModeConfig = useMemo(
     () => (studyModePreset ? getStudyModeConfig(studyModePreset) : null),
@@ -288,6 +297,26 @@ export function ChatPage({
     (width: number) =>
       Math.min(Math.max(width, MIN_CHAT_WIDTH_PX), getMaxChatWidth()),
     [getMaxChatWidth]
+  );
+
+  const getMaxScenarioPanelWidth = useCallback(() => {
+    if (typeof window === 'undefined') return DEFAULT_SCENARIO_PANEL_WIDTH_PX;
+    return Math.max(
+      MIN_SCENARIO_PANEL_WIDTH_PX,
+      Math.min(
+        MAX_SCENARIO_PANEL_WIDTH_PX,
+        window.innerWidth - MIN_MAIN_CONTENT_WIDTH_PX
+      )
+    );
+  }, []);
+
+  const clampScenarioPanelWidth = useCallback(
+    (width: number) =>
+      Math.min(
+        Math.max(width, MIN_SCENARIO_PANEL_WIDTH_PX),
+        getMaxScenarioPanelWidth()
+      ),
+    [getMaxScenarioPanelWidth]
   );
 
   const stopChatWidthResize = useCallback(() => {
@@ -324,6 +353,34 @@ export function ChatPage({
       }
     },
     [chatWidthPx]
+  );
+
+  const stopScenarioPanelWidthResize = useCallback(() => {
+    scenarioPanelResizeSessionRef.current = null;
+    setIsResizingScenarioPanelWidth(false);
+  }, []);
+
+  const handleScenarioPanelWidthResizeMove = useCallback(
+    (event: PointerEvent) => {
+      const session = scenarioPanelResizeSessionRef.current;
+      if (!session) return;
+      const nextWidth = session.startWidth + (event.clientX - session.startX);
+      setScenarioPanelWidthPx(clampScenarioPanelWidth(nextWidth));
+    },
+    [clampScenarioPanelWidth]
+  );
+
+  const handleScenarioPanelWidthResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      scenarioPanelResizeSessionRef.current = {
+        startX: event.clientX,
+        startWidth: scenarioPanelWidthPx,
+      };
+      setIsResizingScenarioPanelWidth(true);
+    },
+    [scenarioPanelWidthPx]
   );
 
   const loadStageData = useCallback(
@@ -534,13 +591,14 @@ export function ChatPage({
   useEffect(() => {
     const handleWindowResize = () => {
       setChatWidthPx((current) => clampChatWidth(current));
+      setScenarioPanelWidthPx((current) => clampScenarioPanelWidth(current));
     };
     handleWindowResize();
     window.addEventListener('resize', handleWindowResize);
     return () => {
       window.removeEventListener('resize', handleWindowResize);
     };
-  }, [clampChatWidth]);
+  }, [clampChatWidth, clampScenarioPanelWidth]);
 
   useEffect(() => {
     if (!isResizingChatWidth) return;
@@ -556,6 +614,25 @@ export function ChatPage({
       window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [isResizingChatWidth, handleChatWidthResizeMove, stopChatWidthResize]);
+
+  useEffect(() => {
+    if (!isResizingScenarioPanelWidth) return;
+    const handlePointerUp = () => {
+      stopScenarioPanelWidthResize();
+    };
+    window.addEventListener('pointermove', handleScenarioPanelWidthResizeMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handleScenarioPanelWidthResizeMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [
+    isResizingScenarioPanelWidth,
+    handleScenarioPanelWidthResizeMove,
+    stopScenarioPanelWidthResize,
+  ]);
 
   useEffect(
     () => () => {
@@ -923,13 +1000,11 @@ export function ChatPage({
       // Best-effort finish request; local teardown still proceeds.
     }
 
-    onStudySessionCleared?.();
     sendSessionResetToAgent('host-finish-study');
-    navigate('/end');
+    navigate('/end', { replace: true });
   }, [
     loading,
     navigate,
-    onStudySessionCleared,
     resetChat,
     sendSessionResetToAgent,
     setUiSpec,
@@ -1083,7 +1158,10 @@ export function ChatPage({
   return (
     <div className="flex h-screen bg-dark">
       {showScenarioBriefing && (
-        <aside className="hidden w-[340px] shrink-0 border-r border-dark-border bg-dark-light lg:block">
+        <aside
+          className="relative hidden shrink-0 border-r border-dark-border bg-dark-light lg:block"
+          style={{ width: scenarioPanelWidthPx }}
+        >
           <div className="h-full overflow-y-auto p-4">
             <ScenarioBriefing
               title={scenarioTitle}
@@ -1091,6 +1169,21 @@ export function ChatPage({
               narratorPreferenceTypes={scenarioPreferenceTypes}
             />
           </div>
+          <button
+            type="button"
+            aria-label="Resize scenario panel width"
+            title="Drag to resize scenario panel"
+            onPointerDown={handleScenarioPanelWidthResizeStart}
+            className="absolute right-0 top-0 flex h-full w-4 translate-x-1/2 cursor-ew-resize"
+          >
+            <span
+              className={`absolute left-1/2 top-1/2 h-14 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors ${
+                isResizingScenarioPanelWidth
+                  ? 'bg-primary'
+                  : 'bg-dark-border hover:bg-dark-lighter'
+              }`}
+            />
+          </button>
         </aside>
       )}
 
