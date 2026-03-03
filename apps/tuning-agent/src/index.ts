@@ -50,6 +50,8 @@ let actionInFlight = false;
 let lastActionFingerprint = '';
 let lastActionAt = 0;
 let ensureSessionReadyInFlight: Promise<void> | null = null;
+let sessionReady = false;
+let hostConnectionAvailable = false;
 let connectedOnce = false;
 let planningInFlight = false;
 let deferredReplanRequested = false;
@@ -263,7 +265,7 @@ async function ensureRelayConnected(): Promise<void> {
         message: error instanceof Error ? error.message : String(error),
       });
       console.warn(
-        `[tuning-agent-v2] relay connect failed, retrying in ${RETRY_DELAY_MS}ms: ${
+        `[tuning-agent] relay connect failed, retrying in ${RETRY_DELAY_MS}ms: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -286,6 +288,7 @@ async function ensureSessionReady(reason: string): Promise<void> {
         monitor.updateState({ phase: 'starting-session', waitingForHost: false });
         await relay.request('session.start', { studyId, participantId });
         await relay.request('snapshot.get', {});
+        sessionReady = true;
         monitor.updateState({
           waitingForHost: false,
           sessionReady: true,
@@ -295,13 +298,15 @@ async function ensureSessionReady(reason: string): Promise<void> {
 
         if (!connectedOnce) {
           connectedOnce = true;
-          console.log(`[tuning-agent-v2] connected to ${relayUrl} (sessionId=${sessionId})`);
-          console.log(`[tuning-agent-v2] monitor API available at http://localhost:${monitorPort}`);
-          console.log(`[tuning-agent-v2] monitor UI available at http://localhost:${monitorWebPort}`);
+          console.log(`[tuning-agent] connected to ${relayUrl} (sessionId=${sessionId})`);
+          console.log(`[tuning-agent] monitor API available at http://localhost:${monitorPort}`);
+          console.log(`[tuning-agent] monitor UI available at http://localhost:${monitorWebPort}`);
         }
         return;
       } catch (error) {
         if (isSessionNotActiveError(error)) {
+          sessionReady = false;
+          hostConnectionAvailable = false;
           monitor.updateState({
             waitingForHost: true,
             sessionReady: false,
@@ -309,14 +314,14 @@ async function ensureSessionReady(reason: string): Promise<void> {
           });
           monitor.pushEvent('session.waiting_host', { reason });
           console.log(
-            `[tuning-agent-v2] waiting for host connection (${reason}); retrying in ${RETRY_DELAY_MS}ms`
+            `[tuning-agent] waiting for host connection (${reason}); retrying in ${RETRY_DELAY_MS}ms`
           );
           await sleep(RETRY_DELAY_MS);
           continue;
         }
 
         console.warn(
-          `[tuning-agent-v2] session bootstrap failed, retrying in ${RETRY_DELAY_MS}ms: ${
+          `[tuning-agent] session bootstrap failed, retrying in ${RETRY_DELAY_MS}ms: ${
             error instanceof Error ? error.message : String(error)
           }`
         );
@@ -462,7 +467,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         reason: action.reason,
       });
       monitor.pushEvent('action.blocked', { trigger, action });
-      console.warn(`[tuning-agent-v2] action blocked by safety policy (${trigger})`);
+      console.warn(`[tuning-agent] action blocked by safety policy (${trigger})`);
       return;
     }
 
@@ -492,6 +497,8 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     monitor.pushEvent('action.outcome', { action, outcome });
 
     if (!outcome.ok && outcome.code === 'SESSION_NOT_ACTIVE') {
+      sessionReady = false;
+      hostConnectionAvailable = false;
       monitor.updateState({ sessionReady: false, waitingForHost: true, phase: 'waiting-host' });
       await maybeSendAssistantMessage(
         planningContext,
@@ -679,6 +686,24 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
   });
 
   switch (envelope.type) {
+    case 'relay.presence': {
+      const payload = asRecord(envelope.payload);
+      const hostActive = payload.hostActive === true;
+      hostConnectionAvailable = hostActive;
+      monitor.pushEvent('session.presence', {
+        hostActive,
+        agentCount: typeof payload.agentCount === 'number' ? payload.agentCount : null,
+      });
+      if (!sessionReady && hostActive) {
+        monitor.updateState({ waitingForHost: false, phase: 'starting-session' });
+        void ensureSessionReady('host-presence').catch((error) => {
+          monitor.pushEvent('session.presence_start_failed', {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
+      return;
+    }
     case 'snapshot.state': {
       const previous = memory.getContext();
       const snapshot = toSnapshotPayload(envelope.payload);
@@ -771,7 +796,15 @@ async function main(): Promise<void> {
   });
 
   relay.messages.subscribe(handleInbound);
-  await ensureSessionReady('startup');
+  await ensureRelayConnected();
+  monitor.updateState({
+    waitingForHost: !hostConnectionAvailable,
+    sessionReady: false,
+    phase: hostConnectionAvailable ? 'starting-session' : 'idle-waiting-host',
+  });
+  if (hostConnectionAvailable) {
+    await ensureSessionReady('startup');
+  }
 }
 
 process.on('SIGINT', () => {
@@ -799,6 +832,6 @@ void main().catch((error) => {
   });
   unsubscribeAllLlmTraces();
   monitor.close();
-  console.error(`[tuning-agent-v2] fatal: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`[tuning-agent] fatal: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 });

@@ -27,7 +27,7 @@ function createTables() {
       name TEXT NOT NULL,
       location TEXT NOT NULL,
       screen_count INTEGER NOT NULL,
-      distance_km REAL NOT NULL,
+      distance_miles REAL NOT NULL,
       amenities TEXT NOT NULL
     );
 
@@ -76,8 +76,14 @@ function createTables() {
     ).map((column) => column.name)
   );
 
-  if (!theaterColumnNames.has('distance_km')) {
-    sqlite.exec('ALTER TABLE theaters ADD COLUMN distance_km REAL NOT NULL DEFAULT 0');
+  const hasDistanceKm = theaterColumnNames.has('distance_km');
+  const hasDistanceMiles = theaterColumnNames.has('distance_miles');
+
+  if (!hasDistanceMiles) {
+    sqlite.exec('ALTER TABLE theaters ADD COLUMN distance_miles REAL NOT NULL DEFAULT 0');
+    if (hasDistanceKm) {
+      sqlite.exec('UPDATE theaters SET distance_miles = distance_km');
+    }
   }
 
   if (!theaterColumnNames.has('amenities')) {
@@ -460,7 +466,7 @@ async function seed() {
       name: 'Regal Battery Park',
       location: 'Battery Park, Manhattan, New York, NY',
       screenCount: 11,
-      distanceKm: 1.2,
+      distanceMiles: 1.2,
       amenities: JSON.stringify(['Premium Large Format', 'Reserved Seating']),
     },
     {
@@ -468,7 +474,7 @@ async function seed() {
       name: 'AMC 34th Street 14',
       location: 'Midtown, Manhattan, New York, NY',
       screenCount: 14,
-      distanceKm: 2.8,
+      distanceMiles: 2.8,
       amenities: JSON.stringify(['Reserved Seating']),
     },
     {
@@ -476,7 +482,7 @@ async function seed() {
       name: 'AMC Magic Johnson Harlem 9',
       location: 'Harlem, Manhattan, New York, NY',
       screenCount: 9,
-      distanceKm: 6.1,
+      distanceMiles: 6.1,
       amenities: JSON.stringify(['Reserved Seating']),
     },
     {
@@ -484,7 +490,7 @@ async function seed() {
       name: 'AMC Bay Plaza Cinema 13',
       location: 'Baychester, Bronx, New York, NY',
       screenCount: 13,
-      distanceKm: 15.4,
+      distanceMiles: 15.4,
       amenities: JSON.stringify(['Reserved Seating']),
     },
   ];

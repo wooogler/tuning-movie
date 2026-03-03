@@ -6,6 +6,7 @@ import {
   useMemo,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
   useChatStore,
@@ -33,6 +34,7 @@ import { MessageList, ChatInput } from '../components/chat';
 import { StageRenderer } from '../renderer';
 import { useToolHandler, useAgentBridge } from '../hooks';
 import { agentTools, type ToolDefinition } from '../agent/tools';
+import { getStudyModeConfig, type StudyModeId } from './studyOptions';
 import type { Movie, Theater, Showing, Booking } from '../types';
 import { getFixedCurrentDate } from '../utils/studyDate';
 
@@ -47,6 +49,7 @@ type AgentModel = 'openai' | 'gemini';
 interface ChatPageProps {
   theme: Theme;
   onThemeToggle: () => void;
+  studyModePreset?: StudyModeId;
 }
 
 const stageInteractionTools: Record<Stage, string[]> = {
@@ -207,7 +210,9 @@ function projectBookingForStage(stage: Stage, booking: BookingContext): BookingC
   }
 }
 
-export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
+export function ChatPage({ theme, onThemeToggle, studyModePreset }: ChatPageProps) {
+  const navigate = useNavigate();
+
   const messages = useChatStore((s) => s.messages);
   const currentStage = useChatStore((s) => s.currentStage);
   const activeSpec = useChatStore((s) => s.activeSpec);
@@ -229,14 +234,14 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [viewMode] = useState<ViewMode>('chat');
   const [agentBridgeEnabled, setAgentBridgeEnabled] = useState<boolean>(() =>
-    readStoredBoolean(AGENT_BRIDGE_ENABLED_STORAGE_KEY, true)
+    readStoredBoolean(AGENT_BRIDGE_ENABLED_STORAGE_KEY, false)
   );
   const [plannerCpMemoryLimit, setPlannerCpMemoryLimit] = useState<number>(() =>
     readStoredNonNegativeInt(PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY, 10)
   );
   const [extractorConflictCandidateEnabled, setExtractorConflictCandidateEnabled] =
     useState<boolean>(() =>
-      readStoredBoolean(EXTRACTOR_CONFLICT_CANDIDATE_ENABLED_STORAGE_KEY, true)
+      readStoredBoolean(EXTRACTOR_CONFLICT_CANDIDATE_ENABLED_STORAGE_KEY, false)
     );
   const [agentModel, setAgentModel] = useState<AgentModel>(() =>
     readStoredAgentModel(AGENT_MODEL_STORAGE_KEY, 'openai')
@@ -251,9 +256,14 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   const [isResizingChatWidth, setIsResizingChatWidth] = useState(false);
 
   const initialized = useRef(false);
+  const appliedStudyModePresetRef = useRef<StudyModeId | null>(null);
   const previousStageRef = useRef<Stage>(currentStage);
   const chatResizeSessionRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const pendingAgentToggleResetReasonRef = useRef<string | null>(null);
+  const studyModeConfig = useMemo(
+    () => (studyModePreset ? getStudyModeConfig(studyModePreset) : null),
+    [studyModePreset]
+  );
 
   const getMaxChatWidth = useCallback(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_WIDTH_PX;
@@ -469,8 +479,9 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   }, []);
 
   useEffect(() => {
+    if (studyModeConfig) return;
     api.getGuiAdaptationConfig().then((res) => setGuiAdaptationEnabled(res.enabled)).catch(() => {});
-  }, []);
+  }, [studyModeConfig]);
 
   useEffect(() => {
     writeStorageValue(AGENT_BRIDGE_ENABLED_STORAGE_KEY, String(agentBridgeEnabled));
@@ -883,6 +894,20 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     handleSessionReset();
   }, [handleSessionReset, loading, sendSessionResetToAgent]);
 
+  const handleFinishStudy = useCallback(() => {
+    if (loading) return;
+    const confirmed = window.confirm('Finish this study session and go to the end screen?');
+    if (!confirmed) return;
+
+    resetChat();
+    setBooking(null);
+    setError(null);
+    setUiSpec(null);
+
+    sendSessionResetToAgent('host-finish-study');
+    navigate('/end');
+  }, [loading, navigate, resetChat, sendSessionResetToAgent, setUiSpec]);
+
   const handleBookAnother = useCallback(() => {
     sendSessionResetToAgent('host-book-another');
     handleBookAnotherLocal();
@@ -902,6 +927,20 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
     setAgentBridgeEnabled(nextEnabled);
     handleSessionReset();
   }, [agentBridgeEnabled, handleSessionReset, sendSessionResetToAgent]);
+
+  useEffect(() => {
+    if (!studyModePreset || !studyModeConfig) return;
+    if (appliedStudyModePresetRef.current === studyModePreset) return;
+    appliedStudyModePresetRef.current = studyModePreset;
+
+    setModelPickerOpen(false);
+    setAgentBridgeEnabled(studyModeConfig.agentEnabled);
+    setGuiAdaptationEnabled(studyModeConfig.guiAdaptationEnabled);
+    setPlannerCpMemoryLimit(studyModeConfig.cpMemoryWindow);
+    setExtractorConflictCandidateEnabled(studyModeConfig.extractorConflictCandidateEnabled);
+
+    api.setGuiAdaptationConfig(studyModeConfig.guiAdaptationEnabled).catch(() => {});
+  }, [studyModePreset, studyModeConfig]);
 
   const handleChatInputSubmit = useCallback(
     (text: string) => {
@@ -1013,8 +1052,18 @@ export function ChatPage({ theme, onThemeToggle }: ChatPageProps) {
   return (
     <div className="flex flex-col h-screen bg-dark">
       <header className="shrink-0 border-b border-dark-border bg-dark px-4 py-3">
-        <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold text-fg-strong">Movie Booking</h1>
+        <div className="max-w-5xl mx-auto space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-lg font-semibold text-fg-strong">Movie Booking</h1>
+            <button
+              type="button"
+              onClick={handleFinishStudy}
+              disabled={loading}
+              className="px-3 py-1 text-xs rounded border border-primary/70 text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Finish Study
+            </button>
+          </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             <div className="text-sm text-fg-muted">
               Step {currentStep} of {STAGE_ORDER.length}

@@ -13,7 +13,7 @@ export interface Theater {
   name: string;
   location: string;
   screenCount: number;
-  distanceKm: number;
+  distanceMiles: number;
   amenities: string[];
 }
 
