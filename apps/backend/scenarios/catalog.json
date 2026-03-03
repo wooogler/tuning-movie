@@ -1,37 +1,24 @@
 {
   "scenarios": [
     {
-      "id": "scn_budget_night",
-      "title": "Budget Night Out",
-      "story": "You are helping a narrator who wants an affordable movie night this weekend. They care most about lower ticket prices and are willing to travel farther if the total cost is better.",
-      "narratorPreferenceTypes": ["budget", "price-sensitivity", "distance-flexibility"],
-      "templateDbFile": "scn_budget_night.db",
-      "seedFilters": {
-        "includeMovieIds": ["m2", "m3", "m8"],
-        "includeTheaterIds": ["tb", "tc", "td"]
-      }
-    },
-    {
-      "id": "scn_family_weekend",
-      "title": "Family Weekend Plan",
-      "story": "You are helping a narrator coordinating a family movie plan. They prefer daytime showtimes, convenient locations, and choices with enough open seats for group seating.",
-      "narratorPreferenceTypes": ["group-seating", "daytime-preference", "convenience"],
-      "templateDbFile": "scn_family_weekend.db",
-      "seedFilters": {
-        "includeMovieIds": ["m1", "m4", "m7"],
-        "includeTheaterIds": ["ta", "tb"]
-      }
-    },
-    {
-      "id": "scn_thrill_night",
-      "title": "Late Thriller Hunt",
-      "story": "You are helping a narrator looking for a late-night thriller experience. They prioritize evening times, premium seats when available, and are less sensitive to distance.",
-      "narratorPreferenceTypes": ["late-time", "genre-focus", "premium-seat-preference"],
-      "templateDbFile": "scn_thrill_night.db",
-      "seedFilters": {
-        "includeMovieIds": ["m4", "m5", "m7"],
-        "includeTheaterIds": ["ta", "tc"]
-      }
+      "id": "scn_t1_college_weekend",
+      "title": "T1: College Weekend Group Booking",
+      "story": "Today is Wednesday, March 11. You live in a small college town in Virginia and have been stressed out from a heavy workload lately. You and two friends, Taylor and Avery, have finally found time to see a movie together this weekend. All three of you are busy, so if not this weekend, it will be a while before your schedules align again. You are in charge of booking the tickets.\n\nThe three of you chatted in a group message and agreed on a comedy to blow off some steam. You recall a coworker recently mentioning that they enjoyed \"Desk for Two,\" so you are thinking of looking into it. However, all of you are open to watching something else as long as it's a comedy movie. The three of you would prefer to avoid romantic comedies if possible, but you're open to it if the other options don't work out. You generally prefer movies with high ratings.\n\nAll the theaters in town are within 10 miles. Anything outside the town would not work. As for timing, Sunday mornings are out because Avery goes to church. On Saturdays, you tend to sleep in, so morning showtimes are not ideal. Taylor wants to watch a movie that ends before 10 PM, as he goes to bed at 10:30 PM every day.\n\nThe three of you must sit together in adjacent seats. Avery has low vision and prefers to sit in the second row - the first row is too close and causes neck pain, but anything beyond the third row is too far.",
+      "narratorPreferenceTypes": [
+        "comedy-hard",
+        "weekend-only-hard",
+        "distance-under-10mi-hard",
+        "no-sunday-morning-hard",
+        "end-before-10pm-hard",
+        "three-adjacent-seats-hard",
+        "row-2-low-vision-hard",
+        "high-rating-soft",
+        "avoid-romcom-soft",
+        "desk-for-two-soft",
+        "saturday-afternoon-soft"
+      ],
+      "templateDbFile": "scn_t1_college_weekend.db",
+      "seedDataFile": "data/scn_t1_college_weekend.json"
     }
   ]
 }

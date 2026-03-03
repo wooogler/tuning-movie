@@ -76,6 +76,39 @@
       "status": "active",
       "createdAt": "2026-03-03T19:11:12.702Z",
       "expiresAt": "2026-03-03T23:11:12.702Z"
+    },
+    {
+      "sessionId": "st_eb93b6cb0144442fb59ca833bac52abf",
+      "relaySessionId": "relay_st_eb93b6cb0144442fb59ca833bac52abf",
+      "participantId": "P-c52abf",
+      "scenarioId": "scn_t1_college_weekend",
+      "studyMode": "gui-only",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_eb93b6cb0144442fb59ca833bac52abf.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:24:10.200Z",
+      "expiresAt": "2026-03-03T23:24:10.200Z"
+    },
+    {
+      "sessionId": "st_63ae81349f4340c68e992159c00b1eb2",
+      "relaySessionId": "relay_st_63ae81349f4340c68e992159c00b1eb2",
+      "participantId": "P-0b1eb2",
+      "scenarioId": "scn_t1_college_weekend",
+      "studyMode": "gui-only",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_63ae81349f4340c68e992159c00b1eb2.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:38:16.156Z",
+      "expiresAt": "2026-03-03T23:38:16.156Z"
+    },
+    {
+      "sessionId": "st_4d3079675f9d49dbb7af1453aeb71675",
+      "relaySessionId": "relay_st_4d3079675f9d49dbb7af1453aeb71675",
+      "participantId": "P-b71675",
+      "scenarioId": "scn_t1_college_weekend",
+      "studyMode": "gui-only",
+      "dbPath": "/Users/sangwooklee/dev/tuning-movie/apps/backend/.runtime/study-db/st_4d3079675f9d49dbb7af1453aeb71675.db",
+      "status": "active",
+      "createdAt": "2026-03-03T19:41:12.152Z",
+      "expiresAt": "2026-03-03T23:41:12.152Z"
     }
   ]
 }

@@ -35,6 +35,8 @@ function validateScenario(raw: unknown): ScenarioDefinition | null {
   const story = typeof record.story === 'string' ? record.story.trim() : '';
   const templateDbFile =
     typeof record.templateDbFile === 'string' ? record.templateDbFile.trim() : '';
+  const seedDataFile =
+    typeof record.seedDataFile === 'string' ? record.seedDataFile.trim() : '';
   const narratorPreferenceTypes = Array.isArray(record.narratorPreferenceTypes)
     ? record.narratorPreferenceTypes.filter(
         (item): item is string => typeof item === 'string' && item.trim().length > 0
@@ -71,6 +73,7 @@ function validateScenario(raw: unknown): ScenarioDefinition | null {
     story,
     narratorPreferenceTypes,
     templateDbFile,
+    ...(seedDataFile ? { seedDataFile } : {}),
     seedFilters,
   };
 }

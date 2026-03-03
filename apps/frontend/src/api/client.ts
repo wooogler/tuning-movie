@@ -3,10 +3,15 @@ import type { StudyModeId } from '../pages/studyOptions';
 import {
   getStoredStudySession,
   type StudySessionState,
+  type StudyScenarioDetail,
   type StudyScenarioSummary,
 } from '../study/sessionStorage';
 
 interface StudySessionInfo extends Omit<StudySessionState, 'studyToken'> {
+  scenario: StudyScenarioSummary & {
+    story: string;
+    narratorPreferenceTypes: string[];
+  };
   story: string;
   narratorPreferenceTypes: string[];
   status: 'active' | 'finished' | 'expired';
@@ -75,12 +80,7 @@ export const api = {
   // Study scenarios/sessions
   getStudyScenarios: () =>
     fetchApi<{
-      scenarios: Array<
-        StudyScenarioSummary & {
-          story: string;
-          narratorPreferenceTypes: string[];
-        }
-      >;
+      scenarios: StudyScenarioDetail[];
     }>('/study/scenarios', {
       includeStudyToken: false,
     }),

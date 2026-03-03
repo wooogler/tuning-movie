@@ -3,17 +3,78 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import Database from 'better-sqlite3';
+import { buildScenarioSeats } from './scenarioSeatBuilder';
 import {
   getScenarioCatalog,
   getScenarioTemplatePath,
   resolveScenarioTemplateDir,
 } from '../study/scenarioCatalog';
+import { loadScenarioDataset } from '../study/scenarioDataset';
 import type { ScenarioDefinition } from '../study/types';
 
 interface ShowingRow {
   id: string;
   movie_id: string;
   theater_id: string;
+}
+
+function createTables(sqlite: Database.Database): void {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS movies (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      poster_url TEXT,
+      genre TEXT NOT NULL,
+      duration INTEGER NOT NULL,
+      rating TEXT NOT NULL,
+      release_date TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS theaters (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      location TEXT NOT NULL,
+      screen_count INTEGER NOT NULL,
+      distance_miles REAL NOT NULL,
+      amenities TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS showings (
+      id TEXT PRIMARY KEY,
+      movie_id TEXT NOT NULL REFERENCES movies(id),
+      theater_id TEXT NOT NULL REFERENCES theaters(id),
+      screen_number INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      time TEXT NOT NULL,
+      total_seats INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS seats (
+      id TEXT PRIMARY KEY,
+      showing_id TEXT NOT NULL REFERENCES showings(id),
+      row TEXT NOT NULL,
+      number INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      price INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available'
+    );
+
+    CREATE TABLE IF NOT EXISTS bookings (
+      id TEXT PRIMARY KEY,
+      showing_id TEXT NOT NULL REFERENCES showings(id),
+      customer_name TEXT NOT NULL,
+      customer_email TEXT NOT NULL,
+      total_price REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'confirmed',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS booking_seats (
+      id TEXT PRIMARY KEY,
+      booking_id TEXT NOT NULL REFERENCES bookings(id),
+      seat_id TEXT NOT NULL REFERENCES seats(id)
+    );
+  `);
 }
 
 function runBaseSeed(targetDbPath: string): void {
@@ -129,9 +190,102 @@ function ensureTemplateDir(): string {
   return dir;
 }
 
+function seedScenarioFromDataset(templatePath: string, scenario: ScenarioDefinition): void {
+  const dataset = loadScenarioDataset(scenario);
+  fs.mkdirSync(path.dirname(templatePath), { recursive: true });
+  if (fs.existsSync(templatePath)) {
+    fs.unlinkSync(templatePath);
+  }
+
+  const sqlite = new Database(templatePath);
+
+  try {
+    createTables(sqlite);
+    sqlite.exec('PRAGMA foreign_keys = ON');
+
+    const insertMovie = sqlite.prepare(
+      'INSERT INTO movies (id, title, poster_url, genre, duration, rating, release_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    const insertTheater = sqlite.prepare(
+      'INSERT INTO theaters (id, name, location, screen_count, distance_miles, amenities) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    const insertShowing = sqlite.prepare(
+      'INSERT INTO showings (id, movie_id, theater_id, screen_number, date, time, total_seats) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    const insertSeat = sqlite.prepare(
+      'INSERT INTO seats (id, showing_id, row, number, type, price, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+
+    const seats = buildScenarioSeats(
+      dataset.showings,
+      dataset.seatTemplate,
+      dataset.seatOverrides
+    );
+
+    const transaction = sqlite.transaction(() => {
+      for (const movie of dataset.movies) {
+        insertMovie.run(
+          movie.id,
+          movie.title,
+          movie.posterUrl,
+          JSON.stringify(movie.genre),
+          movie.duration,
+          movie.rating,
+          movie.releaseDate
+        );
+      }
+
+      for (const theater of dataset.theaters) {
+        insertTheater.run(
+          theater.id,
+          theater.name,
+          theater.location,
+          theater.screenCount,
+          theater.distanceMiles,
+          JSON.stringify(theater.amenities)
+        );
+      }
+
+      for (const showing of dataset.showings) {
+        insertShowing.run(
+          showing.id,
+          showing.movieId,
+          showing.theaterId,
+          showing.screenNumber,
+          showing.date,
+          showing.time,
+          showing.totalSeats
+        );
+      }
+
+      for (const seat of seats) {
+        insertSeat.run(
+          seat.id,
+          seat.showingId,
+          seat.row,
+          seat.number,
+          seat.type,
+          seat.price,
+          seat.status
+        );
+      }
+    });
+
+    transaction();
+    sqlite.exec('VACUUM');
+  } finally {
+    sqlite.close();
+  }
+}
+
 function seedScenarioTemplate(scenario: ScenarioDefinition): void {
   const templatePath = getScenarioTemplatePath(scenario);
   console.log(`[seed:scenarios] Seeding ${scenario.id} -> ${templatePath}`);
+  if (scenario.seedDataFile) {
+    seedScenarioFromDataset(templatePath, scenario);
+    return;
+  }
+
   runBaseSeed(templatePath);
   applyScenarioFilters(templatePath, scenario);
 }

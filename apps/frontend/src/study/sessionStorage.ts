@@ -3,6 +3,13 @@ import type { StudyModeConfig, StudyModeId } from '../pages/studyOptions';
 export interface StudyScenarioSummary {
   id: string;
   title: string;
+  story?: string;
+  narratorPreferenceTypes?: string[];
+}
+
+export interface StudyScenarioDetail extends StudyScenarioSummary {
+  story: string;
+  narratorPreferenceTypes: string[];
 }
 
 export interface StudySessionState {

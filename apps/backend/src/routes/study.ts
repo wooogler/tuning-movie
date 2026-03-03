@@ -63,6 +63,8 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
         scenario: {
           id: created.scenario.id,
           title: created.scenario.title,
+          story: created.scenario.story,
+          narratorPreferenceTypes: created.scenario.narratorPreferenceTypes,
         },
       };
     } catch (error) {
@@ -88,6 +90,8 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
       scenario: {
         id: context.scenario.id,
         title: context.scenario.title,
+        story: context.scenario.story,
+        narratorPreferenceTypes: context.scenario.narratorPreferenceTypes,
       },
       story: context.scenario.story,
       narratorPreferenceTypes: context.scenario.narratorPreferenceTypes,

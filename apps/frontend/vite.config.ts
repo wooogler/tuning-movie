@@ -15,6 +15,7 @@ export default defineConfig({
       '/showings': 'http://localhost:3000',
       '/seats': 'http://localhost:3000',
       '/bookings': 'http://localhost:3000',
+      '/study': 'http://localhost:3000',
       '/agent/config': 'http://localhost:3000',
       '/agent/ws': {
         target: 'ws://localhost:3000',

@@ -26,6 +26,7 @@ export interface ScenarioDefinition {
   story: string;
   narratorPreferenceTypes: string[];
   templateDbFile: string;
+  seedDataFile?: string;
   seedFilters?: ScenarioSeedFilters;
 }
 

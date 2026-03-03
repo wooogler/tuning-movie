@@ -31,6 +31,7 @@ import {
   type Stage,
 } from '../spec';
 import { MessageList, ChatInput } from '../components/chat';
+import { ScenarioBriefing } from '../components/scenario/ScenarioBriefing';
 import { StageRenderer } from '../renderer';
 import { useToolHandler, useAgentBridge } from '../hooks';
 import { agentTools, type ToolDefinition } from '../agent/tools';
@@ -1074,11 +1075,28 @@ export function ChatPage({
 
   const carouselTransition =
     'transform 860ms cubic-bezier(0.22, 1, 0.36, 1), opacity 760ms cubic-bezier(0.22, 1, 0.36, 1)';
+  const scenarioTitle = studySession?.scenario.title ?? 'Scenario';
+  const scenarioStory = studySession?.scenario.story ?? '';
+  const scenarioPreferenceTypes = studySession?.scenario.narratorPreferenceTypes ?? [];
+  const showScenarioBriefing = scenarioStory.length > 0 || scenarioPreferenceTypes.length > 0;
 
   return (
-    <div className="flex flex-col h-screen bg-dark">
-      <header className="shrink-0 border-b border-dark-border bg-dark px-4 py-3">
-        <div className="max-w-5xl mx-auto space-y-3">
+    <div className="flex h-screen bg-dark">
+      {showScenarioBriefing && (
+        <aside className="hidden w-[340px] shrink-0 border-r border-dark-border bg-dark-light lg:block">
+          <div className="h-full overflow-y-auto p-4">
+            <ScenarioBriefing
+              title={scenarioTitle}
+              story={scenarioStory}
+              narratorPreferenceTypes={scenarioPreferenceTypes}
+            />
+          </div>
+        </aside>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="shrink-0 border-b border-dark-border bg-dark px-4 py-3">
+          <div className="max-w-5xl mx-auto space-y-3">
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-lg font-semibold text-fg-strong">Movie Booking</h1>
             <button
@@ -1210,174 +1228,186 @@ export function ChatPage({
               Reset
             </button>
           </div>
-        </div>
-      </header>
+          </div>
+        </header>
 
-      {viewMode === 'chat' ? (
-        <MessageList
-          messages={messages}
-          activeSpec={activeSpec}
-          onSelect={handleSelect}
-          onToggle={handleToggle}
-          onNext={handleNext}
-          onBack={handleBack}
-          onStartOver={handleStartOver}
-          onConfirm={handleConfirm}
-          chatWidthPx={chatWidthPx}
-          isResizingWidth={isResizingChatWidth}
-          onResizeStart={handleChatWidthResizeStart}
-        />
-      ) : (
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          <div className="max-w-7xl mx-auto space-y-4">
-            <div className="flex flex-wrap justify-center gap-2">
-              {STAGE_ORDER.map((stage, index) => {
-                const isCurrent = stage === currentStage;
-                const isPassed = index < currentStep - 1;
-                return (
-                  <span
-                    key={stage}
-                    className={`px-2 py-1 rounded text-xs capitalize ${
-                      isCurrent
-                        ? 'bg-primary text-primary-fg font-semibold'
-                        : isPassed
-                        ? 'bg-dark-light text-fg'
-                        : 'bg-dark-border text-fg-faint'
-                    }`}
+        {showScenarioBriefing && (
+          <div className="shrink-0 border-b border-dark-border bg-dark-light px-4 py-3 lg:hidden">
+            <ScenarioBriefing
+              title={scenarioTitle}
+              story={scenarioStory}
+              narratorPreferenceTypes={scenarioPreferenceTypes}
+              compact
+            />
+          </div>
+        )}
+
+        {viewMode === 'chat' ? (
+          <MessageList
+            messages={messages}
+            activeSpec={activeSpec}
+            onSelect={handleSelect}
+            onToggle={handleToggle}
+            onNext={handleNext}
+            onBack={handleBack}
+            onStartOver={handleStartOver}
+            onConfirm={handleConfirm}
+            chatWidthPx={chatWidthPx}
+            isResizingWidth={isResizingChatWidth}
+            onResizeStart={handleChatWidthResizeStart}
+          />
+        ) : (
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div className="max-w-7xl mx-auto space-y-4">
+              <div className="flex flex-wrap justify-center gap-2">
+                {STAGE_ORDER.map((stage, index) => {
+                  const isCurrent = stage === currentStage;
+                  const isPassed = index < currentStep - 1;
+                  return (
+                    <span
+                      key={stage}
+                      className={`px-2 py-1 rounded text-xs capitalize ${
+                        isCurrent
+                          ? 'bg-primary text-primary-fg font-semibold'
+                          : isPassed
+                          ? 'bg-dark-light text-fg'
+                          : 'bg-dark-border text-fg-faint'
+                      }`}
+                    >
+                      {stage}
+                    </span>
+                  );
+                })}
+              </div>
+
+              <div className="relative h-[680px] overflow-hidden rounded-3xl border border-dark-border bg-dark-light/60">
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-dark-light/95 to-transparent" />
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-dark-light/95 to-transparent" />
+
+                <div className="h-full w-full p-5">
+                  <div
+                    className="grid h-full grid-cols-3 gap-5"
+                    style={{
+                      transform: `translateX(${carouselOffset}px)`,
+                      opacity: carouselOpacity,
+                      transition: carouselTransition,
+                    }}
                   >
-                    {stage}
-                  </span>
-                );
-              })}
-            </div>
-
-            <div className="relative h-[680px] overflow-hidden rounded-3xl border border-dark-border bg-dark-light/60">
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-dark-light/95 to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-dark-light/95 to-transparent" />
-
-              <div className="h-full w-full p-5">
-                <div
-                  className="grid h-full grid-cols-3 gap-5"
-                  style={{
-                    transform: `translateX(${carouselOffset}px)`,
-                    opacity: carouselOpacity,
-                    transition: carouselTransition,
-                  }}
-                >
-                  <div className="h-full overflow-hidden rounded-2xl border border-dark-border bg-dark-light pointer-events-none">
-                    <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-fg-muted">
-                      {previousStage ? `Previous · ${previousStage}` : 'Previous'}
-                    </div>
-                    {previousSpec ? (
-                      <div className="h-full overflow-y-auto px-4 pb-5 pt-3 opacity-75">
-                        <StageRenderer
-                          spec={previousSpec}
-                          onSelect={() => {}}
-                          onToggle={() => {}}
-                          onNext={() => {}}
-                          onBack={() => {}}
-                          onStartOver={undefined}
-                          onConfirm={() => {}}
-                        />
+                    <div className="h-full overflow-hidden rounded-2xl border border-dark-border bg-dark-light pointer-events-none">
+                      <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-fg-muted">
+                        {previousStage ? `Previous · ${previousStage}` : 'Previous'}
                       </div>
-                    ) : (
-                      <div className="px-4 py-10 text-center text-sm text-fg-faint">No previous stage</div>
-                    )}
-                  </div>
-
-                  <div className="h-full overflow-hidden rounded-2xl border border-primary/45 bg-dark-light">
-                    <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-primary">
-                      Current · {currentStage}
+                      {previousSpec ? (
+                        <div className="h-full overflow-y-auto px-4 pb-5 pt-3 opacity-75">
+                          <StageRenderer
+                            spec={previousSpec}
+                            onSelect={() => {}}
+                            onToggle={() => {}}
+                            onNext={() => {}}
+                            onBack={() => {}}
+                            onStartOver={undefined}
+                            onConfirm={() => {}}
+                          />
+                        </div>
+                      ) : (
+                        <div className="px-4 py-10 text-center text-sm text-fg-faint">No previous stage</div>
+                      )}
                     </div>
-                    {activeSpec ? (
-                      <div className="h-full overflow-y-auto px-4 pb-5 pt-3">
-                        <StageRenderer
-                          spec={activeSpec}
-                          onSelect={handleSelect}
-                          onToggle={handleToggle}
-                          onNext={handleNext}
-                          onBack={handleBack}
-                          onStartOver={handleStartOver}
-                          onConfirm={handleConfirm}
-                        />
-                      </div>
-                    ) : (
-                      <div className="py-8 text-center text-fg-muted">Loading...</div>
-                    )}
-                  </div>
 
-                  <div className="h-full overflow-hidden rounded-2xl border border-dark-border bg-dark-light pointer-events-none">
-                    <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-fg-muted">
-                      {nextStage ? `Next · ${nextStage}` : 'Next'}
-                    </div>
-                    {nextSpec ? (
-                      <div className="h-full overflow-y-auto px-4 pb-5 pt-3 opacity-75">
-                        <StageRenderer
-                          spec={nextSpec}
-                          onSelect={() => {}}
-                          onToggle={() => {}}
-                          onNext={() => {}}
-                          onBack={() => {}}
-                          onStartOver={undefined}
-                          onConfirm={() => {}}
-                        />
+                    <div className="h-full overflow-hidden rounded-2xl border border-primary/45 bg-dark-light">
+                      <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-primary">
+                        Current · {currentStage}
                       </div>
-                    ) : (
-                      <div className="px-4 py-10 text-center text-sm text-fg-faint">No next stage yet</div>
-                    )}
+                      {activeSpec ? (
+                        <div className="h-full overflow-y-auto px-4 pb-5 pt-3">
+                          <StageRenderer
+                            spec={activeSpec}
+                            onSelect={handleSelect}
+                            onToggle={handleToggle}
+                            onNext={handleNext}
+                            onBack={handleBack}
+                            onStartOver={handleStartOver}
+                            onConfirm={handleConfirm}
+                          />
+                        </div>
+                      ) : (
+                        <div className="py-8 text-center text-fg-muted">Loading...</div>
+                      )}
+                    </div>
+
+                    <div className="h-full overflow-hidden rounded-2xl border border-dark-border bg-dark-light pointer-events-none">
+                      <div className="px-4 pt-4 text-center text-xs uppercase tracking-[0.12em] text-fg-muted">
+                        {nextStage ? `Next · ${nextStage}` : 'Next'}
+                      </div>
+                      {nextSpec ? (
+                        <div className="h-full overflow-y-auto px-4 pb-5 pt-3 opacity-75">
+                          <StageRenderer
+                            spec={nextSpec}
+                            onSelect={() => {}}
+                            onToggle={() => {}}
+                            onNext={() => {}}
+                            onBack={() => {}}
+                            onStartOver={undefined}
+                            onConfirm={() => {}}
+                          />
+                        </div>
+                      ) : (
+                        <div className="px-4 py-10 text-center text-sm text-fg-faint">No next stage yet</div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {loading && (
-        <div className="shrink-0 px-4 py-2 text-center text-fg-muted text-sm">Loading...</div>
-      )}
+        {loading && (
+          <div className="shrink-0 px-4 py-2 text-center text-fg-muted text-sm">Loading...</div>
+        )}
 
-      {error && (
-        <div className="shrink-0 px-4 py-2 text-center text-primary text-sm">Error: {error}</div>
-      )}
+        {error && (
+          <div className="shrink-0 px-4 py-2 text-center text-primary text-sm">Error: {error}</div>
+        )}
 
-      {booking && (
-        <div className="shrink-0 px-4 py-4 border-t border-dark-border bg-dark-light">
-          <div className="max-w-3xl mx-auto text-center">
-            <div className="text-2xl mb-2">Booking Complete</div>
-            <p className="text-fg-strong font-medium">Booking Confirmed!</p>
-            <p className="text-fg-muted text-sm mb-3">Booking ID: {booking.id}</p>
-            <button
-              onClick={handleBookAnother}
-              className="px-4 py-2 bg-primary text-primary-fg rounded-lg hover:bg-primary/80"
-            >
-              Book Another
-            </button>
+        {booking && (
+          <div className="shrink-0 px-4 py-4 border-t border-dark-border bg-dark-light">
+            <div className="max-w-3xl mx-auto text-center">
+              <div className="text-2xl mb-2">Booking Complete</div>
+              <p className="text-fg-strong font-medium">Booking Confirmed!</p>
+              <p className="text-fg-muted text-sm mb-3">Booking ID: {booking.id}</p>
+              <button
+                onClick={handleBookAnother}
+                className="px-4 py-2 bg-primary text-primary-fg rounded-lg hover:bg-primary/80"
+              >
+                Book Another
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {agentBridgeEnabled && (
-        <ChatInput
-          chatWidthPx={chatWidthPx}
-          disabled={inputDisabled}
-          onSubmit={handleChatInputSubmit}
-          statusLabel={inputStatusLabel}
-          statusDetail={inputStatusDetail}
-          statusTone={inputStatusTone}
-          placeholder={
-            !isAgentBridgeConnected
-              ? 'Waiting for agent relay connection...'
-              : !isAgentBridgeJoined
-              ? 'Joining agent session...'
-              : !hasConnectedAgent
-              ? 'Waiting for an external agent to connect...'
-              : viewMode === 'chat'
-              ? 'Send a message to the external agent...'
-              : 'Carousel mode: input is available here as well'
-          }
-        />
-      )}
+        {agentBridgeEnabled && (
+          <ChatInput
+            chatWidthPx={chatWidthPx}
+            disabled={inputDisabled}
+            onSubmit={handleChatInputSubmit}
+            statusLabel={inputStatusLabel}
+            statusDetail={inputStatusDetail}
+            statusTone={inputStatusTone}
+            placeholder={
+              !isAgentBridgeConnected
+                ? 'Waiting for agent relay connection...'
+                : !isAgentBridgeJoined
+                ? 'Joining agent session...'
+                : !hasConnectedAgent
+                ? 'Waiting for an external agent to connect...'
+                : viewMode === 'chat'
+                ? 'Send a message to the external agent...'
+                : 'Carousel mode: input is available here as well'
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }

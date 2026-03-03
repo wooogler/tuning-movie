@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { STUDY_MODE_OPTIONS, type StudyModeId } from './studyOptions';
-import type { StudySessionState } from '../study/sessionStorage';
+import type { StudyScenarioDetail } from '../study/sessionStorage';
 
 type Theme = 'dark' | 'light';
 
@@ -13,7 +13,6 @@ interface StudyStartPageProps {
   onModeChange: (mode: StudyModeId) => void;
   selectedScenarioId: string | null;
   onScenarioChange: (scenarioId: string) => void;
-  onSessionCreated: (session: StudySessionState) => void;
 }
 
 export function StudyStartPage({
@@ -23,20 +22,11 @@ export function StudyStartPage({
   onModeChange,
   selectedScenarioId,
   onScenarioChange,
-  onSessionCreated,
 }: StudyStartPageProps) {
   const navigate = useNavigate();
   const [loadingScenarios, setLoadingScenarios] = useState(true);
-  const [startingSession, setStartingSession] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scenarios, setScenarios] = useState<
-    Array<{
-      id: string;
-      title: string;
-      story: string;
-      narratorPreferenceTypes: string[];
-    }>
-  >([]);
+  const [scenarios, setScenarios] = useState<StudyScenarioDetail[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -69,25 +59,10 @@ export function StudyStartPage({
     };
   }, [onScenarioChange, selectedScenarioId]);
 
-  const handleStartSession = async () => {
-    if (!selectedScenarioId || startingSession) return;
-    setStartingSession(true);
-    setError(null);
-    try {
-      const session = await api.createStudySession({
-        scenarioId: selectedScenarioId,
-        studyMode: selectedMode,
-      });
-      onSessionCreated(session);
-      navigate('/booking');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start study session');
-    } finally {
-      setStartingSession(false);
-    }
+  const handleStartTask = () => {
+    if (!selectedScenarioId) return;
+    navigate('/task-review');
   };
-
-  const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? null;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-dark px-4 py-8">
@@ -177,7 +152,6 @@ export function StudyStartPage({
                     />
                     <div>
                       <div className="text-sm font-medium text-fg-strong">{scenario.title}</div>
-                      <div className="mt-1 text-sm text-fg-muted">{scenario.story}</div>
                     </div>
                   </label>
                 );
@@ -185,16 +159,6 @@ export function StudyStartPage({
             )}
           </section>
         </div>
-
-        {selectedScenario && (
-          <div className="mt-5 rounded-xl border border-dark-border bg-dark p-4">
-            <div className="text-sm font-semibold text-fg-strong">{selectedScenario.title}</div>
-            <div className="mt-2 text-sm text-fg-muted">{selectedScenario.story}</div>
-            <div className="mt-3 text-xs text-fg-faint">
-              Preference types: {selectedScenario.narratorPreferenceTypes.join(', ')}
-            </div>
-          </div>
-        )}
 
         {error && (
           <div className="mt-4 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
@@ -205,11 +169,11 @@ export function StudyStartPage({
         <div className="mt-8 flex flex-wrap justify-end gap-3">
           <button
             type="button"
-            onClick={handleStartSession}
-            disabled={loadingScenarios || startingSession || !selectedScenarioId}
+            onClick={handleStartTask}
+            disabled={loadingScenarios || !selectedScenarioId}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {startingSession ? 'Starting...' : 'Start Prototype'}
+            Start Task
           </button>
         </div>
       </div>
