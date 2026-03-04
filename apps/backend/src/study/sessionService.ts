@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
+import { spawnSync } from 'child_process';
 import {
   createSessionDbFromTemplate,
   destroySessionDb,
@@ -43,6 +44,58 @@ const TOKEN_SECRET =
   process.env.STUDY_SESSION_SECRET || process.env.AGENT_SESSION_ID || 'tuning-movie-study-secret';
 
 const sessions = new Map<string, StudySessionRecord>();
+
+function resolveBackendRootForSeeding(): string {
+  const candidates = [
+    path.resolve(process.cwd(), 'apps/backend'),
+    process.cwd(),
+    path.resolve(__dirname, '../..'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'package.json'))) {
+      return candidate;
+    }
+  }
+  return process.cwd();
+}
+
+function runScenarioTemplateSeed(): void {
+  const backendRoot = resolveBackendRootForSeeding();
+  const distSeedPath = path.resolve(backendRoot, 'dist/db/seedScenarios.js');
+  const commandResult = fs.existsSync(distSeedPath)
+    ? spawnSync(process.execPath, [distSeedPath], {
+        cwd: backendRoot,
+        env: process.env,
+        stdio: 'inherit',
+      })
+    : spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'db:seed:scenarios'], {
+        cwd: backendRoot,
+        env: process.env,
+        stdio: 'inherit',
+      });
+
+  if (commandResult.status !== 0) {
+    throw new Error('Failed to generate scenario template DBs.');
+  }
+}
+
+function ensureScenarioTemplateDb(scenario: ScenarioDefinition): string {
+  const templateDbPath = getScenarioTemplatePath(scenario);
+  if (fs.existsSync(templateDbPath)) {
+    return templateDbPath;
+  }
+
+  console.warn(
+    `[study] Scenario template DB missing. Regenerating templates: ${templateDbPath}`
+  );
+  runScenarioTemplateSeed();
+
+  if (!fs.existsSync(templateDbPath)) {
+    throw new Error(`Scenario template DB not found: ${templateDbPath}`);
+  }
+  return templateDbPath;
+}
 
 function sessionsFileCandidates(): string[] {
   return [
@@ -207,7 +260,7 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
   const studyMode = parseStudyMode(input.studyMode);
   const studyModeConfig = getStudyModeConfig(studyMode);
 
-  const templateDbPath = getScenarioTemplatePath(scenario);
+  const templateDbPath = ensureScenarioTemplateDb(scenario);
   const sessionId = `st_${randomUUID().replace(/-/g, '')}`;
   const relaySessionId = `relay_${sessionId}`;
   const createdAt = now().toISOString();
