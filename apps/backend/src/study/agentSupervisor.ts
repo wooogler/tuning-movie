@@ -9,10 +9,14 @@ interface AgentProcessHandle {
 }
 
 const handles = new Map<string, AgentProcessHandle>();
+const WORKSPACE_ROOT = path.resolve(__dirname, '../../../..');
+const AGENT_ENTRYPOINT = path.resolve(WORKSPACE_ROOT, 'apps/tuning-agent/src/index.ts');
 
 function resolveTsxBinary(): string {
   const name = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
   const candidates = [
+    path.resolve(WORKSPACE_ROOT, 'apps/backend/node_modules/.bin', name),
+    path.resolve(WORKSPACE_ROOT, 'node_modules/.bin', name),
     path.resolve(process.cwd(), 'node_modules/.bin', name),
     path.resolve(process.cwd(), '../../node_modules/.bin', name),
     name,
@@ -45,9 +49,14 @@ export function startAgentForSession(
 
   stopAgentForSession(sessionId);
 
+  if (!fs.existsSync(AGENT_ENTRYPOINT)) {
+    process.stderr.write(`[agent-supervisor] Agent entrypoint not found: ${AGENT_ENTRYPOINT}\n`);
+    return;
+  }
+
   const tsxBinary = resolveTsxBinary();
-  const child = spawn(tsxBinary, ['apps/tuning-agent/src/index.ts'], {
-    cwd: path.resolve(process.cwd()),
+  const child = spawn(tsxBinary, [AGENT_ENTRYPOINT], {
+    cwd: WORKSPACE_ROOT,
     env: {
       ...process.env,
       AGENT_SESSION_ID: relaySessionId,
