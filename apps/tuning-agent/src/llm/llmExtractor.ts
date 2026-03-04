@@ -36,7 +36,19 @@ interface LlmTraceEvent {
 type LlmTraceListener = (event: LlmTraceEvent) => void;
 
 const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
-const MONITOR_LLM_TRACE_ENABLED = process.env.AGENT_MONITOR_LLM_TRACE !== 'false';
+
+function parseBooleanEnv(value: string | undefined): boolean | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return null;
+}
+
+const monitorEnabled =
+  parseBooleanEnv(process.env.AGENT_MONITOR_ENABLED) ?? process.env.NODE_ENV !== 'production';
+const monitorLlmTraceOverride = parseBooleanEnv(process.env.AGENT_MONITOR_LLM_TRACE);
+const MONITOR_LLM_TRACE_ENABLED = monitorEnabled && (monitorLlmTraceOverride ?? true);
 const llmTraceListeners = new Set<LlmTraceListener>();
 
 function emitLlmTrace(type: LlmTraceEvent['type'], payload: unknown): void {

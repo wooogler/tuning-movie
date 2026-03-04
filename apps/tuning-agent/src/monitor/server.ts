@@ -2,6 +2,7 @@ import http from 'node:http';
 import type { ActionOutcome, PerceivedContext, PlannedAction } from '../types';
 
 interface MonitorOptions {
+  enabled?: boolean;
   port: number;
   relayUrl: string;
   sessionId: string;
@@ -66,6 +67,7 @@ function sendJson(res: http.ServerResponse, statusCode: number, body: unknown): 
 }
 
 export class AgentMonitorServer {
+  private readonly enabled: boolean;
   private readonly port: number;
   private readonly clients = new Set<http.ServerResponse>();
   private readonly events: MonitorEvent[] = [];
@@ -74,6 +76,7 @@ export class AgentMonitorServer {
   private state: MonitorState;
 
   constructor(options: MonitorOptions) {
+    this.enabled = options.enabled ?? true;
     this.port = options.port;
     this.state = {
       startedAt: nowIso(),
@@ -103,6 +106,7 @@ export class AgentMonitorServer {
   }
 
   async start(): Promise<void> {
+    if (!this.enabled) return;
     if (this.server) return;
 
     this.server = http.createServer((req, res) => {
@@ -170,6 +174,7 @@ export class AgentMonitorServer {
   }
 
   close(): void {
+    if (!this.enabled) return;
     for (const client of this.clients) {
       client.end();
     }
@@ -178,7 +183,12 @@ export class AgentMonitorServer {
     this.server = null;
   }
 
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   getListeningPort(): number | null {
+    if (!this.enabled) return null;
     const address = this.server?.address();
     if (!address || typeof address === 'string') {
       return null;
@@ -187,6 +197,7 @@ export class AgentMonitorServer {
   }
 
   updateState(partial: Partial<MonitorState>): void {
+    if (!this.enabled) return;
     this.state = { ...this.state, ...partial };
     this.broadcast('state', { state: this.state });
   }
@@ -200,6 +211,7 @@ export class AgentMonitorServer {
   }
 
   setLastPlan(action: PlannedAction | null, trigger: string): void {
+    if (!this.enabled) return;
     if (!action) return;
     this.updateState({
       lastPlan: action,
@@ -208,6 +220,7 @@ export class AgentMonitorServer {
   }
 
   setLastOutcome(outcome: ActionOutcome): void {
+    if (!this.enabled) return;
     this.updateState({
       lastOutcome: outcome,
       actionCount: this.state.actionCount + 1,
@@ -219,6 +232,7 @@ export class AgentMonitorServer {
     constraints: string[],
     conflicts: string[]
   ): void {
+    if (!this.enabled) return;
     this.updateState({
       memoryPreferences: preferences.slice(),
       memoryConstraints: constraints.slice(),
@@ -227,6 +241,7 @@ export class AgentMonitorServer {
   }
 
   pushEvent(type: string, payload: unknown): void {
+    if (!this.enabled) return;
     const event: MonitorEvent = {
       index: ++this.sequence,
       timestamp: nowIso(),
@@ -241,12 +256,14 @@ export class AgentMonitorServer {
   }
 
   private clearEvents(): void {
+    if (!this.enabled) return;
     this.events.length = 0;
     this.sequence = 0;
     this.broadcast('snapshot', { state: this.state, events: this.events });
   }
 
   private broadcast(event: string, data: unknown): void {
+    if (!this.enabled) return;
     const chunk = sseData(event, data);
     for (const client of this.clients) {
       if (client.writableEnded || client.destroyed) {

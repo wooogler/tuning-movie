@@ -33,10 +33,22 @@ const studyId = process.env.AGENT_STUDY_ID || 'pilot-01';
 const participantId = process.env.AGENT_PARTICIPANT_ID || 'P01';
 const monitorPort = Number(process.env.AGENT_MONITOR_PORT || 3500);
 const monitorWebPort = Number(process.env.AGENT_MONITOR_WEB_PORT || 3501);
+const isProduction = process.env.NODE_ENV === 'production';
+
+function parseBooleanEnv(value: string | undefined): boolean | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return null;
+}
+
+const monitorEnabled = parseBooleanEnv(process.env.AGENT_MONITOR_ENABLED) ?? !isProduction;
 
 const memory = new AgentMemory();
 const relay = new RelayClient({ relayUrl, sessionId, agentName, requestTimeoutMs: 12000 });
 const monitor = new AgentMonitorServer({
+  enabled: monitorEnabled,
   port: monitorPort,
   relayUrl,
   sessionId,
@@ -88,6 +100,7 @@ const DEFAULT_CP_MEMORY_LIMIT = Math.max(
 );
 
 function getMonitorApiPort(): number {
+  if (!monitor.isEnabled()) return monitorPort;
   return monitor.getListeningPort() ?? monitorPort;
 }
 
@@ -306,10 +319,16 @@ async function ensureSessionReady(reason: string): Promise<void> {
 
         if (!connectedOnce) {
           connectedOnce = true;
-          const activeMonitorPort = getMonitorApiPort();
           console.log(`[tuning-agent] connected to ${relayUrl} (sessionId=${sessionId})`);
-          console.log(`[tuning-agent] monitor API available at http://localhost:${activeMonitorPort}`);
-          console.log(`[tuning-agent] monitor UI available at http://localhost:${monitorWebPort}`);
+          if (monitor.isEnabled()) {
+            const activeMonitorPort = getMonitorApiPort();
+            console.log(
+              `[tuning-agent] monitor API available at http://localhost:${activeMonitorPort}`
+            );
+            console.log(`[tuning-agent] monitor UI available at http://localhost:${monitorWebPort}`);
+          } else {
+            console.log('[tuning-agent] monitor disabled');
+          }
         }
         return;
       } catch (error) {
@@ -792,6 +811,7 @@ async function main(): Promise<void> {
   monitor.pushEvent('runtime.start', {
     relayUrl,
     sessionId,
+    monitorEnabled: monitor.isEnabled(),
     monitorPort: activeMonitorPort,
   });
 

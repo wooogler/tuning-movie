@@ -35,6 +35,13 @@ function prefixedWrite(prefix: string, chunk: Buffer | string): void {
   }
 }
 
+function resolveSupervisorAgentMonitorPort(): string {
+  const override = process.env.AGENT_MONITOR_PORT_OVERRIDE?.trim();
+  if (override) return override;
+  // Study sessions can run concurrently, so avoid a fixed monitor port.
+  return '0';
+}
+
 export function startAgentForSession(
   params: {
     sessionId: string;
@@ -64,6 +71,7 @@ export function startAgentForSession(
       AGENT_PARTICIPANT_ID: participantId,
       AGENT_ENABLE_GUI_ADAPTATION: modeConfig.guiAdaptationEnabled ? 'true' : 'false',
       AGENT_DEFAULT_CP_MEMORY_LIMIT: String(modeConfig.cpMemoryWindow),
+      AGENT_MONITOR_PORT: resolveSupervisorAgentMonitorPort(),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
