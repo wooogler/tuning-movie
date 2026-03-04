@@ -12,6 +12,151 @@ import type { PerceivedContext, PlanDecision, PlannedAction, ToolSchemaItem } fr
 
 type Stage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'confirm';
 const STAGE_ORDER: Stage[] = ['movie', 'theater', 'date', 'time', 'seat', 'confirm'];
+const RAW_SCAN_WINDOW = 24;
+const RECENT_WINDOW = 8;
+const MAX_HISTORY_ENTRIES = 12;
+const MAX_VISIBLE_ITEMS_PER_SYSTEM = 12;
+
+type HistoryMessageType = 'system' | 'user' | 'agent';
+
+interface CompactedHistoryEntry {
+  index: number;
+  type: HistoryMessageType;
+  value: Record<string, unknown>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function readTrimmedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function toHistoryType(value: unknown): HistoryMessageType | null {
+  const type = readTrimmedString(value);
+  if (type === 'system' || type === 'user' || type === 'agent') return type;
+  return null;
+}
+
+function compactVisibleItems(
+  value: unknown,
+  maxItems: number
+): Array<{ id: string; value: string; isDisabled?: true }> {
+  if (!Array.isArray(value)) return [];
+  const compacted: Array<{ id: string; value: string; isDisabled?: true }> = [];
+  for (const item of value) {
+    const record = asRecord(item);
+    if (!record) continue;
+    const id = readTrimmedString(record.id);
+    const itemValue = readTrimmedString(record.value);
+    if (!id || !itemValue) continue;
+    if (record.isDisabled === true) {
+      compacted.push({ id, value: itemValue, isDisabled: true });
+    } else {
+      compacted.push({ id, value: itemValue });
+    }
+    if (compacted.length >= maxItems) break;
+  }
+  return compacted;
+}
+
+function compactSystemSpec(
+  value: unknown,
+  includeItems: boolean
+): Record<string, unknown> | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const stage = readTrimmedString(record.stage);
+  const state = asRecord(record.state);
+  const selectedRaw = asRecord(state?.selected);
+  const selectedId = selectedRaw ? readTrimmedString(selectedRaw.id) : null;
+  const selectedValue = selectedRaw ? readTrimmedString(selectedRaw.value) : null;
+  const selectedListCount =
+    state && Array.isArray(state.selectedList) ? state.selectedList.length : 0;
+  const modification = asRecord(record.modification);
+  const summary: Record<string, unknown> = {};
+  const rawVisibleItems = Array.isArray(record.visibleItems) ? record.visibleItems : [];
+  const visibleItems = compactVisibleItems(rawVisibleItems, MAX_VISIBLE_ITEMS_PER_SYSTEM);
+
+  if (stage) summary.stage = stage;
+  if (visibleItems.length > 0) {
+    summary.visibleItems = visibleItems;
+  }
+  if (rawVisibleItems.length > visibleItems.length) {
+    summary.visibleItemCount = rawVisibleItems.length;
+  }
+  if (selectedId && selectedValue) {
+    summary.selected = { id: selectedId, value: selectedValue };
+  }
+  if (selectedListCount > 0) {
+    summary.selectedListCount = selectedListCount;
+  }
+  if (modification) {
+    summary.modification = modification;
+  }
+  if (includeItems) {
+    if (Array.isArray(record.items) && record.items.length > 0) {
+      summary.items = record.items;
+    }
+  }
+
+  return Object.keys(summary).length > 0 ? summary : null;
+}
+
+function compactHistoryEntry(
+  entry: unknown,
+  includeSystemItems: boolean
+): { type: HistoryMessageType; value: Record<string, unknown> } | null {
+  const record = asRecord(entry);
+  if (!record) return null;
+
+  const type = toHistoryType(record.type);
+  if (!type) return null;
+
+  const compacted: Record<string, unknown> = { type };
+  const stage = readTrimmedString(record.stage);
+  if (stage) compacted.stage = stage;
+
+  if (type === 'user') {
+    const action = readTrimmedString(record.action);
+    const label = readTrimmedString(record.label);
+    if (action) compacted.action = action;
+    if (label) compacted.label = label;
+    if (!action && !label) return null;
+    return { type, value: compacted };
+  }
+
+  if (type === 'agent') {
+    const text = readTrimmedString(record.text);
+    if (!text) return null;
+    compacted.text = text;
+    return { type, value: compacted };
+  }
+
+  const compactedSpec = compactSystemSpec(record.spec, includeSystemItems);
+  const annotation = asRecord(record.annotation);
+  if (compactedSpec) compacted.spec = compactedSpec;
+  if (annotation) compacted.annotation = annotation;
+  if (!compactedSpec && !annotation && !stage) return null;
+  return { type, value: compacted };
+}
+
+function getLatestCompactedByType(
+  entries: CompactedHistoryEntry[],
+  targetType: HistoryMessageType
+): CompactedHistoryEntry | null {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    if (entries[i].type === targetType) {
+      return entries[i];
+    }
+  }
+  return null;
+}
 
 function hasTool(toolSchema: ToolSchemaItem[], toolName: string): boolean {
   return toolSchema.some((tool) => tool.name === toolName);
@@ -94,7 +239,8 @@ function buildWorkflowContext(
   plannerTools: ToolSchemaItem[],
   preferences: string[],
   constraints: string[],
-  conflicts: string[]
+  conflicts: string[],
+  cpMemoryEnabled: boolean
 ): PlannerWorkflow {
   const selectedId = getSelectedId(spec);
   const selectedListCount = getSelectedListIds(spec).length;
@@ -118,7 +264,7 @@ function buildWorkflowContext(
     proceedRule = `Call next only when selectedId exists (current: ${selectedId ?? 'null'}).`;
   }
 
-  return {
+  const workflow: PlannerWorkflow = {
     stageOrder: STAGE_ORDER,
     currentStage: stage,
     previousStage,
@@ -127,17 +273,62 @@ function buildWorkflowContext(
     proceedRule,
     availableToolNames: plannerTools.map((tool) => tool.name),
     guardrails,
-    constraints,
-    preferences,
-    conflicts,
+    cpMemoryEnabled,
   };
+
+  if (cpMemoryEnabled) {
+    workflow.preferences = preferences;
+    workflow.constraints = constraints;
+    workflow.conflicts = conflicts;
+  }
+
+  return workflow;
 }
 
 function buildPlannerHistory(
   context: PerceivedContext
 ): unknown[] {
-  // Pass frontend messageHistory through as-is so the LLM sees exactly what users see.
-  return context.messageHistoryTail.slice();
+  // Compact raw timeline entries and keep a recent+anchored subset for planner context.
+  const rawHistory = context.messageHistoryTail.slice(-RAW_SCAN_WINDOW);
+  let latestSystemRawIndex = -1;
+
+  for (let i = rawHistory.length - 1; i >= 0; i -= 1) {
+    const record = asRecord(rawHistory[i]);
+    if (!record) continue;
+    if (toHistoryType(record.type) === 'system') {
+      latestSystemRawIndex = i;
+      break;
+    }
+  }
+
+  const compacted: CompactedHistoryEntry[] = [];
+  for (let i = 0; i < rawHistory.length; i += 1) {
+    const normalized = compactHistoryEntry(rawHistory[i], i === latestSystemRawIndex);
+    if (!normalized) continue;
+    compacted.push({
+      index: i,
+      type: normalized.type,
+      value: normalized.value,
+    });
+  }
+
+  if (compacted.length === 0) return [];
+
+  const selectedByIndex = new Map<number, CompactedHistoryEntry>();
+  for (const entry of compacted.slice(-RECENT_WINDOW)) {
+    selectedByIndex.set(entry.index, entry);
+  }
+
+  for (const type of ['system', 'user', 'agent'] as const) {
+    const latest = getLatestCompactedByType(compacted, type);
+    if (latest) {
+      selectedByIndex.set(latest.index, latest);
+    }
+  }
+
+  const ordered = Array.from(selectedByIndex.values()).sort((a, b) => a.index - b.index);
+  const bounded = ordered.slice(-MAX_HISTORY_ENTRIES);
+  return bounded.map((entry) => entry.value);
 }
 
 function sliceRecent(list: string[], maxItems: number): string[] {
@@ -242,6 +433,7 @@ export async function planNextAction(
   try {
     const plannerTools = getPlannerToolSchema(context.toolSchema);
     const plannerCpMemoryLimit = Math.max(0, Math.floor(context.plannerCpMemoryLimit ?? 0));
+    const cpMemoryEnabled = plannerCpMemoryLimit > 0;
     const plannerPreferences = sliceRecent(memory.getPreferences(), plannerCpMemoryLimit);
     const plannerConstraints = sliceRecent(memory.getConstraints(), plannerCpMemoryLimit);
     const plannerConflicts = sliceRecent(memory.getConflicts(), plannerCpMemoryLimit);
@@ -255,7 +447,8 @@ export async function planNextAction(
         plannerTools,
         plannerPreferences,
         plannerConstraints,
-        plannerConflicts
+        plannerConflicts,
+        cpMemoryEnabled
       ),
     };
 

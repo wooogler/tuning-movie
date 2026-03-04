@@ -8,6 +8,7 @@ import { AgentMessage } from './AgentMessage';
 interface MessageListProps {
   messages: ChatMessage[];
   activeSpec: UISpec | null;
+  isAgentTyping?: boolean;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
   onNext?: () => void;
@@ -22,6 +23,7 @@ interface MessageListProps {
 export function MessageList({
   messages,
   activeSpec,
+  isAgentTyping = false,
   onSelect,
   onToggle,
   onNext,
@@ -47,7 +49,7 @@ export function MessageList({
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+  }, [messages.length, isAgentTyping]);
 
   // Find the last system message index (the active one)
   const lastSystemIndex = messages.reduce(
@@ -108,6 +110,41 @@ export function MessageList({
 
           return <AgentMessage key={message.id} message={message} />;
         })}
+
+        {isAgentTyping && (
+          <div className="flex gap-3 py-4 justify-start">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center self-start mt-1">
+              <svg
+                className="w-4 h-4 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 10h.01M12 10h.01M16 10h.01M9 16h6M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+            <div className="max-w-[80%] min-w-0">
+              <div className="text-sm text-info-label mb-1">Agent</div>
+              <div
+                className="rounded-2xl rounded-tl-sm px-4 py-3 bg-info-bg border border-info-border text-info-text"
+                role="status"
+                aria-live="polite"
+                aria-label="Agent is typing"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="typing-dot" />
+                  <span className="typing-dot typing-dot-delay-1" />
+                  <span className="typing-dot typing-dot-delay-2" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Empty state */}
         {messages.length === 0 && (

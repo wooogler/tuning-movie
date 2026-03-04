@@ -5,8 +5,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY apps ./apps
 
-RUN npm install --workspace=apps/tuning-agent-typescript --include-workspace-root=false
-RUN npm run build --workspace=apps/tuning-agent-typescript
+RUN npm install
+RUN npm run build --workspace=apps/tuning-agent
 
 FROM node:20-alpine AS production
 
@@ -15,10 +15,10 @@ WORKDIR /app
 COPY package*.json ./
 COPY apps ./apps
 
-RUN npm install --omit=dev --workspace=apps/tuning-agent-typescript --include-workspace-root=false
+RUN npm install --omit=dev
 
-COPY --from=builder /app/apps/tuning-agent-typescript/dist ./apps/tuning-agent-typescript/dist
+COPY --from=builder /app/apps/tuning-agent/dist ./apps/tuning-agent/dist
 
 ENV NODE_ENV=production
 
-CMD ["node", "/app/apps/tuning-agent-typescript/dist/index.js"]
+CMD ["node", "/app/apps/tuning-agent/dist/index.js"]

@@ -15,7 +15,6 @@ function createTables() {
     CREATE TABLE IF NOT EXISTS movies (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
-      poster_url TEXT,
       genre TEXT NOT NULL,
       duration INTEGER NOT NULL,
       rating TEXT NOT NULL,
@@ -384,7 +383,6 @@ async function seed() {
     {
       id: 'm1',
       title: 'Midnight Bachelors',
-      posterUrl: 'https://placehold.co/300x450?text=Midnight+Bachelors',
       genre: JSON.stringify(['Comedy']),
       duration: 100,
       rating: '4.5',
@@ -393,7 +391,6 @@ async function seed() {
     {
       id: 'm2',
       title: 'Hall Pass High',
-      posterUrl: 'https://placehold.co/300x450?text=Hall+Pass+High',
       genre: JSON.stringify(['Comedy']),
       duration: 113,
       rating: '4.1',
@@ -402,7 +399,6 @@ async function seed() {
     {
       id: 'm3',
       title: 'Desk for Two',
-      posterUrl: 'https://placehold.co/300x450?text=Desk+for+Two',
       genre: JSON.stringify(['Comedy', 'Drama']),
       duration: 121,
       rating: '3.8',
@@ -411,7 +407,6 @@ async function seed() {
     {
       id: 'm4',
       title: 'Shadow Sentinel',
-      posterUrl: 'https://placehold.co/300x450?text=Shadow+Sentinel',
       genre: JSON.stringify(['Action']),
       duration: 152,
       rating: '4.7',
@@ -420,7 +415,6 @@ async function seed() {
     {
       id: 'm5',
       title: 'Black Ledger: Retribution',
-      posterUrl: 'https://placehold.co/300x450?text=Black+Ledger+Retribution',
       genre: JSON.stringify(['Action']),
       duration: 169,
       rating: '4.3',
@@ -429,7 +423,6 @@ async function seed() {
     {
       id: 'm6',
       title: 'Skyline Vortex',
-      posterUrl: 'https://placehold.co/300x450?text=Skyline+Vortex',
       genre: JSON.stringify(['Action', 'Drama']),
       duration: 131,
       rating: '3.9',
@@ -438,7 +431,6 @@ async function seed() {
     {
       id: 'm7',
       title: 'Vanishing Point',
-      posterUrl: 'https://placehold.co/300x450?text=Vanishing+Point',
       genre: JSON.stringify(['Thriller']),
       duration: 149,
       rating: '4.4',
@@ -447,7 +439,6 @@ async function seed() {
     {
       id: 'm8',
       title: 'City of Starlight',
-      posterUrl: 'https://placehold.co/300x450?text=City+of+Starlight',
       genre: JSON.stringify(['Romance']),
       duration: 128,
       rating: '4.2',

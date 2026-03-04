@@ -3,7 +3,6 @@ import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 export const movies = sqliteTable('movies', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
-  posterUrl: text('poster_url'),
   genre: text('genre').notNull(), // JSON string array
   duration: integer('duration').notNull(), // minutes
   rating: text('rating').notNull(),

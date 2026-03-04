@@ -3,7 +3,6 @@
     {
       "id": "m1",
       "title": "Desk for Two",
-      "posterUrl": "https://placehold.co/300x450?text=Desk+for+Two",
       "genre": [
         "Romance",
         "Drama"
@@ -15,7 +14,6 @@
     {
       "id": "m2",
       "title": "Love Punchline",
-      "posterUrl": "https://placehold.co/300x450?text=Love+Punchline",
       "genre": [
         "Romance",
         "Comedy"
@@ -27,7 +25,6 @@
     {
       "id": "m3",
       "title": "Cosmic Laughs",
-      "posterUrl": "https://placehold.co/300x450?text=Cosmic+Laughs",
       "genre": [
         "Sci-Fi",
         "Comedy"
@@ -39,7 +36,6 @@
     {
       "id": "m4",
       "title": "Happy Feet Friday",
-      "posterUrl": "https://placehold.co/300x450?text=Happy+Feet+Friday",
       "genre": [
         "Comedy"
       ],
@@ -50,7 +46,6 @@
     {
       "id": "m5",
       "title": "Steel Horizon",
-      "posterUrl": "https://placehold.co/300x450?text=Steel+Horizon",
       "genre": [
         "Action",
         "Thriller"
@@ -62,7 +57,6 @@
     {
       "id": "m6",
       "title": "Autumn Letters",
-      "posterUrl": "https://placehold.co/300x450?text=Autumn+Letters",
       "genre": [
         "Drama"
       ],

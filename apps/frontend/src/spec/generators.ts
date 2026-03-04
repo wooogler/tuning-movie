@@ -50,7 +50,6 @@ export interface MovieItem extends DataItem {
   genre: string[];
   rating: string;
   duration: number;
-  posterUrl?: string;
 }
 
 export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
@@ -61,7 +60,6 @@ export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
     genre: m.genre,
     rating: m.rating,
     duration: m.duration,
-    posterUrl: m.posterUrl,
   }));
 
   return createSpec({

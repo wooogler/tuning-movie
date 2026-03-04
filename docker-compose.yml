@@ -32,7 +32,7 @@ services:
     environment:
       - AGENT_RELAY_URL=ws://backend:3000/agent/ws
       - AGENT_SESSION_ID=${AGENT_SESSION_ID:-default}
-      - AGENT_NAME=${AGENT_NAME:-tuning-agent-typescript}
+      - AGENT_NAME=${AGENT_NAME:-tuning-agent}
       - AGENT_STUDY_ID=${AGENT_STUDY_ID:-pilot-01}
       - AGENT_PARTICIPANT_ID=${AGENT_PARTICIPANT_ID:-P01}
       - AGENT_MONITOR_PORT=3500

@@ -35,6 +35,31 @@ function prefixedWrite(prefix: string, chunk: Buffer | string): void {
   }
 }
 
+function parseBooleanEnv(value: string | undefined): boolean | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return null;
+}
+
+function resolveSupervisorAgentMonitorPort(): string {
+  const override = process.env.AGENT_MONITOR_PORT_OVERRIDE?.trim();
+  if (override) return override;
+
+  const monitorEnabled =
+    parseBooleanEnv(process.env.AGENT_MONITOR_ENABLED) ?? process.env.NODE_ENV !== 'production';
+  if (!monitorEnabled) return '0';
+
+  if (process.env.NODE_ENV !== 'production') {
+    return process.env.AGENT_MONITOR_PORT?.trim() || '3500';
+  }
+
+  // In production, keep monitor port dynamic to avoid cross-session conflicts
+  // if monitor is explicitly enabled.
+  return '0';
+}
+
 export function startAgentForSession(
   params: {
     sessionId: string;
@@ -64,6 +89,7 @@ export function startAgentForSession(
       AGENT_PARTICIPANT_ID: participantId,
       AGENT_ENABLE_GUI_ADAPTATION: modeConfig.guiAdaptationEnabled ? 'true' : 'false',
       AGENT_DEFAULT_CP_MEMORY_LIMIT: String(modeConfig.cpMemoryWindow),
+      AGENT_MONITOR_PORT: resolveSupervisorAgentMonitorPort(),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
