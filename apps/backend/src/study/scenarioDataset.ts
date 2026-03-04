@@ -12,7 +12,6 @@ type SeatStatus = 'available' | 'occupied';
 export interface ScenarioDatasetMovie {
   id: string;
   title: string;
-  posterUrl: string;
   genre: string[];
   duration: number;
   rating: string;
@@ -155,13 +154,12 @@ function parseMovie(raw: unknown, index: number, scenarioId: string): ScenarioDa
 
   const id = readString(record.id);
   const title = readString(record.title);
-  const posterUrl = readString(record.posterUrl);
   const genre = readStringArray(record.genre);
   const duration = readPositiveInteger(record.duration);
   const rating = readString(record.rating);
   const releaseDate = readString(record.releaseDate);
 
-  if (!id || !title || !posterUrl || !genre || duration === null || !rating || !releaseDate) {
+  if (!id || !title || !genre || duration === null || !rating || !releaseDate) {
     throw new Error(`[${scenarioId}] movies[${index}] has invalid fields`);
   }
   if (!validateDate(releaseDate)) {
@@ -171,7 +169,6 @@ function parseMovie(raw: unknown, index: number, scenarioId: string): ScenarioDa
   return {
     id,
     title,
-    posterUrl,
     genre,
     duration,
     rating,

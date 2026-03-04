@@ -23,7 +23,6 @@ function createTables(sqlite: Database.Database): void {
     CREATE TABLE IF NOT EXISTS movies (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
-      poster_url TEXT,
       genre TEXT NOT NULL,
       duration INTEGER NOT NULL,
       rating TEXT NOT NULL,
@@ -204,7 +203,7 @@ function seedScenarioFromDataset(templatePath: string, scenario: ScenarioDefinit
     sqlite.exec('PRAGMA foreign_keys = ON');
 
     const insertMovie = sqlite.prepare(
-      'INSERT INTO movies (id, title, poster_url, genre, duration, rating, release_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO movies (id, title, genre, duration, rating, release_date) VALUES (?, ?, ?, ?, ?, ?)'
     );
     const insertTheater = sqlite.prepare(
       'INSERT INTO theaters (id, name, location, screen_count, distance_miles, amenities) VALUES (?, ?, ?, ?, ?, ?)'
@@ -227,7 +226,6 @@ function seedScenarioFromDataset(templatePath: string, scenario: ScenarioDefinit
         insertMovie.run(
           movie.id,
           movie.title,
-          movie.posterUrl,
           JSON.stringify(movie.genre),
           movie.duration,
           movie.rating,
