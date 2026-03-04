@@ -6,6 +6,10 @@ interface MonitorOptions {
   relayUrl: string;
   sessionId: string;
   agentName: string;
+  llmSystemPrompts: {
+    planner: string;
+    extractor: string;
+  };
 }
 
 interface MonitorEvent {
@@ -35,6 +39,10 @@ interface MonitorState {
   memoryConflicts: string[];
   actionCount: number;
   pendingUserMessages: number;
+  llmSystemPrompts: {
+    planner: string;
+    extractor: string;
+  };
 }
 
 const MAX_EVENTS = 300;
@@ -87,6 +95,10 @@ export class AgentMonitorServer {
       memoryConflicts: [],
       actionCount: 0,
       pendingUserMessages: 0,
+      llmSystemPrompts: {
+        planner: options.llmSystemPrompts.planner,
+        extractor: options.llmSystemPrompts.extractor,
+      },
     };
   }
 
@@ -164,6 +176,14 @@ export class AgentMonitorServer {
     this.clients.clear();
     this.server?.close();
     this.server = null;
+  }
+
+  getListeningPort(): number | null {
+    const address = this.server?.address();
+    if (!address || typeof address === 'string') {
+      return null;
+    }
+    return address.port;
   }
 
   updateState(partial: Partial<MonitorState>): void {

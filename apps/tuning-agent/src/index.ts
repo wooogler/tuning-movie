@@ -2,9 +2,13 @@ import { executePlannedAction } from './core/executor';
 import { AgentMemory } from './core/memory';
 import { applyStateUpdated, applyUserMessage, fromSnapshot } from './core/perception';
 import { planNextAction } from './core/planner';
-import { subscribeLlmTrace as subscribePlannerLlmTrace } from './llm/llmPlanner';
+import {
+  getPlannerSystemPrompt,
+  subscribeLlmTrace as subscribePlannerLlmTrace,
+} from './llm/llmPlanner';
 import {
   extractPreferencesAndConstraints,
+  getExtractorSystemPrompt,
   subscribeLlmTrace as subscribeExtractorLlmTrace,
   type ExtractionContext,
 } from './llm/llmExtractor';
@@ -32,7 +36,16 @@ const monitorWebPort = Number(process.env.AGENT_MONITOR_WEB_PORT || 3501);
 
 const memory = new AgentMemory();
 const relay = new RelayClient({ relayUrl, sessionId, agentName, requestTimeoutMs: 12000 });
-const monitor = new AgentMonitorServer({ port: monitorPort, relayUrl, sessionId, agentName });
+const monitor = new AgentMonitorServer({
+  port: monitorPort,
+  relayUrl,
+  sessionId,
+  agentName,
+  llmSystemPrompts: {
+    planner: getPlannerSystemPrompt(),
+    extractor: getExtractorSystemPrompt(),
+  },
+});
 const llmTraceHandler = (event: { component?: string; type: string; payload: unknown }) => {
   const component =
     typeof event.component === 'string' && event.component.trim() ? event.component.trim() : 'unknown';
@@ -73,6 +86,10 @@ const DEFAULT_CP_MEMORY_LIMIT = Math.max(
   0,
   Number.parseInt(process.env.AGENT_DEFAULT_CP_MEMORY_LIMIT || '10', 10) || 10
 );
+
+function getMonitorApiPort(): number {
+  return monitor.getListeningPort() ?? monitorPort;
+}
 
 function syncMonitorMemoryState(): void {
   monitor.updateMemory(
@@ -289,8 +306,9 @@ async function ensureSessionReady(reason: string): Promise<void> {
 
         if (!connectedOnce) {
           connectedOnce = true;
+          const activeMonitorPort = getMonitorApiPort();
           console.log(`[tuning-agent] connected to ${relayUrl} (sessionId=${sessionId})`);
-          console.log(`[tuning-agent] monitor API available at http://localhost:${monitorPort}`);
+          console.log(`[tuning-agent] monitor API available at http://localhost:${activeMonitorPort}`);
           console.log(`[tuning-agent] monitor UI available at http://localhost:${monitorWebPort}`);
         }
         return;
@@ -770,10 +788,11 @@ async function main(): Promise<void> {
   await monitor.start();
   monitor.updateState({ phase: 'monitor-ready' });
   syncMonitorMemoryState();
+  const activeMonitorPort = getMonitorApiPort();
   monitor.pushEvent('runtime.start', {
     relayUrl,
     sessionId,
-    monitorPort,
+    monitorPort: activeMonitorPort,
   });
 
   relay.messages.subscribe(handleInbound);

@@ -27,6 +27,10 @@ type MonitorState = {
   memoryConflicts?: string[];
   actionCount: number;
   pendingUserMessages: number;
+  llmSystemPrompts?: {
+    planner: string;
+    extractor: string;
+  };
 };
 
 type SnapshotPayload = {
@@ -175,14 +179,28 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
   return interactions;
 }
 
+function getInteractionStatus(item: LlmInteraction): 'pending' | 'completed' | 'error' {
+  if (item.error) return 'error';
+  if (item.parsed) return 'completed';
+  return 'pending';
+}
+
+function getComponentLabel(component: LlmComponent): string {
+  if (component === 'extractor') return 'Extractor';
+  if (component === 'planner') return 'Planner';
+  return 'Unknown';
+}
+
 export default function App() {
   const [tab, setTab] = useState<'agent' | 'llm'>('llm');
   const [llmFilter, setLlmFilter] = useState<'all' | 'planner' | 'extractor'>('all');
+  const [showSystemPrompts, setShowSystemPrompts] = useState(false);
   const [monitorState, setMonitorState] = useState<MonitorState | null>(null);
   const [events, setEvents] = useState<MonitorEvent[]>([]);
   const [connection, setConnection] = useState<'connecting' | 'live' | 'error'>('connecting');
   const [errorText, setErrorText] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
+  const [selectedLlmId, setSelectedLlmId] = useState<number | null>(null);
 
   useEffect(() => {
     let closed = false;
@@ -301,7 +319,34 @@ export default function App() {
         .reverse(),
     [llmInteractions, llmFilter]
   );
+  const selectedLlmInteraction = useMemo(
+    () => (selectedLlmId === null ? null : llmInteractions.find((item) => item.id === selectedLlmId) ?? null),
+    [llmInteractions, selectedLlmId]
+  );
   const recentEvents = useMemo(() => events.slice().reverse().slice(0, 160), [events]);
+
+  useEffect(() => {
+    if (!selectedLlmInteraction) return;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedLlmId(null);
+      }
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [selectedLlmInteraction]);
+
+  useEffect(() => {
+    if (tab !== 'llm') {
+      setSelectedLlmId(null);
+    }
+  }, [tab]);
 
   async function clearMonitorEvents() {
     if (isClearing) return;
@@ -324,7 +369,8 @@ export default function App() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] px-4 pb-10 pt-6">
+    <>
+      <div className="mx-auto max-w-[1500px] px-4 pb-10 pt-6">
       <header className="mb-5 rounded-2xl border border-ink-700/70 bg-ink-900/60 p-4 backdrop-blur">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">Tuning Agent Monitor</h1>
@@ -461,9 +507,21 @@ export default function App() {
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-mist-300">
-              One card per LLM interaction (request → response/error) across planner/extractor.
+              One card per LLM interaction (request → response/error) across planner/extractor. Click a card to open
+              full-height detail.
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
+              <button
+                className={`rounded-lg border px-2.5 py-1 ${
+                  showSystemPrompts
+                    ? 'border-mist-500 bg-mist-700/20 text-mist-100'
+                    : 'border-ink-700 bg-ink-900/50 text-mist-300'
+                }`}
+                onClick={() => setShowSystemPrompts((prev) => !prev)}
+                type="button"
+              >
+                {showSystemPrompts ? 'Hide System Prompts' : 'Show System Prompts'}
+              </button>
               <button
                 className={`rounded-lg border px-2.5 py-1 ${
                   llmFilter === 'all'
@@ -499,17 +557,46 @@ export default function App() {
               </button>
             </div>
           </div>
+          {showSystemPrompts ? (
+            <section className="rounded-2xl border border-ink-700/70 bg-ink-900/50 p-4">
+              <h2 className="mb-1 text-sm font-semibold text-mist-200">System Prompts</h2>
+              <p className="mb-3 text-xs text-mist-300">
+                Prompts currently loaded by this agent process for each LLM component.
+              </p>
+              <div className="grid gap-3 xl:grid-cols-2">
+                <PromptBlock
+                  title="Planner"
+                  prompt={monitorState?.llmSystemPrompts?.planner}
+                />
+                <PromptBlock
+                  title="Extractor"
+                  prompt={monitorState?.llmSystemPrompts?.extractor}
+                />
+              </div>
+            </section>
+          ) : null}
           {filteredLlmInteractions.length === 0 ? (
             <section className="rounded-2xl border border-ink-700/70 bg-ink-900/50 p-4 text-sm text-mist-300">
               No LLM interactions for selected filter.
             </section>
           ) : (
             filteredLlmInteractions.map((item) => {
-              const status = item.error ? 'error' : item.parsed ? 'completed' : 'pending';
-              const componentLabel =
-                item.component === 'extractor' ? 'Extractor' : item.component === 'planner' ? 'Planner' : 'Unknown';
+              const status = getInteractionStatus(item);
+              const componentLabel = getComponentLabel(item.component);
               return (
-                <article key={item.id} className="rounded-2xl border border-ink-700/70 bg-ink-900/50 p-4">
+                <article
+                  key={item.id}
+                  className="cursor-pointer rounded-2xl border border-ink-700/70 bg-ink-900/50 p-4 transition hover:border-mist-500/70"
+                  onClick={() => setSelectedLlmId(item.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedLlmId(item.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <span
@@ -554,7 +641,69 @@ export default function App() {
           )}
         </section>
       )}
-    </div>
+      </div>
+      {selectedLlmInteraction ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-ink-950/85 p-3 backdrop-blur-sm sm:p-6"
+          onClick={() => setSelectedLlmId(null)}
+          role="dialog"
+        >
+          <section
+            className="mx-auto flex h-full w-full max-w-[1500px] flex-col rounded-2xl border border-ink-600 bg-ink-900/95"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700/80 px-4 py-3 text-xs sm:px-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`rounded-full px-2 py-1 font-semibold ${
+                    selectedLlmInteraction.component === 'extractor'
+                      ? 'bg-cyan-500/15 text-cyan-300'
+                      : selectedLlmInteraction.component === 'planner'
+                        ? 'bg-mist-500/20 text-mist-100'
+                        : 'bg-ink-700/60 text-mist-300'
+                  }`}
+                >
+                  {getComponentLabel(selectedLlmInteraction.component)}
+                </span>
+                <span className="text-mist-300">
+                  #{selectedLlmInteraction.id} · {shortTime(selectedLlmInteraction.timestamp)}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-1 font-semibold ${
+                    getInteractionStatus(selectedLlmInteraction) === 'completed'
+                      ? 'bg-ok-500/15 text-ok-500'
+                      : getInteractionStatus(selectedLlmInteraction) === 'pending'
+                        ? 'bg-warn-500/15 text-warn-500'
+                        : 'bg-danger-500/15 text-danger-500'
+                  }`}
+                >
+                  {getInteractionStatus(selectedLlmInteraction)}
+                </span>
+              </div>
+              <button
+                className="rounded-lg border border-ink-600 bg-ink-900/70 px-3 py-1.5 text-mist-100 hover:border-mist-500"
+                onClick={() => setSelectedLlmId(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-5">
+              <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
+                <TraceBlock fillHeight title="Request" value={selectedLlmInteraction.request} copyable />
+                <TraceBlock fillHeight title="Response" value={selectedLlmInteraction.parsed} copyable />
+              </div>
+              {selectedLlmInteraction.error !== null && selectedLlmInteraction.error !== undefined ? (
+                <div className="max-h-[35vh] min-h-[140px]">
+                  <TraceBlock fillHeight title="Error" value={selectedLlmInteraction.error} />
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -578,14 +727,66 @@ function JsonCard({ title, value }: { title: string; value: unknown }) {
   );
 }
 
+function PromptBlock({
+  title,
+  prompt,
+}: {
+  title: string;
+  prompt?: string;
+}) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const text = prompt?.trim() ? prompt : 'Prompt unavailable.';
+
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = window.setTimeout(() => setCopyState('idle'), 1200);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyState('copied');
+    } catch {
+      setCopyState('error');
+    }
+  }
+
+  return (
+    <section>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-mist-300">{title}</div>
+        <button
+          className={`rounded border px-2 py-0.5 text-[11px] ${
+            copyState === 'copied'
+              ? 'border-ok-500/60 bg-ok-500/15 text-ok-500'
+              : copyState === 'error'
+                ? 'border-danger-500/60 bg-danger-500/15 text-danger-500'
+                : 'border-ink-600 bg-ink-900/60 text-mist-200 hover:border-mist-500'
+          }`}
+          onClick={() => void handleCopy()}
+          type="button"
+        >
+          {copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Failed' : 'Copy'}
+        </button>
+      </div>
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-ink-700 bg-ink-950/70 p-2 font-mono text-[11px] text-mist-100">
+        {text}
+      </pre>
+    </section>
+  );
+}
+
 function TraceBlock({
   title,
   value,
   copyable = false,
+  fillHeight = false,
 }: {
   title: string;
   value: unknown;
   copyable?: boolean;
+  fillHeight?: boolean;
 }) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
 
@@ -605,7 +806,7 @@ function TraceBlock({
   }
 
   return (
-    <section>
+    <section className={fillHeight ? 'flex min-h-0 flex-col' : undefined}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="text-xs font-semibold text-mist-300">{title}</div>
         {copyable ? (
@@ -617,14 +818,21 @@ function TraceBlock({
                   ? 'border-danger-500/60 bg-danger-500/15 text-danger-500'
                   : 'border-ink-600 bg-ink-900/60 text-mist-200 hover:border-mist-500'
             }`}
-            onClick={() => void handleCopy()}
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleCopy();
+            }}
             type="button"
           >
             {copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Failed' : 'Copy'}
           </button>
         ) : null}
       </div>
-      <pre className="max-h-72 overflow-auto rounded-md border border-ink-700 bg-ink-950/70 p-2 font-mono text-[11px] text-mist-100">
+      <pre
+        className={`overflow-auto rounded-md border border-ink-700 bg-ink-950/70 p-2 font-mono text-[11px] text-mist-100 ${
+          fillHeight ? 'min-h-0 flex-1' : 'max-h-72'
+        }`}
+      >
         {fmt(value)}
       </pre>
     </section>

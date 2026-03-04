@@ -91,6 +91,10 @@ const EXTRACTION_SYSTEM_PROMPT =
   '- Do not include duplicates.\n' +
   '- Return JSON only matching this schema: { "updatedPreferences": string[], "updatedConstraints": string[], "updatedConflicts": string[] }';
 
+export function getExtractorSystemPrompt(): string {
+  return EXTRACTION_SYSTEM_PROMPT;
+}
+
 function parseJsonObject(text: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(text) as unknown;

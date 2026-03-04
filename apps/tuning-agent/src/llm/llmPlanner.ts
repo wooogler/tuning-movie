@@ -140,6 +140,10 @@ const SYSTEM_PROMPT =
   '- workflow.conflicts = current contradictions between preferences and constraints. Address or resolve these conflicts before committing.\n' +
   '- If there are multiple viable options and no explicit user commitment to one item, prefer action.type="none" and ask for a concise confirmation.';
 
+export function getPlannerSystemPrompt(): string {
+  return SYSTEM_PROMPT;
+}
+
 // ── OpenAI ──────────────────────────────────────────────────────────────────
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
