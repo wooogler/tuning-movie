@@ -82,6 +82,7 @@ let planningInFlight = false;
 let deferredReplanRequested = false;
 let deferredReplanTrigger: string | null = null;
 let userTurnAwaitingStateUpdate = false;
+let userConversationStarted = false;
 let fatalErrorMessage: string | null = null;
 let perceptionVersion = 0;
 
@@ -183,6 +184,28 @@ function applyImmediateUiSpec(context: PerceivedContext, uiSpec: unknown): Perce
     uiSpec: uiSpec ?? null,
     lastUpdatedAt: new Date().toISOString(),
   };
+}
+
+function hasInputUserMessage(history: unknown[]): boolean {
+  return history.some((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    const record = entry as Record<string, unknown>;
+    const type = typeof record.type === 'string' ? record.type : '';
+    const action = typeof record.action === 'string' ? record.action : '';
+    const label = typeof record.label === 'string' ? record.label : '';
+    return type === 'user' && action === 'input' && label.trim().length > 0;
+  });
+}
+
+function syncUserConversationStarted(context: PerceivedContext): void {
+  if (userConversationStarted) return;
+  if (context.lastUserMessage?.text?.trim()) {
+    userConversationStarted = true;
+    return;
+  }
+  if (hasInputUserMessage(context.messageHistoryTail)) {
+    userConversationStarted = true;
+  }
 }
 
 function getToolName(action: import('./types').PlannedAction): string {
@@ -388,6 +411,13 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
 
   const context = memory.getContext();
   if (!context) return;
+  if (!userConversationStarted && trigger !== 'state.updated:user-message') {
+    monitor.pushEvent('planner.blocked_until_user_message', {
+      trigger,
+      stage: context.stage,
+    });
+    return;
+  }
 
   planningInFlight = true;
   monitor.updateContext(context);
@@ -681,6 +711,7 @@ function resetRuntimeState(): void {
   deferredReplanRequested = false;
   deferredReplanTrigger = null;
   userTurnAwaitingStateUpdate = false;
+  userConversationStarted = false;
   fatalErrorMessage = null;
   perceptionVersion = 0;
   lastActionFingerprint = '';
@@ -730,6 +761,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
         next.lastUserMessage = previous.lastUserMessage;
       }
       upsertContext(next);
+      syncUserConversationStarted(next);
       markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
       await maybePlanAndExecute('snapshot.state');
@@ -741,6 +773,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       const next = applyStateUpdated(current, toStateUpdatedPayload(envelope.payload));
       const stageChanged = next.stage !== current.stage;
       upsertContext(next);
+      syncUserConversationStarted(next);
       markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
 
@@ -766,6 +799,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       if (!current) return;
       const userMessage = toUserMessagePayload(envelope.payload);
       if (!userMessage.text) return;
+      userConversationStarted = true;
       upsertContext(applyUserMessage(current, userMessage));
       monitor.updateContext(memory.getContext());
       monitor.updateState({ pendingUserMessages: 0 });
