@@ -9,9 +9,10 @@ export interface PlannerWorkflow {
   proceedRule: string;
   availableToolNames: string[];
   guardrails: string[];
-  constraints: string[];
-  preferences: string[];
-  conflicts: string[];
+  cpMemoryEnabled?: boolean;
+  constraints?: string[];
+  preferences?: string[];
+  conflicts?: string[];
 }
 
 interface PlannerInput {
@@ -94,6 +95,16 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   return null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readTrimmedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
 function toPlannerOutput(value: Record<string, unknown>): PlannerOutput | null {
   const assistantMessage =
     typeof value.assistantMessage === 'string' ? value.assistantMessage.trim() : '';
@@ -127,33 +138,296 @@ function toPlannerOutput(value: Record<string, unknown>): PlannerOutput | null {
   };
 }
 
-const SYSTEM_PROMPT =
+const BASE_SYSTEM_PROMPT =
   'You are a UI agent. Pick exactly one next step that best reflects user intent and current GUI state.\n' +
   'Constraints:\n' +
-  '- Use the provided history stream as context. Infer intent from the conversation, prioritizing unresolved recent user preferences.\n' +
-  '- Use the provided workflow object as process guidance (stage order, current/next stage, proceedRule, guardrails).\n' +
-  '- Treat workflow.currentStage and availableTools as operational boundaries.\n' +
-  '- If intent is reasonably clear, prefer taking one concrete action over asking repetitive clarification questions.\n' +
-  '- When intent remains broad, ambiguous, recommendation-seeking, or preference-seeking, prefer GUI adaptation tools (filter/sort/highlight/augment) and avoid commitment actions.\n' +
+  '- Use history and workflow together to infer intent, prioritizing unresolved recent user preferences.\n' +
+  '- Treat workflow.currentStage and available tools as hard operational boundaries.\n' +
+  '- Primary goal: help the user complete booking efficiently and safely.\n' +
+  '- If intent is reasonably clear, prefer one concrete action over repetitive clarifications.\n' +
+  '- If user intent or preference is uncertain, use a concise conversational clarification (respond/action.type="none") before applying potentially assumption-heavy GUI changes.\n' +
+  '- Use non-committal GUI modification tools when they clearly narrow options without assuming unstated preferences.\n' +
+  '- Use navigation/commitment actions (select/next/prev/startOver) only when user intent is clear and sufficiently confirmed.\n' +
+  '- Do not treat assistant-generated recommendations, options, or questions as user confirmation.\n' +
+  '- Require user-originated explicit or unambiguous confirmation before commitment actions.\n' +
+  '- Do not infer unstated optimization objectives (for example highest-rated, lowest price, earliest time, shortest duration, nearest location).\n' +
+  '- Apply optimization-oriented actions only when the objective is explicit in the latest user request or current workflow guidance.\n' +
+  '- If optimization objective is unspecified, prefer neutral narrowing or concise clarification instead of arbitrary ranking.\n' +
+  '- If multiple viable options remain without explicit user commitment to one item, ask concise confirmation.\n' +
+  '- Choose exactly one action for this turn.';
+
+const CP_MEMORY_PROMPT_RULES =
+  '- Use workflow.preferences as accumulated user intent, workflow.constraints as accumulated system availability facts, and workflow.conflicts as active contradictions to resolve before committing.';
+
+const JSON_ACTION_FORMAT_RULES =
+  'JSON action format rules:\n' +
   '- assistantMessage is the user-facing conversational response.\n' +
+  '- assistantMessage must be plain text only (no Markdown, no code fences, no bullet lists, no links).\n' +
+  '- Keep assistantMessage short and natural.\n' +
   '- Choose action.type="none" when clarification/confirmation is needed, or when the next step would commit to a choice without clear user confirmation.\n' +
   '- If action.type="tool.call", toolName must be one of available tools.\n' +
   '- Keep assistantMessage consistent with action: if action.type="tool.call", describe the action being taken and do not ask for permission.\n' +
   '- If assistantMessage asks for confirmation or permission, action.type must be "none".\n' +
-  '- Use execution tools (select/next/prev/startOver) only when the latest user-originated turn commits to a concrete next action (explicit instruction or unambiguous confirmation).\n' +
-  '- Do not treat assistant-generated recommendations, options, or follow-up questions by themselves as confirmation; allow commitment actions only after a user-originated explicit or unambiguous affirmation.\n' +
-  '- Choose exactly one action for this turn.\n' +
-  '- select requires params.itemId from visible item ids.\n' +
-  '- Never include internal item ids (for example m1, t2) in assistantMessage; refer to human-readable item values only.\n' +
-  '- assistantMessage must be plain text only (no Markdown, no code fences, no bullet lists, no links).\n' +
-  '- Keep assistantMessage short and natural.\n' +
-  '- workflow.constraints = accumulated system availability facts from prior turns. Factor these into feasibility checks and action selection.\n' +
-  '- workflow.preferences = accumulated user preferences from prior turns. Respect these when choosing items or making recommendations.\n' +
-  '- workflow.conflicts = current contradictions between preferences and constraints. Address or resolve these conflicts before committing.\n' +
-  '- If there are multiple viable options and no explicit user commitment to one item, prefer action.type="none" and ask for a concise confirmation.';
+  '- select requires params.itemId from visible item ids.';
+
+const NATIVE_TOOL_CALLING_RULES =
+  'Native tool-calling rules:\n' +
+  '- Call exactly one available function every turn.\n' +
+  '- If no GUI action should be taken now, call "respond".\n' +
+  '- Put a concise user-facing message in "assistantMessage" argument.\n' +
+  '- Put a concise rationale in "reason" argument.\n' +
+  '- For tool calls, assistantMessage must describe the action and must not ask for permission.\n' +
+  '- Do not output plain text without a function call.\n' +
+  '- Never include internal item ids (for example m1, t2) in assistantMessage; refer to human-readable item values only.';
 
 export function getPlannerSystemPrompt(): string {
-  return SYSTEM_PROMPT;
+  return BASE_SYSTEM_PROMPT;
+}
+
+function hasCpMemoryContext(workflow: PlannerWorkflow): boolean {
+  if (workflow.cpMemoryEnabled === true) return true;
+  if (workflow.cpMemoryEnabled === false) return false;
+  return (
+    Array.isArray(workflow.preferences) ||
+    Array.isArray(workflow.constraints) ||
+    Array.isArray(workflow.conflicts)
+  );
+}
+
+function buildSystemPrompt(workflow: PlannerWorkflow): string {
+  if (!hasCpMemoryContext(workflow)) {
+    return BASE_SYSTEM_PROMPT;
+  }
+  return `${BASE_SYSTEM_PROMPT}\n${CP_MEMORY_PROMPT_RULES}`;
+}
+
+type OpenAiJsonSchemaType = 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array';
+
+interface OpenAiFunctionTool {
+  type: 'function';
+  name: string;
+  description?: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required?: string[];
+    additionalProperties: boolean;
+  };
+}
+
+interface NativeToolCall {
+  toolName: string;
+  arguments: Record<string, unknown>;
+}
+
+const TOOL_META_ASSISTANT_MESSAGE_KEY = 'assistantMessage';
+const TOOL_META_REASON_KEY = 'reason';
+const NATIVE_NONE_TOOL_NAME = 'respond';
+
+function normalizeJsonSchemaType(raw: string | null): OpenAiJsonSchemaType | null {
+  if (!raw) return null;
+  switch (raw.toLowerCase()) {
+    case 'string':
+      return 'string';
+    case 'number':
+      return 'number';
+    case 'integer':
+      return 'integer';
+    case 'boolean':
+      return 'boolean';
+    case 'object':
+      return 'object';
+    case 'array':
+      return 'array';
+    default:
+      return null;
+  }
+}
+
+function toOpenAiParamSchema(paramValue: unknown): Record<string, unknown> {
+  const paramRecord = isRecord(paramValue) ? paramValue : {};
+  const schema: Record<string, unknown> = {};
+
+  const description = readTrimmedString(paramRecord.description);
+  if (description) schema.description = description;
+
+  const normalizedType = normalizeJsonSchemaType(readTrimmedString(paramRecord.type));
+  if (normalizedType) {
+    schema.type = normalizedType;
+    if (normalizedType === 'array') {
+      schema.items = {};
+    }
+    if (normalizedType === 'object') {
+      schema.additionalProperties = true;
+    }
+  }
+
+  if (Array.isArray(paramRecord.enum)) {
+    const enumValues = paramRecord.enum.filter(
+      (item): item is string => typeof item === 'string' && Boolean(item.trim())
+    );
+    if (enumValues.length > 0) {
+      schema.enum = enumValues;
+      if (!normalizedType) {
+        schema.type = 'string';
+      }
+    }
+  }
+
+  return schema;
+}
+
+function getToolParametersRecord(tool: ToolSchemaItem): Record<string, unknown> {
+  if (isRecord(tool.parameters)) return tool.parameters;
+  if (isRecord(tool.params)) return tool.params;
+  return {};
+}
+
+function toOpenAiTools(availableTools: ToolSchemaItem[]): OpenAiFunctionTool[] {
+  const tools: OpenAiFunctionTool[] = [];
+
+  for (const tool of availableTools) {
+    const name = readTrimmedString(tool.name);
+    if (!name) continue;
+    const description = readTrimmedString(tool.description);
+    const parameterDefs = getToolParametersRecord(tool);
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+
+    for (const [paramName, paramValue] of Object.entries(parameterDefs)) {
+      properties[paramName] = toOpenAiParamSchema(paramValue);
+      const optional = isRecord(paramValue) && paramValue.optional === true;
+      if (!optional) {
+        required.push(paramName);
+      }
+    }
+
+    properties[TOOL_META_ASSISTANT_MESSAGE_KEY] = {
+      type: 'string',
+      description: 'One short user-facing message describing the step.',
+    };
+    properties[TOOL_META_REASON_KEY] = {
+      type: 'string',
+      description: 'Brief internal reason for why this tool is the best next action now.',
+    };
+
+    tools.push({
+      type: 'function',
+      name,
+      ...(description ? { description } : {}),
+      parameters: {
+        type: 'object',
+        properties,
+        ...(required.length > 0 ? { required } : {}),
+        additionalProperties: false,
+      },
+    });
+  }
+
+  tools.push({
+    type: 'function',
+    name: NATIVE_NONE_TOOL_NAME,
+    description:
+      'Respond to the user without executing any GUI tool. Use this for clarification, confirmation, or when waiting for user input.',
+    parameters: {
+      type: 'object',
+      properties: {
+        [TOOL_META_ASSISTANT_MESSAGE_KEY]: {
+          type: 'string',
+          description: 'A concise user-facing response.',
+        },
+        [TOOL_META_REASON_KEY]: {
+          type: 'string',
+          description: 'Brief reason for not taking a tool action now.',
+        },
+      },
+      required: [TOOL_META_ASSISTANT_MESSAGE_KEY],
+      additionalProperties: false,
+    },
+  });
+
+  return tools;
+}
+
+function parseToolArguments(raw: unknown): Record<string, unknown> {
+  if (isRecord(raw)) return raw;
+  if (typeof raw === 'string') {
+    const parsed = parseJsonObject(raw);
+    return parsed ?? {};
+  }
+  return {};
+}
+
+function extractNativeToolCall(body: unknown): NativeToolCall | null {
+  if (!isRecord(body)) return null;
+  const output = Array.isArray(body.output) ? body.output : [];
+
+  for (const item of output) {
+    if (!isRecord(item)) continue;
+    if (item.type !== 'function_call') continue;
+    const toolName = readTrimmedString(item.name);
+    if (!toolName) continue;
+    return {
+      toolName,
+      arguments: parseToolArguments(item.arguments),
+    };
+  }
+
+  return null;
+}
+
+function plannerOutputFromNativeToolCall(
+  toolCall: NativeToolCall,
+  outputText: string | null
+): PlannerOutput {
+  const params = { ...toolCall.arguments };
+  const assistantMessageFromToolArg = readTrimmedString(params[TOOL_META_ASSISTANT_MESSAGE_KEY]);
+  const reasonFromToolArg = readTrimmedString(params[TOOL_META_REASON_KEY]);
+  delete params[TOOL_META_ASSISTANT_MESSAGE_KEY];
+  delete params[TOOL_META_REASON_KEY];
+
+  const assistantMessage = assistantMessageFromToolArg ?? readTrimmedString(outputText) ?? '';
+  const reason =
+    reasonFromToolArg ??
+    assistantMessageFromToolArg ??
+    readTrimmedString(outputText) ??
+    `Use ${toolCall.toolName} as the best next action based on user intent and current workflow state.`;
+
+  if (toolCall.toolName === NATIVE_NONE_TOOL_NAME) {
+    return {
+      assistantMessage,
+      action: {
+        type: 'none',
+        toolName: '',
+        params: {},
+        reason,
+      },
+    };
+  }
+
+  return {
+    assistantMessage,
+    action: {
+      type: 'tool.call',
+      toolName: toolCall.toolName,
+      params,
+      reason,
+    },
+  };
+}
+
+function plannerOutputFromNoToolCall(outputText: string | null): PlannerOutput | null {
+  const assistantMessage = readTrimmedString(outputText) ?? '';
+  if (!assistantMessage) return null;
+  return {
+    assistantMessage,
+    action: {
+      type: 'none',
+      toolName: '',
+      params: {},
+      reason: assistantMessage,
+    },
+  };
 }
 
 // ── OpenAI ──────────────────────────────────────────────────────────────────
@@ -218,47 +492,29 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
   const temperature = resolveOpenAITemperature();
+  const openAiTools = toOpenAiTools(input.availableTools);
+  const nativePlannerInput = {
+    history: input.history,
+    workflow: input.workflow,
+  };
+  const openAiSystemPrompt =
+    buildSystemPrompt(input.workflow) +
+    '\n' +
+    NATIVE_TOOL_CALLING_RULES;
 
   const baseBody = {
     model: OPENAI_MODEL,
     input: [
       {
         role: 'system',
-        content:
-          SYSTEM_PROMPT +
-          '\n- Return JSON only via schema.',
+        content: openAiSystemPrompt,
       },
       {
         role: 'user',
-        content: JSON.stringify(input),
+        content: JSON.stringify(nativePlannerInput),
       },
     ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'planner_decision',
-        strict: false,
-        schema: {
-          type: 'object',
-          properties: {
-            assistantMessage: { type: 'string' },
-            action: {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['tool.call', 'none'] },
-                toolName: { type: 'string' },
-                params: { type: 'object', additionalProperties: true },
-                reason: { type: 'string' },
-              },
-              required: ['type', 'toolName', 'params', 'reason'],
-              additionalProperties: false,
-            },
-          },
-          required: ['assistantMessage', 'action'],
-          additionalProperties: false,
-        },
-      },
-    },
+    ...(openAiTools.length > 0 ? { tools: openAiTools, parallel_tool_calls: false } : {}),
   };
   const body =
     typeof temperature === 'number'
@@ -270,7 +526,8 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   }
   emitLlmTrace('request', {
     model: OPENAI_MODEL,
-    input,
+    input: nativePlannerInput,
+    tools: openAiTools.map((tool) => tool.name),
     temperature: typeof temperature === 'number' ? temperature : null,
   });
 
@@ -297,7 +554,8 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
       }
       emitLlmTrace('request', {
         model: OPENAI_MODEL,
-        input,
+        input: nativePlannerInput,
+        tools: openAiTools.map((tool) => tool.name),
         temperature: null,
         retryWithoutTemperature: true,
       });
@@ -323,19 +581,35 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
 
   const payload = (await response.json()) as unknown;
   const outputText = parseOpenAIOutputText(payload);
+  const nativeToolCall = extractNativeToolCall(payload);
   if (DEBUG_LLM) {
     console.log('[tuning-agent][llm] planner raw output_text:', outputText);
+    console.log('[tuning-agent][llm] planner native tool call:', JSON.stringify(nativeToolCall));
   }
-  emitLlmTrace('response.raw', { outputText });
+  emitLlmTrace('response.raw', { outputText, nativeToolCall });
+
+  if (nativeToolCall) {
+    const parsedNative = plannerOutputFromNativeToolCall(nativeToolCall, outputText);
+    emitLlmTrace('response.parsed', { parsed: parsedNative });
+    return parsedNative;
+  }
+
   if (!outputText) return null;
   const parsed = parseJsonObject(outputText);
   if (DEBUG_LLM) {
     console.log('[tuning-agent][llm] planner parsed output:', JSON.stringify(parsed));
   }
-  emitLlmTrace('response.parsed', { parsed });
-  if (!parsed) return null;
+  if (parsed) {
+    const structured = toPlannerOutput(parsed);
+    emitLlmTrace('response.parsed', { parsed: structured ?? parsed, parser: 'json-schema-fallback' });
+    if (structured) {
+      return structured;
+    }
+  }
 
-  return toPlannerOutput(parsed);
+  const noToolOutput = plannerOutputFromNoToolCall(outputText);
+  emitLlmTrace('response.parsed', { parsed: noToolOutput, parser: 'text-no-tool' });
+  return noToolOutput;
 }
 
 // ── Gemini ──────────────────────────────────────────────────────────────────
@@ -374,7 +648,9 @@ export async function planActionWithGemini(input: PlannerInput): Promise<Planner
   const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
   const geminiSystemPrompt =
-    SYSTEM_PROMPT +
+    buildSystemPrompt(input.workflow) +
+    '\n' +
+    JSON_ACTION_FORMAT_RULES +
     '\n- Return JSON only matching this schema: { "assistantMessage": string, "action": { "type": "tool.call" | "none", "toolName": string, "params": object, "reason": string } }';
 
   const body = {

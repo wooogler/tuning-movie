@@ -6,16 +6,17 @@ interface VisibleItemSummary {
   disabled?: boolean;
 }
 
+export type ExtractionFocus = 'preferences_conflicts' | 'constraints_conflicts';
+type ExtractionTrigger = 'user_message' | 'ui_changed';
+
 interface ExtractionInput {
   userMessage: string;
+  updateFocus: ExtractionFocus;
+  trigger: ExtractionTrigger;
   currentStage: string;
-  messageHistory: unknown[];
+  contextHistory: unknown[];
   visibleItems: VisibleItemSummary[];
   selectedItem: { id: string; value: string } | null;
-  actionType: string;
-  toolName: string;
-  actionParams: Record<string, unknown>;
-  outcomeOk: boolean;
   existingPreferences: string[];
   existingConstraints: string[];
   existingConflicts: string[];
@@ -72,13 +73,16 @@ const EXTRACTION_SYSTEM_PROMPT =
   '- System\'s Constraints: objective availability or limitation facts from the system state.\n' +
   '- Conflicts: contradictions between preferences and constraints.\n' +
   '\n' +
-  'Inputs include existingPreferences, existingConstraints, existingConflicts, userMessage, messageHistory, visibleItems, selectedItem, currentStage, action metadata, and outcomeOk.\n' +
+  'Inputs include existingPreferences, existingConstraints, existingConflicts, userMessage, updateFocus, trigger, contextHistory, visibleItems, selectedItem, and currentStage.\n' +
   '\n' +
   'Update policy:\n' +
   '- Return the full updated list for all categories on every turn.\n' +
   '- Start from existing lists, then revise by this turn\'s evidence.\n' +
   '- If a previous item becomes obsolete, remove it by not including it in the updated list.\n' +
   '- If no change is needed, return existing lists as-is.\n' +
+  '- updateFocus values: "preferences_conflicts" or "constraints_conflicts".\n' +
+  '- If updateFocus is "preferences_conflicts", keep constraints unchanged unless there is explicit new constraint evidence in the provided inputs.\n' +
+  '- If updateFocus is "constraints_conflicts", keep preferences unchanged unless there is explicit new user intent evidence in the provided inputs.\n' +
   '\n' +
   'Preference rules:\n' +
   '- Preferences must come from user intent, not inferred solely from system state.\n' +
@@ -105,6 +109,130 @@ const EXTRACTION_SYSTEM_PROMPT =
 
 export function getExtractorSystemPrompt(): string {
   return EXTRACTION_SYSTEM_PROMPT;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function trimText(value: unknown, maxLength = 240): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length <= maxLength ? trimmed : `${trimmed.slice(0, maxLength)}...`;
+}
+
+function compactVisibleItems(value: unknown, maxItems = 8): VisibleItemSummary[] {
+  if (!Array.isArray(value)) return [];
+  const compacted: VisibleItemSummary[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const id = trimText(entry.id, 64);
+    const itemValue = trimText(entry.value, 200);
+    if (!id || !itemValue) continue;
+    compacted.push({
+      id,
+      value: itemValue,
+      disabled: entry.isDisabled === true || entry.disabled === true,
+    });
+    if (compacted.length >= maxItems) break;
+  }
+  return compacted;
+}
+
+function compactSystemSpec(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+
+  const stage = trimText(value.stage, 24);
+  const state = isRecord(value.state) ? value.state : null;
+  const selected =
+    state && isRecord(state.selected)
+      ? {
+          id: trimText(state.selected.id, 64),
+          value: trimText(state.selected.value, 200),
+        }
+      : null;
+  const selectedListCount =
+    state && Array.isArray(state.selectedList) ? state.selectedList.length : 0;
+  const modification = isRecord(value.modification) ? value.modification : null;
+
+  const summary: Record<string, unknown> = {};
+  if (stage) summary.stage = stage;
+  if (selected && selected.id && selected.value) summary.selected = selected;
+  if (selectedListCount > 0) summary.selectedListCount = selectedListCount;
+  if (modification) summary.modification = modification;
+  return Object.keys(summary).length > 0 ? summary : null;
+}
+
+function compactMessageEntry(entry: unknown): Record<string, unknown> | null {
+  if (!isRecord(entry)) return null;
+  const type = trimText(entry.type, 16);
+  if (!type) return null;
+
+  const compacted: Record<string, unknown> = { type };
+  const stage = trimText(entry.stage, 24);
+  if (stage) compacted.stage = stage;
+
+  if (type === 'user') {
+    const action = trimText(entry.action, 24);
+    const label = trimText(entry.label, 280);
+    if (action) compacted.action = action;
+    if (label) compacted.label = label;
+    return label || action ? compacted : null;
+  }
+
+  if (type === 'agent') {
+    const text = trimText(entry.text, 320);
+    if (!text) return null;
+    compacted.text = text;
+    return compacted;
+  }
+
+  if (type === 'system') {
+    const spec = compactSystemSpec(entry.spec);
+    const annotation = isRecord(entry.annotation) ? entry.annotation : null;
+    if (spec) compacted.spec = spec;
+    if (annotation) compacted.annotation = annotation;
+    return spec || annotation ? compacted : null;
+  }
+
+  return null;
+}
+
+function compactHistory(history: unknown[]): Record<string, unknown>[] {
+  const compacted: Record<string, unknown>[] = [];
+  for (const entry of history) {
+    const normalized = compactMessageEntry(entry);
+    if (normalized) compacted.push(normalized);
+  }
+  return compacted;
+}
+
+function focusHistoryForConstraintUpdate(
+  history: Record<string, unknown>[]
+): Record<string, unknown>[] {
+  let latestAgentIndex = -1;
+  let latestSystemIndex = -1;
+
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const type = history[i].type;
+    if (latestAgentIndex < 0 && type === 'agent') {
+      latestAgentIndex = i;
+      continue;
+    }
+    if (latestSystemIndex < 0 && type === 'system') {
+      latestSystemIndex = i;
+    }
+    if (latestAgentIndex >= 0 && latestSystemIndex >= 0) break;
+  }
+
+  const indices = [latestAgentIndex, latestSystemIndex]
+    .filter((index): index is number => index >= 0)
+    .sort((a, b) => a - b);
+  if (indices.length === 0) {
+    return history.slice(-3);
+  }
+  return indices.map((index) => history[index]);
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -565,14 +693,12 @@ async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutp
 
 export interface ExtractionContext {
   userMessage: string;
+  updateFocus: ExtractionFocus;
+  trigger: ExtractionTrigger;
   currentStage: string;
-  messageHistory: unknown[];
+  contextHistory: unknown[];
   visibleItems: VisibleItemSummary[];
   selectedItem: { id: string; value: string } | null;
-  actionType: string;
-  toolName: string;
-  actionParams: Record<string, unknown>;
-  outcomeOk: boolean;
   existingPreferences: string[];
   existingConstraints: string[];
   existingConflicts: string[];
@@ -592,16 +718,21 @@ export async function extractPreferencesAndConstraints(
     throw new Error('EXTRACTION_PROVIDER_UNAVAILABLE');
   }
 
+  const updateFocus = ctx.updateFocus;
+  const compactedHistory = compactHistory(ctx.contextHistory.slice(-20));
+  const focusedHistory =
+    updateFocus === 'constraints_conflicts'
+      ? focusHistoryForConstraintUpdate(compactedHistory)
+      : compactedHistory.slice(-8);
+
   const input: ExtractionInput = {
     userMessage: ctx.userMessage,
+    updateFocus,
+    trigger: ctx.trigger,
     currentStage: ctx.currentStage,
-    messageHistory: ctx.messageHistory.slice(-15),
+    contextHistory: focusedHistory,
     visibleItems: ctx.visibleItems,
     selectedItem: ctx.selectedItem,
-    actionType: ctx.actionType,
-    toolName: ctx.toolName,
-    actionParams: ctx.actionParams,
-    outcomeOk: ctx.outcomeOk,
     existingPreferences: ctx.existingPreferences,
     existingConstraints: ctx.existingConstraints,
     existingConflicts: ctx.existingConflicts,
@@ -615,5 +746,16 @@ export async function extractPreferencesAndConstraints(
     throw new Error('EXTRACTION_INVALID_OUTPUT');
   }
 
-  return applyConflictHeuristics(input, result);
+  const normalizedResult =
+    updateFocus === 'constraints_conflicts'
+      ? {
+          ...result,
+          updatedPreferences: ctx.existingPreferences.slice(),
+        }
+      : {
+          ...result,
+          updatedConstraints: ctx.existingConstraints.slice(),
+        };
+
+  return applyConflictHeuristics(input, normalizedResult);
 }

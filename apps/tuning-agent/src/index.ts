@@ -12,7 +12,7 @@ import {
   subscribeLlmTrace as subscribeExtractorLlmTrace,
   type ExtractionContext,
 } from './llm/llmExtractor';
-import { toUISpecLike, getEnabledVisibleItems, getSelectedId } from './core/uiModel';
+import { toUISpecLike, getSelectedId } from './core/uiModel';
 import { shouldResync } from './core/verifier';
 import { isActionSafe } from './policies/safetyPolicy';
 import { RelayClient } from './runtime/relayClient';
@@ -82,9 +82,12 @@ let planningInFlight = false;
 let deferredReplanRequested = false;
 let deferredReplanTrigger: string | null = null;
 let userTurnAwaitingStateUpdate = false;
+let userPreferenceExtractionInFlight: Promise<void> | null = null;
 let userConversationStarted = false;
 let fatalErrorMessage: string | null = null;
 let perceptionVersion = 0;
+let lastUiFingerprint: string | null = null;
+let isFirstSnapshotSeen = false;
 
 interface PerceptionWaiter {
   afterVersion: number;
@@ -184,6 +187,146 @@ function applyImmediateUiSpec(context: PerceivedContext, uiSpec: unknown): Perce
     uiSpec: uiSpec ?? null,
     lastUpdatedAt: new Date().toISOString(),
   };
+}
+
+function buildUiFingerprint(uiSpec: unknown): string {
+  if (uiSpec === null || uiSpec === undefined) return 'null';
+  try {
+    return JSON.stringify(uiSpec);
+  } catch {
+    return JSON.stringify({ stage: pickStageFromUiSpec(uiSpec) ?? null });
+  }
+}
+
+function buildExtractionViewContext(
+  context: PerceivedContext
+): Pick<ExtractionContext, 'currentStage' | 'contextHistory' | 'visibleItems' | 'selectedItem'> {
+  const spec = toUISpecLike(context.uiSpec);
+  const visibleItems: Array<{ id: string; value: string; disabled?: boolean }> = [];
+  if (Array.isArray(spec?.visibleItems)) {
+    for (const item of spec.visibleItems) {
+      if (!item || typeof item.id !== 'string' || !item.id) continue;
+      const value = typeof item.value === 'string' ? item.value : '';
+      if (!value.trim()) continue;
+      const normalized: { id: string; value: string; disabled?: boolean } = {
+        id: item.id,
+        value,
+      };
+      if (item.isDisabled === true) {
+        normalized.disabled = true;
+      }
+      visibleItems.push(normalized);
+    }
+  }
+  const selectedId = spec ? getSelectedId(spec) : null;
+  const selectedValue = spec?.state?.selected?.value;
+  const selectedItem =
+    selectedId && typeof selectedValue === 'string' ? { id: selectedId, value: selectedValue } : null;
+
+  return {
+    currentStage: context.stage ?? '',
+    contextHistory: context.messageHistoryTail,
+    visibleItems,
+    selectedItem,
+  };
+}
+
+async function runPreferenceExtractionFromUserMessage(
+  context: PerceivedContext,
+  userMessageText: string
+): Promise<void> {
+  const userMessage = userMessageText.trim();
+  if (!userMessage) return;
+
+  const extractionView = buildExtractionViewContext(context);
+  const existingPreferences = memory.getPreferences();
+  const existingConstraints = memory.getConstraints();
+  const existingConflicts = memory.getConflicts();
+  const uiFingerprint = buildUiFingerprint(context.uiSpec);
+
+  const extractionCtx: ExtractionContext = {
+    userMessage,
+    updateFocus: 'preferences_conflicts',
+    trigger: 'user_message',
+    ...extractionView,
+    existingPreferences,
+    existingConstraints,
+    existingConflicts,
+  };
+
+  try {
+    const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
+    memory.setPreferences(extractionResult.updatedPreferences);
+    memory.setConflicts(extractionResult.updatedConflicts);
+    syncMonitorMemoryState();
+    monitor.pushEvent('extraction.completed', {
+      trigger: 'user.message',
+      updateFocus: 'preferences_conflicts',
+      uiFingerprint,
+      updatedPreferences: extractionResult.updatedPreferences,
+      updatedConstraints: existingConstraints,
+      updatedConflicts: extractionResult.updatedConflicts,
+      preferences: memory.getPreferences(),
+      constraints: memory.getConstraints(),
+      conflicts: memory.getConflicts(),
+    });
+  } catch (extractionError) {
+    monitor.pushEvent('extraction.failed', {
+      trigger: 'user.message',
+      updateFocus: 'preferences_conflicts',
+      uiFingerprint,
+      message: extractionError instanceof Error ? extractionError.message : String(extractionError),
+    });
+  }
+}
+
+async function runConstraintExtractionFromUiChange(
+  context: PerceivedContext,
+  trigger: string,
+  uiFingerprint: string,
+  uiFingerprintChanged: boolean
+): Promise<void> {
+  const extractionView = buildExtractionViewContext(context);
+  const existingPreferences = memory.getPreferences();
+  const existingConstraints = memory.getConstraints();
+  const existingConflicts = memory.getConflicts();
+
+  const extractionCtx: ExtractionContext = {
+    userMessage: '',
+    updateFocus: 'constraints_conflicts',
+    trigger: 'ui_changed',
+    ...extractionView,
+    existingPreferences,
+    existingConstraints,
+    existingConflicts,
+  };
+
+  try {
+    const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
+    memory.setConstraints(extractionResult.updatedConstraints);
+    memory.setConflicts(extractionResult.updatedConflicts);
+    syncMonitorMemoryState();
+    monitor.pushEvent('extraction.completed', {
+      trigger,
+      updateFocus: 'constraints_conflicts',
+      uiFingerprint,
+      uiFingerprintChanged,
+      updatedPreferences: existingPreferences,
+      updatedConstraints: extractionResult.updatedConstraints,
+      updatedConflicts: extractionResult.updatedConflicts,
+      preferences: memory.getPreferences(),
+      constraints: memory.getConstraints(),
+      conflicts: memory.getConflicts(),
+    });
+  } catch (extractionError) {
+    monitor.pushEvent('extraction.failed', {
+      trigger,
+      updateFocus: 'constraints_conflicts',
+      uiFingerprint,
+      uiFingerprintChanged,
+      message: extractionError instanceof Error ? extractionError.message : String(extractionError),
+    });
+  }
 }
 
 function hasInputUserMessage(history: unknown[]): boolean {
@@ -433,57 +576,6 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       if (decisionExplainText.trim()) {
         await maybeSendAssistantMessage(planningContext, decisionExplainText);
       }
-      if (planningContext.lastUserMessage?.text?.trim()) {
-        try {
-          const spec = toUISpecLike(planningContext.uiSpec);
-          const visibleItems = spec
-            ? getEnabledVisibleItems(spec).map((item) => ({
-                id: item.id,
-                value: item.value,
-                disabled: item.isDisabled,
-              }))
-            : [];
-          const selectedId = spec ? getSelectedId(spec) : null;
-          const selectedValue = spec?.state?.selected?.value;
-          const selectedItem =
-            selectedId && typeof selectedValue === 'string' ? { id: selectedId, value: selectedValue } : null;
-
-          const extractionCtx: ExtractionContext = {
-            userMessage: planningContext.lastUserMessage.text,
-            currentStage: planningContext.stage ?? '',
-            messageHistory: planningContext.messageHistoryTail,
-            visibleItems,
-            selectedItem,
-            actionType: 'none',
-            toolName: '',
-            actionParams: {},
-            outcomeOk: true,
-            existingPreferences: memory.getPreferences(),
-            existingConstraints: memory.getConstraints(),
-            existingConflicts: memory.getConflicts(),
-          };
-
-          const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
-          memory.setPreferences(extractionResult.updatedPreferences);
-          memory.setConstraints(extractionResult.updatedConstraints);
-          memory.setConflicts(extractionResult.updatedConflicts);
-          syncMonitorMemoryState();
-          monitor.pushEvent('extraction.completed', {
-            trigger: 'planner.no_action',
-            updatedPreferences: extractionResult.updatedPreferences,
-            updatedConstraints: extractionResult.updatedConstraints,
-            updatedConflicts: extractionResult.updatedConflicts,
-            preferences: memory.getPreferences(),
-            constraints: memory.getConstraints(),
-            conflicts: memory.getConflicts(),
-          });
-        } catch (extractionError) {
-          monitor.pushEvent('extraction.failed', {
-            trigger: 'planner.no_action',
-            message: extractionError instanceof Error ? extractionError.message : String(extractionError),
-          });
-        }
-      }
       monitor.pushEvent('planner.no_action', {
         source: decision.source,
         explainText: decision.explainText ?? null,
@@ -528,7 +620,6 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     monitor.updateState({ actionInFlight: true, phase: 'executing-action' });
     lastActionFingerprint = actionFingerprint;
     lastActionAt = now;
-    const preActionPerceptionVersion = perceptionVersion;
 
     if (action.type !== 'agent.message') {
       await maybeSendAssistantMessage(
@@ -570,70 +661,6 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       code: outcome.code,
       reason: action.reason,
     });
-
-    // Strong chaining: wait for latest host perception, then update CP memory.
-    const shouldExtract = Boolean(planningContext.lastUserMessage?.text?.trim()) || outcome.ok;
-    if (shouldExtract) {
-      const shouldWaitForPerception = action.type === 'tool.call' && outcome.ok;
-      if (shouldWaitForPerception) {
-        monitor.pushEvent('extraction.waiting_perception', {
-          afterVersion: preActionPerceptionVersion,
-          actionType: action.type,
-          toolName: action.type === 'tool.call' ? (action.payload.toolName as string) : null,
-        });
-        await waitForPerceptionAdvance(preActionPerceptionVersion);
-      }
-
-      const latestContext = memory.getContext() ?? planningContext;
-      const spec = toUISpecLike(latestContext.uiSpec);
-      const visibleItems = spec
-        ? getEnabledVisibleItems(spec).map((item) => ({
-            id: item.id,
-            value: item.value,
-            disabled: item.isDisabled,
-          }))
-        : [];
-      const selectedId = spec ? getSelectedId(spec) : null;
-      const selectedValue = spec?.state?.selected?.value;
-      const selectedItem =
-        selectedId && typeof selectedValue === 'string' ? { id: selectedId, value: selectedValue } : null;
-
-      const extractionCtx: ExtractionContext = {
-        userMessage: latestContext.lastUserMessage?.text ?? '',
-        currentStage: latestContext.stage ?? '',
-        messageHistory: latestContext.messageHistoryTail,
-        visibleItems,
-        selectedItem,
-        actionType: action.type,
-        toolName: action.type === 'tool.call' ? (action.payload.toolName as string) : '',
-        actionParams: (action.payload as Record<string, unknown>) ?? {},
-        outcomeOk: outcome.ok,
-        existingPreferences: memory.getPreferences(),
-        existingConstraints: memory.getConstraints(),
-        existingConflicts: memory.getConflicts(),
-      };
-
-      try {
-        const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
-        memory.setPreferences(extractionResult.updatedPreferences);
-        memory.setConstraints(extractionResult.updatedConstraints);
-        memory.setConflicts(extractionResult.updatedConflicts);
-        syncMonitorMemoryState();
-        monitor.pushEvent('extraction.completed', {
-          updatedPreferences: extractionResult.updatedPreferences,
-          updatedConstraints: extractionResult.updatedConstraints,
-          updatedConflicts: extractionResult.updatedConflicts,
-          preferences: memory.getPreferences(),
-          constraints: memory.getConstraints(),
-          conflicts: memory.getConflicts(),
-        });
-      } catch (extractionError) {
-        monitor.pushEvent('extraction.failed', {
-          message: extractionError instanceof Error ? extractionError.message : String(extractionError),
-        });
-        throw extractionError;
-      }
-    }
 
     if (!outcome.ok) {
       await maybeSendAssistantMessage(
@@ -711,9 +738,12 @@ function resetRuntimeState(): void {
   deferredReplanRequested = false;
   deferredReplanTrigger = null;
   userTurnAwaitingStateUpdate = false;
+  userPreferenceExtractionInFlight = null;
   userConversationStarted = false;
   fatalErrorMessage = null;
   perceptionVersion = 0;
+  lastUiFingerprint = null;
+  isFirstSnapshotSeen = false;
   lastActionFingerprint = '';
   lastActionAt = 0;
   monitor.updateState({
@@ -761,6 +791,8 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
         next.lastUserMessage = previous.lastUserMessage;
       }
       upsertContext(next);
+      lastUiFingerprint = buildUiFingerprint(next.uiSpec);
+      isFirstSnapshotSeen = true;
       syncUserConversationStarted(next);
       markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
@@ -772,13 +804,32 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       if (!current) return;
       const next = applyStateUpdated(current, toStateUpdatedPayload(envelope.payload));
       const stageChanged = next.stage !== current.stage;
+      const nextUiFingerprint = buildUiFingerprint(next.uiSpec);
+      const uiFingerprintChanged =
+        lastUiFingerprint === null ? true : lastUiFingerprint !== nextUiFingerprint;
+      lastUiFingerprint = nextUiFingerprint;
       upsertContext(next);
       syncUserConversationStarted(next);
       markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
 
+      if (isFirstSnapshotSeen && uiFingerprintChanged) {
+        await runConstraintExtractionFromUiChange(
+          next,
+          'state.updated:ui-changed',
+          nextUiFingerprint,
+          uiFingerprintChanged
+        );
+      }
+
       if (userTurnAwaitingStateUpdate) {
         userTurnAwaitingStateUpdate = false;
+        if (userPreferenceExtractionInFlight) {
+          monitor.pushEvent('planner.waiting_preference_extraction', {
+            trigger: 'state.updated:user-message',
+          });
+          await userPreferenceExtractionInFlight;
+        }
         await maybePlanAndExecute('state.updated:user-message');
         return;
       }
@@ -798,17 +849,25 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       const current = memory.getContext();
       if (!current) return;
       const userMessage = toUserMessagePayload(envelope.payload);
-      if (!userMessage.text) return;
+      if (!userMessage.text.trim()) return;
       userConversationStarted = true;
-      upsertContext(applyUserMessage(current, userMessage));
+      const next = applyUserMessage(current, userMessage);
+      upsertContext(next);
       monitor.updateContext(memory.getContext());
       monitor.updateState({ pendingUserMessages: 0 });
-      // Defer planning until state.updated arrives so planner history always
-      // includes the newly appended timeline user message.
+      // Set this before async extraction so fast state.updated events cannot bypass planning.
+      // Planning still waits for state.updated to keep timeline-consistent history.
       userTurnAwaitingStateUpdate = true;
       monitor.pushEvent('planner.waiting_state_updated_after_user_message', {
         stage: userMessage.stage ?? null,
       });
+      const extractionPromise = runPreferenceExtractionFromUserMessage(next, userMessage.text);
+      userPreferenceExtractionInFlight = extractionPromise.finally(() => {
+        if (userPreferenceExtractionInFlight === extractionPromise) {
+          userPreferenceExtractionInFlight = null;
+        }
+      });
+      await userPreferenceExtractionInFlight;
       return;
     }
     case 'session.reset': {

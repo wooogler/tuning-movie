@@ -47,6 +47,7 @@ type EventPayload = {
 };
 
 type LlmComponent = 'planner' | 'extractor' | 'unknown';
+type ExtractionUpdateFocus = 'preferences_conflicts' | 'constraints_conflicts';
 
 type LlmInteraction = {
   id: number;
@@ -191,6 +192,27 @@ function getComponentLabel(component: LlmComponent): string {
   return 'Unknown';
 }
 
+function getExtractorRequestInput(request: unknown): Record<string, unknown> | null {
+  const requestRecord = asRecord(request);
+  if (!requestRecord) return null;
+  const nestedInput = asRecord(requestRecord.input);
+  return nestedInput ?? requestRecord;
+}
+
+function getExtractorMode(request: unknown): ExtractionUpdateFocus | null {
+  const input = getExtractorRequestInput(request);
+  const mode = input?.updateFocus;
+  if (mode === 'preferences_conflicts' || mode === 'constraints_conflicts') {
+    return mode;
+  }
+  return null;
+}
+
+function getExtractorTrigger(request: unknown): string | null {
+  const input = getExtractorRequestInput(request);
+  return typeof input?.trigger === 'string' && input.trigger.trim() ? input.trigger : null;
+}
+
 export default function App() {
   const [tab, setTab] = useState<'agent' | 'llm'>('llm');
   const [llmFilter, setLlmFilter] = useState<'all' | 'planner' | 'extractor'>('all');
@@ -322,6 +344,20 @@ export default function App() {
   const selectedLlmInteraction = useMemo(
     () => (selectedLlmId === null ? null : llmInteractions.find((item) => item.id === selectedLlmId) ?? null),
     [llmInteractions, selectedLlmId]
+  );
+  const selectedExtractorMode = useMemo(
+    () =>
+      selectedLlmInteraction?.component === 'extractor'
+        ? getExtractorMode(selectedLlmInteraction.request)
+        : null,
+    [selectedLlmInteraction]
+  );
+  const selectedExtractorTrigger = useMemo(
+    () =>
+      selectedLlmInteraction?.component === 'extractor'
+        ? getExtractorTrigger(selectedLlmInteraction.request)
+        : null,
+    [selectedLlmInteraction]
   );
   const recentEvents = useMemo(() => events.slice().reverse().slice(0, 160), [events]);
 
@@ -583,6 +619,9 @@ export default function App() {
             filteredLlmInteractions.map((item) => {
               const status = getInteractionStatus(item);
               const componentLabel = getComponentLabel(item.component);
+              const extractorMode = item.component === 'extractor' ? getExtractorMode(item.request) : null;
+              const extractorTrigger =
+                item.component === 'extractor' ? getExtractorTrigger(item.request) : null;
               return (
                 <article
                   key={item.id}
@@ -613,6 +652,16 @@ export default function App() {
                       <span className="text-mist-300">
                         #{item.id} · {shortTime(item.timestamp)}
                       </span>
+                      {extractorMode ? (
+                        <span className="rounded-full border border-cyan-500/35 bg-cyan-500/10 px-2 py-1 font-semibold text-cyan-200">
+                          mode: {extractorMode}
+                        </span>
+                      ) : null}
+                      {extractorTrigger ? (
+                        <span className="rounded-full border border-ink-600 bg-ink-800/70 px-2 py-1 font-semibold text-mist-200">
+                          trigger: {extractorTrigger}
+                        </span>
+                      ) : null}
                     </div>
                     <span
                       className={`rounded-full px-2 py-1 font-semibold ${
@@ -669,6 +718,16 @@ export default function App() {
                 <span className="text-mist-300">
                   #{selectedLlmInteraction.id} · {shortTime(selectedLlmInteraction.timestamp)}
                 </span>
+                {selectedExtractorMode ? (
+                  <span className="rounded-full border border-cyan-500/35 bg-cyan-500/10 px-2 py-1 font-semibold text-cyan-200">
+                    mode: {selectedExtractorMode}
+                  </span>
+                ) : null}
+                {selectedExtractorTrigger ? (
+                  <span className="rounded-full border border-ink-600 bg-ink-800/70 px-2 py-1 font-semibold text-mist-200">
+                    trigger: {selectedExtractorTrigger}
+                  </span>
+                ) : null}
                 <span
                   className={`rounded-full px-2 py-1 font-semibold ${
                     getInteractionStatus(selectedLlmInteraction) === 'completed'
