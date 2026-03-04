@@ -12,7 +12,6 @@ export interface StudyModeConfig {
   agentEnabled: boolean;
   guiAdaptationEnabled: boolean;
   cpMemoryWindow: number;
-  extractorConflictCandidateEnabled: boolean;
 }
 
 export interface ScenarioSeedFilters {

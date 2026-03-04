@@ -9,7 +9,6 @@ export class AgentMemory {
   private preferences: string[] = [];
   private constraints: string[] = [];
   private conflicts: string[] = [];
-  private candidates: string[] = [];
 
   reset(): void {
     this.context = null;
@@ -17,7 +16,6 @@ export class AgentMemory {
     this.preferences = [];
     this.constraints = [];
     this.conflicts = [];
-    this.candidates = [];
   }
 
   getPreferences(): string[] {
@@ -32,10 +30,6 @@ export class AgentMemory {
     return this.conflicts.slice();
   }
 
-  getCandidates(): string[] {
-    return this.candidates.slice();
-  }
-
   setPreferences(items: string[]): void {
     this.preferences = this.normalizeList(items);
   }
@@ -46,10 +40,6 @@ export class AgentMemory {
 
   setConflicts(items: string[]): void {
     this.conflicts = this.normalizeList(items);
-  }
-
-  setCandidates(items: string[]): void {
-    this.candidates = this.normalizeList(items);
   }
 
   setContext(context: PerceivedContext): void {

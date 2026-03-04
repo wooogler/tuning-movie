@@ -19,6 +19,7 @@ import './App.css';
 type Theme = 'dark' | 'light';
 
 const THEME_STORAGE_KEY = 'tuning-movie-theme';
+const AGENT_CONSOLE_ENABLED = !import.meta.env.PROD;
 
 function getInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'light';
@@ -161,7 +162,7 @@ function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
-          <DevTools />
+          {AGENT_CONSOLE_ENABLED ? <DevTools /> : null}
         </div>
       </DevToolsProvider>
     </BrowserRouter>

@@ -27,7 +27,6 @@ export interface SnapshotStatePayload {
   toolSchema: ToolSchemaItem[];
   plannerCpMemoryLimit?: number;
   plannerCpEnabled?: boolean;
-  extractorConflictCandidateEnabled?: boolean;
 }
 
 export interface StateUpdatedPayload {
@@ -37,7 +36,6 @@ export interface StateUpdatedPayload {
   toolSchema: ToolSchemaItem[];
   plannerCpMemoryLimit?: number;
   plannerCpEnabled?: boolean;
-  extractorConflictCandidateEnabled?: boolean;
 }
 
 export interface PerceivedContext {
@@ -47,7 +45,6 @@ export interface PerceivedContext {
   messageHistoryTail: unknown[];
   toolSchema: ToolSchemaItem[];
   plannerCpMemoryLimit: number;
-  extractorConflictCandidateEnabled: boolean;
   lastUserMessage: UserMessagePayload | null;
   lastUpdatedAt: string;
 }

@@ -33,7 +33,6 @@ interface MonitorState {
   memoryPreferences: string[];
   memoryConstraints: string[];
   memoryConflicts: string[];
-  memoryCandidates: string[];
   actionCount: number;
   pendingUserMessages: number;
 }
@@ -86,7 +85,6 @@ export class AgentMonitorServer {
       memoryPreferences: [],
       memoryConstraints: [],
       memoryConflicts: [],
-      memoryCandidates: [],
       actionCount: 0,
       pendingUserMessages: 0,
     };
@@ -199,14 +197,12 @@ export class AgentMonitorServer {
   updateMemory(
     preferences: string[],
     constraints: string[],
-    conflicts: string[],
-    candidates: string[]
+    conflicts: string[]
   ): void {
     this.updateState({
       memoryPreferences: preferences.slice(),
       memoryConstraints: constraints.slice(),
       memoryConflicts: conflicts.slice(),
-      memoryCandidates: candidates.slice(),
     });
   }
 

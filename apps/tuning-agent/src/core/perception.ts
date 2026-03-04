@@ -10,8 +10,6 @@ const DEFAULT_CP_MEMORY_LIMIT = Math.max(
   0,
   Number.parseInt(process.env.AGENT_DEFAULT_CP_MEMORY_LIMIT || '10', 10) || 10
 );
-const DEFAULT_EXTRACTOR_CONFLICT_CANDIDATE_ENABLED =
-  process.env.AGENT_DEFAULT_EXTRACTOR_CONFLICT_CANDIDATE_ENABLED !== 'false';
 
 function pickStage(uiSpec: unknown): string | null {
   if (!uiSpec || typeof uiSpec !== 'object') return null;
@@ -40,16 +38,6 @@ function normalizeCpMemoryLimit(raw: unknown, fallback: number): number {
   return fallback;
 }
 
-function normalizeBoolean(raw: unknown, fallback: boolean): boolean {
-  if (typeof raw === 'boolean') return raw;
-  if (typeof raw === 'string') {
-    const normalized = raw.trim().toLowerCase();
-    if (normalized === 'true') return true;
-    if (normalized === 'false') return false;
-  }
-  return fallback;
-}
-
 export function fromSnapshot(payload: SnapshotStatePayload): PerceivedContext {
   const fallbackFromLegacyToggle =
     typeof payload.plannerCpEnabled === 'boolean'
@@ -66,10 +54,6 @@ export function fromSnapshot(payload: SnapshotStatePayload): PerceivedContext {
     plannerCpMemoryLimit: normalizeCpMemoryLimit(
       payload.plannerCpMemoryLimit,
       fallbackFromLegacyToggle
-    ),
-    extractorConflictCandidateEnabled: normalizeBoolean(
-      payload.extractorConflictCandidateEnabled,
-      DEFAULT_EXTRACTOR_CONFLICT_CANDIDATE_ENABLED
     ),
     lastUserMessage: null,
     lastUpdatedAt: nowIso(),
@@ -95,10 +79,6 @@ export function applyStateUpdated(
     plannerCpMemoryLimit: normalizeCpMemoryLimit(
       payload.plannerCpMemoryLimit,
       fallbackFromLegacyToggle
-    ),
-    extractorConflictCandidateEnabled: normalizeBoolean(
-      payload.extractorConflictCandidateEnabled,
-      previous.extractorConflictCandidateEnabled
     ),
     lastUpdatedAt: nowIso(),
   };

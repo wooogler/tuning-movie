@@ -11,7 +11,7 @@ export default defineConfig({
     open: true,
     proxy: {
       '/monitor-api': {
-        target: 'http://localhost:3500',
+        target: `http://127.0.0.1:${Number(process.env.AGENT_MONITOR_PORT || 3500)}`,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/monitor-api/, ''),
       },

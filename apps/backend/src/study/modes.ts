@@ -5,25 +5,21 @@ const MODE_CONFIG: Record<StudyModeId, StudyModeConfig> = {
     agentEnabled: false,
     guiAdaptationEnabled: false,
     cpMemoryWindow: 0,
-    extractorConflictCandidateEnabled: false,
   },
   'basic-tuning': {
     agentEnabled: true,
     guiAdaptationEnabled: false,
     cpMemoryWindow: 0,
-    extractorConflictCandidateEnabled: false,
   },
   'adaptive-tuning': {
     agentEnabled: true,
     guiAdaptationEnabled: true,
     cpMemoryWindow: 0,
-    extractorConflictCandidateEnabled: false,
   },
   'full-tuning': {
     agentEnabled: true,
     guiAdaptationEnabled: true,
     cpMemoryWindow: 10,
-    extractorConflictCandidateEnabled: false,
   },
 };
 

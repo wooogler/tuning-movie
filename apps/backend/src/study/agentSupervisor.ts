@@ -64,8 +64,6 @@ export function startAgentForSession(
       AGENT_PARTICIPANT_ID: participantId,
       AGENT_ENABLE_GUI_ADAPTATION: modeConfig.guiAdaptationEnabled ? 'true' : 'false',
       AGENT_DEFAULT_CP_MEMORY_LIMIT: String(modeConfig.cpMemoryWindow),
-      AGENT_DEFAULT_EXTRACTOR_CONFLICT_CANDIDATE_ENABLED:
-        modeConfig.extractorConflictCandidateEnabled ? 'true' : 'false',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

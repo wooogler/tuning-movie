@@ -25,7 +25,6 @@ type MonitorState = {
   memoryPreferences: string[];
   memoryConstraints: string[];
   memoryConflicts?: string[];
-  memoryCandidates?: string[];
   actionCount: number;
   pendingUserMessages: number;
 };
@@ -57,6 +56,7 @@ type LlmInteraction = {
 
 const API_BASE = import.meta.env.VITE_MONITOR_API_BASE || '/monitor-api';
 const MAX_EVENTS = 500;
+const RECONNECT_DELAY_MS = 1200;
 
 function fmt(value: unknown): string {
   return JSON.stringify(value, null, 2);
@@ -186,9 +186,33 @@ export default function App() {
 
   useEffect(() => {
     let closed = false;
+    let es: EventSource | null = null;
+    let reconnectTimer: number | null = null;
     const eventsUrl = `${API_BASE}/events`;
 
+    function clearReconnectTimer() {
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    }
+
+    function scheduleReconnect() {
+      if (closed || reconnectTimer !== null) return;
+      setConnection('connecting');
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        void bootstrap();
+      }, RECONNECT_DELAY_MS);
+    }
+
     async function bootstrap() {
+      if (closed) return;
+      if (es) {
+        es.close();
+        es = null;
+      }
+      setConnection('connecting');
       try {
         const res = await fetch(`${API_BASE}/state`);
         if (!res.ok) throw new Error(`state fetch failed (${res.status})`);
@@ -196,14 +220,16 @@ export default function App() {
         if (closed) return;
         setMonitorState(payload.state);
         setEvents(payload.events ?? []);
+        setErrorText(null);
       } catch (error) {
         if (closed) return;
         setConnection('error');
         setErrorText(error instanceof Error ? error.message : String(error));
+        scheduleReconnect();
         return;
       }
 
-      const es = new EventSource(eventsUrl);
+      es = new EventSource(eventsUrl);
 
       es.addEventListener('open', () => {
         if (closed) return;
@@ -215,6 +241,11 @@ export default function App() {
         if (closed) return;
         setConnection('error');
         setErrorText('event stream disconnected');
+        if (es) {
+          es.close();
+          es = null;
+        }
+        scheduleReconnect();
       });
 
       es.addEventListener('snapshot', (event) => {
@@ -235,14 +266,16 @@ export default function App() {
         const payload = JSON.parse(event.data) as EventPayload;
         setEvents((prev) => [...prev, payload.event].slice(-MAX_EVENTS));
       });
-
-      return () => es.close();
     }
 
-    const cleanupPromise = bootstrap();
+    void bootstrap();
     return () => {
       closed = true;
-      void cleanupPromise?.then((cleanup) => cleanup?.());
+      clearReconnectTimer();
+      if (es) {
+        es.close();
+        es = null;
+      }
     };
   }, []);
 
@@ -365,7 +398,6 @@ export default function App() {
             <StatCard label="Preference Count" value={String(monitorState?.memoryPreferences?.length ?? 0)} />
             <StatCard label="Constraint Count" value={String(monitorState?.memoryConstraints?.length ?? 0)} />
             <StatCard label="Conflict Count" value={String(monitorState?.memoryConflicts?.length ?? 0)} />
-            <StatCard label="Candidate Count" value={String(monitorState?.memoryCandidates?.length ?? 0)} />
           </div>
 
           <JsonCard
@@ -390,7 +422,6 @@ export default function App() {
               preferences: monitorState?.memoryPreferences ?? [],
               constraints: monitorState?.memoryConstraints ?? [],
               conflicts: monitorState?.memoryConflicts ?? [],
-              candidates: monitorState?.memoryCandidates ?? [],
             }}
           />
           <JsonCard title="Last Plan" value={monitorState?.lastPlan ?? null} />

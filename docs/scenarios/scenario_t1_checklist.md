@@ -22,7 +22,8 @@
 
 ### Attempt 1: Cosmic Laughs at Theater A
 - Date options for `Cosmic Laughs + Theater A`:
-  - only `2026-03-15` (Sunday)
+  - includes opening `2026-03-15` (Sunday) and following weekdays
+  - in the target weekend (`2026-03-14`~`2026-03-15`), only Sunday is available
 - Time options include:
   - `10:30`, `13:00`, `15:30`, `20:00`
 - Seat row B adjacency:

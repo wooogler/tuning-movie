@@ -19,15 +19,12 @@ interface ExtractionInput {
   existingPreferences: string[];
   existingConstraints: string[];
   existingConflicts: string[];
-  existingCandidates: string[];
-  extractConflictCandidate: boolean;
 }
 
 interface ExtractionOutput {
   updatedPreferences: string[];
   updatedConstraints: string[];
   updatedConflicts: string[];
-  updatedCandidates: string[];
 }
 
 interface LlmTraceEvent {
@@ -37,13 +34,13 @@ interface LlmTraceEvent {
 }
 
 type LlmTraceListener = (event: LlmTraceEvent) => void;
-type ExtractionMode = 'full' | 'light';
 
 const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
+const MONITOR_LLM_TRACE_ENABLED = process.env.AGENT_MONITOR_LLM_TRACE !== 'false';
 const llmTraceListeners = new Set<LlmTraceListener>();
 
 function emitLlmTrace(type: LlmTraceEvent['type'], payload: unknown): void {
-  if (!DEBUG_LLM) return;
+  if (!MONITOR_LLM_TRACE_ENABLED) return;
   const event: LlmTraceEvent = { component: 'extractor', type, payload };
   for (const listener of llmTraceListeners) {
     listener(event);
@@ -57,14 +54,13 @@ export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
   };
 }
 
-const EXTRACTION_SYSTEM_PROMPT_FULL =
-  'You maintain four memory lists for an interactive agent turn.\n' +
+const EXTRACTION_SYSTEM_PROMPT =
+  'You maintain three memory lists for an interactive agent turn.\n' +
   '- User\'s Preferences: what the user wants, from user intent.\n' +
   '- System\'s Constraints: objective availability or limitation facts from the system state.\n' +
   '- Conflicts: contradictions between preferences and constraints.\n' +
-  '- Candidates: currently viable options derived from intent and observable state.\n' +
   '\n' +
-  'Inputs include existingPreferences, existingConstraints, existingConflicts, existingCandidates, userMessage, messageHistory, visibleItems, selectedItem, currentStage, action metadata, and outcomeOk.\n' +
+  'Inputs include existingPreferences, existingConstraints, existingConflicts, userMessage, messageHistory, visibleItems, selectedItem, currentStage, action metadata, and outcomeOk.\n' +
   '\n' +
   'Update policy:\n' +
   '- Return the full updated list for all categories on every turn.\n' +
@@ -91,47 +87,9 @@ const EXTRACTION_SYSTEM_PROMPT_FULL =
   '- Keep unresolved conflicts until either preferences change or constraints/options change.\n' +
   '- Write conflicts with both sides: desired preference + blocking constraint fact.\n' +
   '\n' +
-  'Candidate rules:\n' +
-  '- Candidates should represent concrete viable options available now for user choice.\n' +
-  '- Build candidates as multi-stage decision paths, not isolated single-step items, whenever enough context exists.\n' +
-  '- Combine known selections from prior stages with current/future unresolved slots (for example: already-selected context + current choice + downstream choice).\n' +
-  '- If a stage value is unresolved, keep the path candidate explicit about the unresolved slot.\n' +
-  '- Keep this representation domain-agnostic; do not rely on domain-specific templates.\n' +
-  '- Derive candidates primarily from visibleItems and messageHistory, constrained by preferences and constraints.\n' +
-  '- Store candidates as natural-language memory sentences (free-form text), not structured objects and not fixed templates.\n' +
-  '- Keep each candidate concise, specific, and readable; include key trade-offs when they matter.\n' +
-  '- Keep one candidate per list item.\n' +
-  '\n' +
   'Output rules:\n' +
   '- Do not include duplicates.\n' +
-  '- Return JSON only matching this schema: { "updatedPreferences": string[], "updatedConstraints": string[], "updatedConflicts": string[], "updatedCandidates": string[] }';
-
-const EXTRACTION_SYSTEM_PROMPT_LIGHT =
-  'You maintain two memory lists for an interactive agent turn.\n' +
-  '- User\'s Preferences: what the user wants, from user intent.\n' +
-  '- System\'s Constraints: objective availability or limitation facts from the system state.\n' +
-  '\n' +
-  'Inputs include existingPreferences, existingConstraints, userMessage, messageHistory, visibleItems, selectedItem, currentStage, action metadata, and outcomeOk.\n' +
-  '\n' +
-  'Update policy:\n' +
-  '- Return the full updated list for both categories on every turn.\n' +
-  '- Start from existing lists, then revise by this turn\'s evidence.\n' +
-  '- If a previous item becomes obsolete, remove it by not including it in the updated list.\n' +
-  '- If no change is needed, return existing lists as-is.\n' +
-  '\n' +
-  'Preference rules:\n' +
-  '- Preferences must come from user intent, not inferred solely from system state.\n' +
-  '- Ignore trivial acknowledgements that add no durable intent.\n' +
-  '- Keep each item as a short standalone sentence.\n' +
-  '\n' +
-  'Constraint rules:\n' +
-  '- Constraints must be objective system facts, not user desires.\n' +
-  '- Prefer specific, durable facts over temporary UI states.\n' +
-  '- Keep each item as a short standalone sentence.\n' +
-  '\n' +
-  'Output rules:\n' +
-  '- Do not include duplicates.\n' +
-  '- Return JSON only matching this schema: { "updatedPreferences": string[], "updatedConstraints": string[] }';
+  '- Return JSON only matching this schema: { "updatedPreferences": string[], "updatedConstraints": string[], "updatedConflicts": string[] }';
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
   try {
@@ -253,11 +211,8 @@ function collectTemporalPreferenceSignals(preferences: string[], userMessage: st
 
 function applyConflictHeuristics(
   input: ExtractionInput,
-  output: ExtractionOutput,
-  mode: ExtractionMode
+  output: ExtractionOutput
 ): ExtractionOutput {
-  if (mode !== 'full') return output;
-
   const conflictsToAdd: string[] = [];
   const preferences = output.updatedPreferences;
 
@@ -314,32 +269,50 @@ function applyConflictHeuristics(
   };
 }
 
-function toExtractionOutput(
-  value: Record<string, unknown>,
-  includeConflictsAndCandidates: boolean
-): ExtractionOutput {
+function toExtractionOutput(value: Record<string, unknown>): ExtractionOutput {
   const updatedPreferences = Array.isArray(value.updatedPreferences)
     ? (value.updatedPreferences as unknown[]).filter((item): item is string => typeof item === 'string')
     : [];
   const updatedConstraints = Array.isArray(value.updatedConstraints)
     ? (value.updatedConstraints as unknown[]).filter((item): item is string => typeof item === 'string')
     : [];
-  const updatedConflicts = includeConflictsAndCandidates
-    ? Array.isArray(value.updatedConflicts)
-      ? (value.updatedConflicts as unknown[]).filter((item): item is string => typeof item === 'string')
-      : []
+  const updatedConflicts = Array.isArray(value.updatedConflicts)
+    ? (value.updatedConflicts as unknown[]).filter((item): item is string => typeof item === 'string')
     : [];
-  const updatedCandidates = includeConflictsAndCandidates
-    ? Array.isArray(value.updatedCandidates)
-      ? (value.updatedCandidates as unknown[]).filter((item): item is string => typeof item === 'string')
-      : []
-    : [];
-  return { updatedPreferences, updatedConstraints, updatedConflicts, updatedCandidates };
+  return { updatedPreferences, updatedConstraints, updatedConflicts };
 }
 
 // ── OpenAI ──────────────────────────────────────────────────────────────────
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
+const DEFAULT_OPENAI_TEMPERATURE = 0;
+const OPENAI_TEMPERATURE_OFF_SENTINELS = new Set(['default', 'none', 'omit', 'off']);
+
+function resolveOpenAITemperature(): number | undefined {
+  const raw = process.env.AGENT_OPENAI_TEMPERATURE;
+  if (typeof raw !== 'string' || !raw.trim()) return DEFAULT_OPENAI_TEMPERATURE;
+
+  const normalized = raw.trim().toLowerCase();
+  if (OPENAI_TEMPERATURE_OFF_SENTINELS.has(normalized)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed)) return DEFAULT_OPENAI_TEMPERATURE;
+  return Math.min(2, Math.max(0, parsed));
+}
+
+function isUnsupportedTemperatureError(status: number, errorText: string): boolean {
+  if (status !== 400) return false;
+  const lowered = errorText.toLowerCase();
+  return (
+    lowered.includes('temperature') &&
+    (lowered.includes('not supported') ||
+      lowered.includes('unsupported') ||
+      lowered.includes('only support') ||
+      lowered.includes('invalid'))
+  );
+}
 
 function getOpenAIModel(): string {
   return process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
@@ -369,39 +342,25 @@ function parseOpenAIOutputText(body: unknown): string | null {
   return null;
 }
 
-async function extractWithOpenAI(
-  input: ExtractionInput,
-  mode: ExtractionMode
-): Promise<ExtractionOutput | null> {
+async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutput | null> {
   if (process.env.AGENT_ENABLE_OPENAI === 'false') return null;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
   const model = getOpenAIModel();
-  const includeConflictsAndCandidates = mode === 'full';
-  const schemaProperties = includeConflictsAndCandidates
-    ? {
-        updatedPreferences: { type: 'array', items: { type: 'string' } },
-        updatedConstraints: { type: 'array', items: { type: 'string' } },
-        updatedConflicts: { type: 'array', items: { type: 'string' } },
-        updatedCandidates: { type: 'array', items: { type: 'string' } },
-      }
-    : {
-        updatedPreferences: { type: 'array', items: { type: 'string' } },
-        updatedConstraints: { type: 'array', items: { type: 'string' } },
-      };
-  const requiredKeys = includeConflictsAndCandidates
-    ? ['updatedPreferences', 'updatedConstraints', 'updatedConflicts', 'updatedCandidates']
-    : ['updatedPreferences', 'updatedConstraints'];
-  const body = {
+  const temperature = resolveOpenAITemperature();
+  const schemaProperties = {
+    updatedPreferences: { type: 'array', items: { type: 'string' } },
+    updatedConstraints: { type: 'array', items: { type: 'string' } },
+    updatedConflicts: { type: 'array', items: { type: 'string' } },
+  };
+  const requiredKeys = ['updatedPreferences', 'updatedConstraints', 'updatedConflicts'];
+  const baseBody = {
     model,
     input: [
       {
         role: 'system',
-        content:
-          (includeConflictsAndCandidates
-            ? EXTRACTION_SYSTEM_PROMPT_FULL
-            : EXTRACTION_SYSTEM_PROMPT_LIGHT) + '\n- Return JSON only via schema.',
+        content: EXTRACTION_SYSTEM_PROMPT + '\n- Return JSON only via schema.',
       },
       { role: 'user', content: JSON.stringify(input) },
     ],
@@ -419,13 +378,21 @@ async function extractWithOpenAI(
       },
     },
   };
+  const body =
+    typeof temperature === 'number'
+      ? { ...baseBody, temperature }
+      : baseBody;
 
   if (DEBUG_LLM) {
     console.log('[tuning-agent-v2][extractor:openai] request:', JSON.stringify(input));
   }
-  emitLlmTrace('request', { model, mode, input });
+  emitLlmTrace('request', {
+    model,
+    input,
+    temperature: typeof temperature === 'number' ? temperature : null,
+  });
 
-  const response = await fetch(OPENAI_API_URL, {
+  let response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -435,12 +402,41 @@ async function extractWithOpenAI(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    if (DEBUG_LLM) {
-      console.error('[tuning-agent-v2][extractor:openai] error:', errorText);
+    const firstErrorText = await response.text();
+    const shouldRetryWithoutTemperature =
+      typeof temperature === 'number' &&
+      isUnsupportedTemperatureError(response.status, firstErrorText);
+
+    if (shouldRetryWithoutTemperature) {
+      if (DEBUG_LLM) {
+        console.warn(
+          '[tuning-agent-v2][extractor:openai] temperature rejected; retrying without temperature'
+        );
+      }
+      emitLlmTrace('request', {
+        model,
+        input,
+        temperature: null,
+        retryWithoutTemperature: true,
+      });
+      response = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(baseBody),
+      });
     }
-    emitLlmTrace('error', { status: response.status, errorText });
-    throw new Error(`OpenAI extractor failed (${response.status}): ${errorText}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (DEBUG_LLM) {
+        console.error('[tuning-agent-v2][extractor:openai] error:', errorText);
+      }
+      emitLlmTrace('error', { status: response.status, errorText });
+      throw new Error(`OpenAI extractor failed (${response.status}): ${errorText}`);
+    }
   }
 
   const payload = (await response.json()) as unknown;
@@ -454,7 +450,7 @@ async function extractWithOpenAI(
   const parsed = parseJsonObject(outputText);
   emitLlmTrace('response.parsed', { parsed });
   if (!parsed) return null;
-  return toExtractionOutput(parsed, includeConflictsAndCandidates);
+  return toExtractionOutput(parsed);
 }
 
 // ── Gemini ──────────────────────────────────────────────────────────────────
@@ -488,25 +484,19 @@ function extractGeminiText(body: unknown): string | null {
   return null;
 }
 
-async function extractWithGemini(
-  input: ExtractionInput,
-  mode: ExtractionMode
-): Promise<ExtractionOutput | null> {
+async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutput | null> {
   if (process.env.AGENT_ENABLE_GEMINI === 'false') return null;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   const model = getGeminiModel();
   const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
-  const includeConflictsAndCandidates = mode === 'full';
 
   const body = {
     systemInstruction: {
       parts: [
         {
-          text: includeConflictsAndCandidates
-            ? EXTRACTION_SYSTEM_PROMPT_FULL
-            : EXTRACTION_SYSTEM_PROMPT_LIGHT,
+          text: EXTRACTION_SYSTEM_PROMPT,
         },
       ],
     },
@@ -524,7 +514,7 @@ async function extractWithGemini(
   if (DEBUG_LLM) {
     console.log('[tuning-agent-v2][extractor:gemini] request:', JSON.stringify(input));
   }
-  emitLlmTrace('request', { model, mode, input });
+  emitLlmTrace('request', { model, input });
 
   const response = await fetch(url, {
     method: 'POST',
@@ -552,7 +542,7 @@ async function extractWithGemini(
   const parsed = parseJsonObject(outputText);
   emitLlmTrace('response.parsed', { parsed });
   if (!parsed) return null;
-  return toExtractionOutput(parsed, includeConflictsAndCandidates);
+  return toExtractionOutput(parsed);
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -570,16 +560,12 @@ export interface ExtractionContext {
   existingPreferences: string[];
   existingConstraints: string[];
   existingConflicts: string[];
-  existingCandidates: string[];
-  extractConflictCandidate?: boolean;
 }
 
 export async function extractPreferencesAndConstraints(
   ctx: ExtractionContext
 ): Promise<ExtractionOutput> {
   refreshModelEnvVars();
-  const includeConflictsAndCandidates = ctx.extractConflictCandidate !== false;
-  const mode: ExtractionMode = includeConflictsAndCandidates ? 'full' : 'light';
 
   const geminiEnabled =
     process.env.AGENT_ENABLE_GEMINI !== 'false' && Boolean(process.env.GEMINI_API_KEY);
@@ -603,23 +589,15 @@ export async function extractPreferencesAndConstraints(
     existingPreferences: ctx.existingPreferences,
     existingConstraints: ctx.existingConstraints,
     existingConflicts: ctx.existingConflicts,
-    existingCandidates: ctx.existingCandidates,
-    extractConflictCandidate: includeConflictsAndCandidates,
   };
 
   const result = geminiEnabled
-    ? await extractWithGemini(input, mode)
-    : await extractWithOpenAI(input, mode);
+    ? await extractWithGemini(input)
+    : await extractWithOpenAI(input);
 
   if (!result) {
     throw new Error('EXTRACTION_INVALID_OUTPUT');
   }
 
-  return includeConflictsAndCandidates
-    ? applyConflictHeuristics(input, result, mode)
-    : {
-        ...result,
-        updatedConflicts: [],
-        updatedCandidates: [],
-      };
+  return applyConflictHeuristics(input, result);
 }

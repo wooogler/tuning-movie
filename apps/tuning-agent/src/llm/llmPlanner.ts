@@ -12,7 +12,6 @@ export interface PlannerWorkflow {
   constraints: string[];
   preferences: string[];
   conflicts: string[];
-  candidates: string[];
 }
 
 interface PlannerInput {
@@ -42,10 +41,11 @@ interface LlmTraceEvent {
 type LlmTraceListener = (event: LlmTraceEvent) => void;
 
 const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
+const MONITOR_LLM_TRACE_ENABLED = process.env.AGENT_MONITOR_LLM_TRACE !== 'false';
 const llmTraceListeners = new Set<LlmTraceListener>();
 
 function emitLlmTrace(type: LlmTraceEvent['type'], payload: unknown): void {
-  if (!DEBUG_LLM) return;
+  if (!MONITOR_LLM_TRACE_ENABLED) return;
   const event: LlmTraceEvent = { component: 'planner', type, payload };
   for (const listener of llmTraceListeners) {
     listener(event);
@@ -138,14 +138,40 @@ const SYSTEM_PROMPT =
   '- workflow.constraints = accumulated system availability facts from prior turns. Factor these into feasibility checks and action selection.\n' +
   '- workflow.preferences = accumulated user preferences from prior turns. Respect these when choosing items or making recommendations.\n' +
   '- workflow.conflicts = current contradictions between preferences and constraints. Address or resolve these conflicts before committing.\n' +
-  '- workflow.candidates = currently viable options for user choice, written as free-form natural-language memory sentences.\n' +
-  '- When there are multiple viable candidates and no explicit user commitment to one item, prefer action.type="none" and ask the user to choose among those candidates.\n' +
-  '- In that case, assistantMessage should include the candidate options in concise, readable form.';
+  '- If there are multiple viable options and no explicit user commitment to one item, prefer action.type="none" and ask for a concise confirmation.';
 
 // ── OpenAI ──────────────────────────────────────────────────────────────────
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const OPENAI_MODEL = process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
+const DEFAULT_OPENAI_TEMPERATURE = 0;
+const OPENAI_TEMPERATURE_OFF_SENTINELS = new Set(['default', 'none', 'omit', 'off']);
+
+function resolveOpenAITemperature(): number | undefined {
+  const raw = process.env.AGENT_OPENAI_TEMPERATURE;
+  if (typeof raw !== 'string' || !raw.trim()) return DEFAULT_OPENAI_TEMPERATURE;
+
+  const normalized = raw.trim().toLowerCase();
+  if (OPENAI_TEMPERATURE_OFF_SENTINELS.has(normalized)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed)) return DEFAULT_OPENAI_TEMPERATURE;
+  return Math.min(2, Math.max(0, parsed));
+}
+
+function isUnsupportedTemperatureError(status: number, errorText: string): boolean {
+  if (status !== 400) return false;
+  const lowered = errorText.toLowerCase();
+  return (
+    lowered.includes('temperature') &&
+    (lowered.includes('not supported') ||
+      lowered.includes('unsupported') ||
+      lowered.includes('only support') ||
+      lowered.includes('invalid'))
+  );
+}
 
 function parseOpenAIOutputText(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null;
@@ -175,8 +201,9 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   if (process.env.AGENT_ENABLE_OPENAI === 'false') return null;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
+  const temperature = resolveOpenAITemperature();
 
-  const body = {
+  const baseBody = {
     model: OPENAI_MODEL,
     input: [
       {
@@ -217,13 +244,21 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
       },
     },
   };
+  const body =
+    typeof temperature === 'number'
+      ? { ...baseBody, temperature }
+      : baseBody;
 
   if (DEBUG_LLM) {
     console.log('[tuning-agent-v2][llm] planner request input:', JSON.stringify(input));
   }
-  emitLlmTrace('request', { model: OPENAI_MODEL, input });
+  emitLlmTrace('request', {
+    model: OPENAI_MODEL,
+    input,
+    temperature: typeof temperature === 'number' ? temperature : null,
+  });
 
-  const response = await fetch(OPENAI_API_URL, {
+  let response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -233,12 +268,41 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    if (DEBUG_LLM) {
-      console.error('[tuning-agent-v2][llm] planner error response:', errorText);
+    const firstErrorText = await response.text();
+    const shouldRetryWithoutTemperature =
+      typeof temperature === 'number' &&
+      isUnsupportedTemperatureError(response.status, firstErrorText);
+
+    if (shouldRetryWithoutTemperature) {
+      if (DEBUG_LLM) {
+        console.warn(
+          '[tuning-agent-v2][llm] planner temperature rejected; retrying without temperature'
+        );
+      }
+      emitLlmTrace('request', {
+        model: OPENAI_MODEL,
+        input,
+        temperature: null,
+        retryWithoutTemperature: true,
+      });
+      response = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(baseBody),
+      });
     }
-    emitLlmTrace('error', { status: response.status, errorText });
-    throw new Error(`OpenAI planner failed (${response.status}): ${errorText}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (DEBUG_LLM) {
+        console.error('[tuning-agent-v2][llm] planner error response:', errorText);
+      }
+      emitLlmTrace('error', { status: response.status, errorText });
+      throw new Error(`OpenAI planner failed (${response.status}): ${errorText}`);
+    }
   }
 
   const payload = (await response.json()) as unknown;

@@ -6,10 +6,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev:stack:system",
+    "dev": "npm run dev:stack:agent",
     "dev:backend": "npm run dev --workspace=apps/backend",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
-    "dev:agent": "bash scripts/run-tuning-agent.sh",
+    "dev:agent": "AGENT_MONITOR_PORT_OVERRIDE=0 bash scripts/run-tuning-agent.sh",
     "dev:agent-ts": "bash scripts/run-tuning-agent-typescript.sh",
     "dev:monitor": "npm run dev --workspace=apps/agent-monitor",
     "dev:agent-test": "npm run dev --workspace=apps/agent-test",

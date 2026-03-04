@@ -73,10 +73,9 @@ const MIN_MAIN_CONTENT_WIDTH_PX = 700;
 const guiAdaptationTools = ['filter', 'sort', 'highlight', 'augment', 'clearModification'] as const;
 const AGENT_BRIDGE_ENABLED_STORAGE_KEY = 'tuning-movie-agent-bridge-enabled';
 const PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY = 'tuning-movie-planner-cp-memory-limit';
-const EXTRACTOR_CONFLICT_CANDIDATE_ENABLED_STORAGE_KEY =
-  'tuning-movie-extractor-conflict-candidate-enabled';
 const AGENT_MODEL_STORAGE_KEY = 'tuning-movie-agent-model';
 const GUI_ADAPTATION_ENABLED_STORAGE_KEY = 'tuning-movie-gui-adaptation-enabled';
+const SHOW_STUDY_CONTROL_BUTTONS = !import.meta.env.PROD;
 
 function readStorageValue(key: string): string | null {
   if (typeof window === 'undefined') return null;
@@ -251,10 +250,6 @@ export function ChatPage({
   const [plannerCpMemoryLimit, setPlannerCpMemoryLimit] = useState<number>(() =>
     readStoredNonNegativeInt(PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY, 10)
   );
-  const [extractorConflictCandidateEnabled, setExtractorConflictCandidateEnabled] =
-    useState<boolean>(() =>
-      readStoredBoolean(EXTRACTOR_CONFLICT_CANDIDATE_ENABLED_STORAGE_KEY, false)
-    );
   const [agentModel, setAgentModel] = useState<AgentModel>(() =>
     readStoredAgentModel(AGENT_MODEL_STORAGE_KEY, 'openai')
   );
@@ -558,13 +553,6 @@ export function ChatPage({
   useEffect(() => {
     writeStorageValue(PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY, String(plannerCpMemoryLimit));
   }, [plannerCpMemoryLimit]);
-
-  useEffect(() => {
-    writeStorageValue(
-      EXTRACTOR_CONFLICT_CANDIDATE_ENABLED_STORAGE_KEY,
-      String(extractorConflictCandidateEnabled)
-    );
-  }, [extractorConflictCandidateEnabled]);
 
   useEffect(() => {
     writeStorageValue(AGENT_MODEL_STORAGE_KEY, agentModel);
@@ -964,7 +952,6 @@ export function ChatPage({
     messageHistory: messages,
     toolSchema: agentToolSchema,
     plannerCpMemoryLimit,
-    extractorConflictCandidateEnabled,
     sessionId: studySession?.relaySessionId,
     studyToken: studySession?.studyToken,
     enabled: agentBridgeEnabled && Boolean(studySession),
@@ -978,7 +965,9 @@ export function ChatPage({
 
   const handleManualReset = useCallback(() => {
     if (loading) return;
-    const confirmed = window.confirm('Reset the current chat and booking progress?');
+    const confirmed = window.confirm(
+      'Reset this task and clear the current chat and booking progress?'
+    );
     if (!confirmed) return;
     sendSessionResetToAgent('host-manual-reset');
     handleSessionReset();
@@ -986,7 +975,7 @@ export function ChatPage({
 
   const handleFinishStudy = useCallback(async () => {
     if (loading) return;
-    const confirmed = window.confirm('Finish this study session and go to the end screen?');
+    const confirmed = window.confirm('Finish this task and go to the end screen?');
     if (!confirmed) return;
 
     resetChat();
@@ -1039,7 +1028,6 @@ export function ChatPage({
     setAgentBridgeEnabled(studyModeConfig.agentEnabled);
     setGuiAdaptationEnabled(studyModeConfig.guiAdaptationEnabled);
     setPlannerCpMemoryLimit(studyModeConfig.cpMemoryWindow);
-    setExtractorConflictCandidateEnabled(studyModeConfig.extractorConflictCandidateEnabled);
 
     api.setGuiAdaptationConfig(studyModeConfig.guiAdaptationEnabled).catch(() => {});
   }, [studyModePreset, studyModeConfig]);
@@ -1189,22 +1177,7 @@ export function ChatPage({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="shrink-0 border-b border-dark-border bg-dark px-4 py-3">
-          <div className="max-w-5xl mx-auto space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="text-lg font-semibold text-fg-strong">Movie Booking</h1>
-            <button
-              type="button"
-              onClick={handleFinishStudy}
-              disabled={loading}
-              className="px-3 py-1 text-xs rounded border border-primary/70 text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Finish Study
-            </button>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-            <div className="text-sm text-fg-muted">
-              Step {currentStep} of {STAGE_ORDER.length}
-            </div>
+          <div className="mx-auto flex w-full items-center justify-end gap-2 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
             <button
               type="button"
               onClick={onThemeToggle}
@@ -1216,111 +1189,111 @@ export function ChatPage({
             >
               {theme === 'dark' ? 'Bright Mode' : 'Dark Mode'}
             </button>
-            <button
-              type="button"
-              onClick={handleAgentBridgeToggle}
-              disabled={sessionLocked}
-              className={`px-3 py-1 text-xs rounded border ${
-                agentBridgeEnabled
-                  ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
-                  : 'border-primary/40 text-primary/80 hover:border-primary hover:text-primary'
-              } disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
-            </button>
-            <button
-              type="button"
-              onClick={handleGuiAdaptationToggle}
-              disabled={sessionLocked}
-              className={`px-3 py-1 text-xs rounded border ${
-                guiAdaptationEnabled
-                  ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
-                  : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
-              } disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              GUI Adaptation {guiAdaptationEnabled ? 'ON' : 'OFF'}
-            </button>
-            <label
-              className={`flex items-center gap-2 px-3 py-1 text-xs rounded border ${
-                agentBridgeEnabled
-                  ? 'border-info-border text-info-label'
-                  : 'border-info-border/50 text-info-label/60'
-              }`}
-            >
-              <span>CP Memory</span>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={plannerCpMemoryLimit}
-                disabled={!agentBridgeEnabled || sessionLocked}
-                onChange={(event) => {
-                  const parsed = Number.parseInt(event.target.value, 10);
-                  if (!Number.isFinite(parsed)) {
-                    setPlannerCpMemoryLimit(0);
-                    return;
-                  }
-                  setPlannerCpMemoryLimit(Math.max(0, parsed));
-                }}
-                className="w-16 rounded border border-info-border bg-dark px-2 py-0.5 text-xs text-info-text disabled:cursor-not-allowed disabled:opacity-60"
-                title="0 disables CP memory injection. N injects the latest N memory items per list."
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => setExtractorConflictCandidateEnabled((prev) => !prev)}
-              disabled={sessionLocked}
-              className={`px-3 py-1 text-xs rounded border ${
-                extractorConflictCandidateEnabled
-                  ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
-                  : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
-              } disabled:cursor-not-allowed disabled:opacity-60`}
-              title="Toggle CP extraction of conflicts and candidates."
-            >
-              CP Conflict/Candidate {extractorConflictCandidateEnabled ? 'ON' : 'OFF'}
-            </button>
-            {agentBridgeEnabled && (
-              <div className="relative flex">
+            {SHOW_STUDY_CONTROL_BUTTONS && (
+              <>
                 <button
                   type="button"
-                  onClick={() => setModelPickerOpen((prev) => !prev)}
+                  onClick={handleAgentBridgeToggle}
                   disabled={sessionLocked}
-                  className="px-3 py-1 text-xs rounded border border-info-border text-info-label hover:border-info-label hover:text-info-text transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  className={`px-3 py-1 text-xs rounded border ${
+                    agentBridgeEnabled
+                      ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
+                      : 'border-primary/40 text-primary/80 hover:border-primary hover:text-primary'
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                  {agentModel === 'openai' ? 'gpt-5.2' : 'gemini-2.5-flash'}
+                  Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
                 </button>
-                {modelPickerOpen && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setModelPickerOpen(false)} />
-                    <div className="absolute left-0 top-full z-20 mt-1 flex flex-col gap-1">
-                      {([['openai', 'gpt-5.2'], ['gemini', 'gemini-2.5-flash']] as const).map(([id, label]) => (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => handleModelToggle(id)}
-                          className={`px-3 py-1 text-xs rounded border whitespace-nowrap transition-colors ${
-                            agentModel === id
-                              ? 'border-info-label text-info-text bg-info-bg'
-                              : 'border-info-border text-info-label bg-dark hover:border-info-label hover:text-info-text'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
+                <button
+                  type="button"
+                  onClick={handleGuiAdaptationToggle}
+                  disabled={sessionLocked}
+                  className={`px-3 py-1 text-xs rounded border ${
+                    guiAdaptationEnabled
+                      ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
+                      : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  GUI Adaptation {guiAdaptationEnabled ? 'ON' : 'OFF'}
+                </button>
+                <label
+                  className={`flex h-[26px] items-center gap-2 rounded border px-3 text-xs ${
+                    agentBridgeEnabled
+                      ? 'border-info-border text-info-label'
+                      : 'border-info-border/50 text-info-label/60'
+                  }`}
+                >
+                  <span>CP Memory</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={plannerCpMemoryLimit}
+                    disabled={!agentBridgeEnabled || sessionLocked}
+                    onChange={(event) => {
+                      const parsed = Number.parseInt(event.target.value, 10);
+                      if (!Number.isFinite(parsed)) {
+                        setPlannerCpMemoryLimit(0);
+                        return;
+                      }
+                      setPlannerCpMemoryLimit(Math.max(0, parsed));
+                    }}
+                    className="h-5 w-16 rounded border border-info-border bg-dark px-2 text-xs text-info-text disabled:cursor-not-allowed disabled:opacity-60"
+                    title="0 disables CP memory injection. N injects the latest N memory items per list."
+                  />
+                </label>
+                {agentBridgeEnabled && (
+                  <div className="relative flex">
+                    <button
+                      type="button"
+                      onClick={() => setModelPickerOpen((prev) => !prev)}
+                      disabled={sessionLocked}
+                      className="px-3 py-1 text-xs rounded border border-info-border text-info-label hover:border-info-label hover:text-info-text transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {agentModel === 'openai' ? 'gpt-5.2' : 'gemini-2.5-flash'}
+                    </button>
+                    {modelPickerOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setModelPickerOpen(false)} />
+                        <div className="absolute left-0 top-full z-20 mt-1 flex flex-col gap-1">
+                          {([['openai', 'gpt-5.2'], ['gemini', 'gemini-2.5-flash']] as const).map(
+                            ([id, label]) => (
+                              <button
+                                key={id}
+                                type="button"
+                                onClick={() => handleModelToggle(id)}
+                                className={`px-3 py-1 text-xs rounded border whitespace-nowrap transition-colors ${
+                                  agentModel === id
+                                    ? 'border-info-label text-info-text bg-info-bg'
+                                    : 'border-info-border text-info-label bg-dark hover:border-info-label hover:text-info-text'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
-              </div>
+                <button
+                  type="button"
+                  onClick={handleManualReset}
+                  disabled={loading}
+                  className="px-3 py-1 text-xs rounded border border-dark-border text-fg hover:text-fg-strong hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Reset
+                </button>
+              </>
             )}
             <button
               type="button"
-              onClick={handleManualReset}
+              onClick={handleFinishStudy}
               disabled={loading}
-              className="px-3 py-1 text-xs rounded border border-dark-border text-fg hover:text-fg-strong hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+              className="px-3 py-1 text-xs rounded border border-primary/70 text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Reset
+              Finish Task
             </button>
-          </div>
           </div>
         </header>
 

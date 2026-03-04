@@ -2,7 +2,6 @@ export interface StudyModeConfig {
   agentEnabled: boolean;
   guiAdaptationEnabled: boolean;
   cpMemoryWindow: number;
-  extractorConflictCandidateEnabled: boolean;
 }
 
 export const STUDY_MODE_OPTIONS = [
@@ -14,7 +13,6 @@ export const STUDY_MODE_OPTIONS = [
       agentEnabled: false,
       guiAdaptationEnabled: false,
       cpMemoryWindow: 0,
-      extractorConflictCandidateEnabled: false,
     },
   },
   {
@@ -25,7 +23,6 @@ export const STUDY_MODE_OPTIONS = [
       agentEnabled: true,
       guiAdaptationEnabled: false,
       cpMemoryWindow: 0,
-      extractorConflictCandidateEnabled: false,
     },
   },
   {
@@ -36,18 +33,16 @@ export const STUDY_MODE_OPTIONS = [
       agentEnabled: true,
       guiAdaptationEnabled: true,
       cpMemoryWindow: 0,
-      extractorConflictCandidateEnabled: false,
     },
   },
   {
     id: 'full-tuning',
     label: 'Full TUNING',
-    description: 'Agent ON, GUI Adaptation ON, CP memory ON (window 10, candidate OFF).',
+    description: 'Agent ON, GUI Adaptation ON, CP memory ON (window 10, conflict memory ON).',
     config: {
       agentEnabled: true,
       guiAdaptationEnabled: true,
       cpMemoryWindow: 10,
-      extractorConflictCandidateEnabled: false,
     },
   },
 ] as const;

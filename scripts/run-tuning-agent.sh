@@ -16,6 +16,11 @@ else
   echo "[tuning-agent] .env not found at $ROOT_ENV_FILE (using current shell env)"
 fi
 
+# Optional override used by orchestrated dev stacks.
+if [[ -n "${AGENT_MONITOR_PORT_OVERRIDE:-}" ]]; then
+  export AGENT_MONITOR_PORT="$AGENT_MONITOR_PORT_OVERRIDE"
+fi
+
 cd "$ROOT_DIR"
 if [[ "$MODE" == "start" ]]; then
   exec npm run start --workspace=apps/tuning-agent

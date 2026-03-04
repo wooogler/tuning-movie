@@ -78,8 +78,7 @@ function syncMonitorMemoryState(): void {
   monitor.updateMemory(
     memory.getPreferences(),
     memory.getConstraints(),
-    memory.getConflicts(),
-    memory.getCandidates()
+    memory.getConflicts()
   );
 }
 
@@ -116,10 +115,6 @@ function toSnapshotPayload(value: unknown): SnapshotStatePayload {
     plannerCpMemoryLimit: resolvePlannerCpMemoryLimit(payload, DEFAULT_CP_MEMORY_LIMIT),
     plannerCpEnabled:
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
-    extractorConflictCandidateEnabled:
-      typeof payload.extractorConflictCandidateEnabled === 'boolean'
-        ? payload.extractorConflictCandidateEnabled
-        : undefined,
   };
 }
 
@@ -133,10 +128,6 @@ function toStateUpdatedPayload(value: unknown): StateUpdatedPayload {
     plannerCpMemoryLimit: resolvePlannerCpMemoryLimit(payload, DEFAULT_CP_MEMORY_LIMIT),
     plannerCpEnabled:
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
-    extractorConflictCandidateEnabled:
-      typeof payload.extractorConflictCandidateEnabled === 'boolean'
-        ? payload.extractorConflictCandidateEnabled
-        : undefined,
   };
 }
 
@@ -403,26 +394,21 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
             existingPreferences: memory.getPreferences(),
             existingConstraints: memory.getConstraints(),
             existingConflicts: memory.getConflicts(),
-            existingCandidates: memory.getCandidates(),
-            extractConflictCandidate: planningContext.extractorConflictCandidateEnabled,
           };
 
           const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
           memory.setPreferences(extractionResult.updatedPreferences);
           memory.setConstraints(extractionResult.updatedConstraints);
           memory.setConflicts(extractionResult.updatedConflicts);
-          memory.setCandidates(extractionResult.updatedCandidates);
           syncMonitorMemoryState();
           monitor.pushEvent('extraction.completed', {
             trigger: 'planner.no_action',
             updatedPreferences: extractionResult.updatedPreferences,
             updatedConstraints: extractionResult.updatedConstraints,
             updatedConflicts: extractionResult.updatedConflicts,
-            updatedCandidates: extractionResult.updatedCandidates,
             preferences: memory.getPreferences(),
             constraints: memory.getConstraints(),
             conflicts: memory.getConflicts(),
-            candidates: memory.getCandidates(),
           });
         } catch (extractionError) {
           monitor.pushEvent('extraction.failed', {
@@ -558,8 +544,6 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         existingPreferences: memory.getPreferences(),
         existingConstraints: memory.getConstraints(),
         existingConflicts: memory.getConflicts(),
-        existingCandidates: memory.getCandidates(),
-        extractConflictCandidate: latestContext.extractorConflictCandidateEnabled,
       };
 
       try {
@@ -567,17 +551,14 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         memory.setPreferences(extractionResult.updatedPreferences);
         memory.setConstraints(extractionResult.updatedConstraints);
         memory.setConflicts(extractionResult.updatedConflicts);
-        memory.setCandidates(extractionResult.updatedCandidates);
         syncMonitorMemoryState();
         monitor.pushEvent('extraction.completed', {
           updatedPreferences: extractionResult.updatedPreferences,
           updatedConstraints: extractionResult.updatedConstraints,
           updatedConflicts: extractionResult.updatedConflicts,
-          updatedCandidates: extractionResult.updatedCandidates,
           preferences: memory.getPreferences(),
           constraints: memory.getConstraints(),
           conflicts: memory.getConflicts(),
-          candidates: memory.getCandidates(),
         });
       } catch (extractionError) {
         monitor.pushEvent('extraction.failed', {

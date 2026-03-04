@@ -12,7 +12,6 @@ interface UseAgentBridgeOptions {
   sessionId?: string;
   studyToken?: string;
   plannerCpMemoryLimit?: number;
-  extractorConflictCandidateEnabled?: boolean;
   onToolCall: (
     toolName: string,
     params: Record<string, unknown>,
@@ -78,7 +77,6 @@ export function useAgentBridge({
   sessionId,
   studyToken,
   plannerCpMemoryLimit = 10,
-  extractorConflictCandidateEnabled = true,
   onToolCall,
   onAgentMessage,
   onSessionEnd,
@@ -101,7 +99,6 @@ export function useAgentBridge({
     messageHistory,
     toolSchema,
     plannerCpMemoryLimit,
-    extractorConflictCandidateEnabled,
     onToolCall,
     onAgentMessage,
     onSessionEnd,
@@ -124,7 +121,6 @@ export function useAgentBridge({
       messageHistory,
       toolSchema,
       plannerCpMemoryLimit,
-      extractorConflictCandidateEnabled,
       onToolCall,
       onAgentMessage,
       onSessionEnd,
@@ -134,7 +130,6 @@ export function useAgentBridge({
     messageHistory,
     toolSchema,
     plannerCpMemoryLimit,
-    extractorConflictCandidateEnabled,
     onToolCall,
     onAgentMessage,
     onSessionEnd,
@@ -170,7 +165,6 @@ export function useAgentBridge({
       messageHistory: current.messageHistory,
       toolSchema: current.toolSchema,
       plannerCpMemoryLimit: normalizeCpMemoryLimit(current.plannerCpMemoryLimit),
-      extractorConflictCandidateEnabled: Boolean(current.extractorConflictCandidateEnabled),
     };
   }, [normalizeCpMemoryLimit]);
 
@@ -393,9 +387,6 @@ export function useAgentBridge({
         messageHistory: latestRef.current.messageHistory,
         toolSchema: latestRef.current.toolSchema,
         plannerCpMemoryLimit: normalizeCpMemoryLimit(latestRef.current.plannerCpMemoryLimit),
-        extractorConflictCandidateEnabled: Boolean(
-          latestRef.current.extractorConflictCandidateEnabled
-        ),
       },
     });
   }, [
@@ -404,7 +395,6 @@ export function useAgentBridge({
     messageHistory,
     toolSchema,
     plannerCpMemoryLimit,
-    extractorConflictCandidateEnabled,
     sendEnvelope,
     normalizeCpMemoryLimit,
   ]);
