@@ -35,10 +35,28 @@ function prefixedWrite(prefix: string, chunk: Buffer | string): void {
   }
 }
 
+function parseBooleanEnv(value: string | undefined): boolean | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return null;
+}
+
 function resolveSupervisorAgentMonitorPort(): string {
   const override = process.env.AGENT_MONITOR_PORT_OVERRIDE?.trim();
   if (override) return override;
-  // Study sessions can run concurrently, so avoid a fixed monitor port.
+
+  const monitorEnabled =
+    parseBooleanEnv(process.env.AGENT_MONITOR_ENABLED) ?? process.env.NODE_ENV !== 'production';
+  if (!monitorEnabled) return '0';
+
+  if (process.env.NODE_ENV !== 'production') {
+    return process.env.AGENT_MONITOR_PORT?.trim() || '3500';
+  }
+
+  // In production, keep monitor port dynamic to avoid cross-session conflicts
+  // if monitor is explicitly enabled.
   return '0';
 }
 

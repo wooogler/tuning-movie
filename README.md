@@ -100,9 +100,10 @@ The project uses an orchestrator that starts services in the right order (backen
 
 | Command | Services | Use case |
 |---------|----------|----------|
-| `npm run dev` | backend + frontend + agent + monitor | **Default** &mdash; full stack with AI agent and monitoring dashboard |
-| `npm run dev:stack:agent` | backend + frontend + agent | AI agent without monitor |
-| `npm run dev:stack:system` | backend + frontend | UI/API dev only, no agent |
+| `npm run dev` | backend + frontend | **Default** &mdash; host UI/API development |
+| `npm run dev:stack:agent` | backend + frontend + agent | Standalone agent runtime (no monitor) |
+| `npm run dev:stack:agent-monitor` | backend + frontend + monitor | Host sessions + monitor dashboard |
+| `npm run dev:stack:system` | backend + frontend | Alias of default host UI/API mode |
 | `npm run dev:stack:all` | backend + frontend + agent-test | Manual testing with test console |
 
 You can also run any service individually:
@@ -148,10 +149,10 @@ tuning-movie/
 **Root Level**
 ```bash
 # Dev stacks (orchestrated)
-npm run dev                      # Default: backend + frontend + agent + monitor
-npm run dev:stack:system         # backend + frontend only
-npm run dev:stack:agent          # backend + frontend + agent
-npm run dev:stack:agent-monitor  # backend + frontend + agent + monitor
+npm run dev                      # Default: backend + frontend
+npm run dev:stack:system         # backend + frontend only (same as `dev`)
+npm run dev:stack:agent          # backend + frontend + standalone agent
+npm run dev:stack:agent-monitor  # backend + frontend + monitor
 npm run dev:stack:all            # backend + frontend + agent-test
 
 # Individual services
