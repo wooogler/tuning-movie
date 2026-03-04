@@ -265,6 +265,7 @@ export function ChatPage({
     DEFAULT_SCENARIO_PANEL_WIDTH_PX
   );
   const [isResizingScenarioPanelWidth, setIsResizingScenarioPanelWidth] = useState(false);
+  const [awaitingAgentResponse, setAwaitingAgentResponse] = useState(false);
 
   const initialized = useRef(false);
   const appliedStudyModePresetRef = useRef<StudyModeId | null>(null);
@@ -844,6 +845,7 @@ export function ChatPage({
     resetChat();
     setBooking(null);
     setError(null);
+    setAwaitingAgentResponse(false);
     initialized.current = true;
     if (movies.length > 0) {
       const spec = withBookingContext(generateMovieSpec(movies), {});
@@ -925,6 +927,7 @@ export function ChatPage({
     resetChat();
     setBooking(null);
     setError(null);
+    setAwaitingAgentResponse(false);
     initialized.current = true;
     if (movies.length > 0) {
       const spec = withBookingContext(generateMovieSpec(movies), {});
@@ -939,6 +942,21 @@ export function ChatPage({
     () => buildToolSchemaForStage(activeSpec, currentStage, guiAdaptationEnabled),
     [activeSpec, currentStage, guiAdaptationEnabled]
   );
+
+  const handleAgentToolCall = useCallback((
+    toolName: string,
+    params: Record<string, unknown>,
+    context?: ToolApplyContext
+  ) => {
+    setAwaitingAgentResponse(false);
+    return onToolApply(toolName, params, context);
+  }, [onToolApply]);
+
+  const handleAgentMessage = useCallback((text: string) => {
+    setAwaitingAgentResponse(false);
+    const stage = activeSpec?.stage ?? currentStage;
+    addAgentMessage(stage, text);
+  }, [activeSpec, currentStage, addAgentMessage]);
 
   const {
     sendUserMessageToAgent,
@@ -955,11 +973,8 @@ export function ChatPage({
     sessionId: studySession?.relaySessionId,
     studyToken: studySession?.studyToken,
     enabled: agentBridgeEnabled && Boolean(studySession),
-    onToolCall: onToolApply,
-    onAgentMessage: (text: string) => {
-      const stage = activeSpec?.stage ?? currentStage;
-      addAgentMessage(stage, text);
-    },
+    onToolCall: handleAgentToolCall,
+    onAgentMessage: handleAgentMessage,
     onSessionEnd: handleSessionReset,
   });
 
@@ -981,6 +996,7 @@ export function ChatPage({
     resetChat();
     setBooking(null);
     setError(null);
+    setAwaitingAgentResponse(false);
     setUiSpec(null);
 
     try {
@@ -1036,6 +1052,7 @@ export function ChatPage({
     (text: string) => {
       if (!agentBridgeEnabled) return;
       addUserMessage(currentStage, 'input', text);
+      setAwaitingAgentResponse(true);
       sendUserMessageToAgent(text, currentStage);
     },
     [addUserMessage, agentBridgeEnabled, currentStage, sendUserMessageToAgent]
@@ -1046,6 +1063,17 @@ export function ChatPage({
   const nextStage = getNextStage(currentStage);
   const hasConnectedAgent = connectedAgents.length > 0;
   const connectedAgentNames = connectedAgents.map((agent) => agent.name).join(', ');
+  const isAgentTyping =
+    awaitingAgentResponse &&
+    agentBridgeEnabled &&
+    isAgentBridgeConnected &&
+    isAgentBridgeJoined &&
+    hasConnectedAgent;
+
+  useEffect(() => {
+    if (isAgentTyping) return;
+    setAwaitingAgentResponse(false);
+  }, [isAgentTyping]);
 
   useEffect(() => {
     const pendingReason = pendingAgentToggleResetReasonRef.current;
@@ -1312,6 +1340,7 @@ export function ChatPage({
           <MessageList
             messages={messages}
             activeSpec={activeSpec}
+            isAgentTyping={isAgentTyping}
             onSelect={handleSelect}
             onToggle={handleToggle}
             onNext={handleNext}
