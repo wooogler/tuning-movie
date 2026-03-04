@@ -384,7 +384,7 @@ async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutp
       : baseBody;
 
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][extractor:openai] request:', JSON.stringify(input));
+    console.log('[tuning-agent][extractor:openai] request:', JSON.stringify(input));
   }
   emitLlmTrace('request', {
     model,
@@ -410,7 +410,7 @@ async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutp
     if (shouldRetryWithoutTemperature) {
       if (DEBUG_LLM) {
         console.warn(
-          '[tuning-agent-v2][extractor:openai] temperature rejected; retrying without temperature'
+          '[tuning-agent][extractor:openai] temperature rejected; retrying without temperature'
         );
       }
       emitLlmTrace('request', {
@@ -432,7 +432,7 @@ async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutp
     if (!response.ok) {
       const errorText = await response.text();
       if (DEBUG_LLM) {
-        console.error('[tuning-agent-v2][extractor:openai] error:', errorText);
+        console.error('[tuning-agent][extractor:openai] error:', errorText);
       }
       emitLlmTrace('error', { status: response.status, errorText });
       throw new Error(`OpenAI extractor failed (${response.status}): ${errorText}`);
@@ -442,7 +442,7 @@ async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutp
   const payload = (await response.json()) as unknown;
   const outputText = parseOpenAIOutputText(payload);
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][extractor:openai] raw output:', outputText);
+    console.log('[tuning-agent][extractor:openai] raw output:', outputText);
   }
   emitLlmTrace('response.raw', { outputText });
   if (!outputText) return null;
@@ -512,7 +512,7 @@ async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutp
   };
 
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][extractor:gemini] request:', JSON.stringify(input));
+    console.log('[tuning-agent][extractor:gemini] request:', JSON.stringify(input));
   }
   emitLlmTrace('request', { model, input });
 
@@ -525,7 +525,7 @@ async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutp
   if (!response.ok) {
     const errorText = await response.text();
     if (DEBUG_LLM) {
-      console.error('[tuning-agent-v2][extractor:gemini] error:', errorText);
+      console.error('[tuning-agent][extractor:gemini] error:', errorText);
     }
     emitLlmTrace('error', { status: response.status, errorText });
     throw new Error(`Gemini extractor failed (${response.status}): ${errorText}`);
@@ -534,7 +534,7 @@ async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutp
   const payload = (await response.json()) as unknown;
   const outputText = extractGeminiText(payload);
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][extractor:gemini] raw output:', outputText);
+    console.log('[tuning-agent][extractor:gemini] raw output:', outputText);
   }
   emitLlmTrace('response.raw', { outputText });
   if (!outputText) return null;

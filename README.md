@@ -100,9 +100,8 @@ The project uses an orchestrator that starts services in the right order (backen
 
 | Command | Services | Use case |
 |---------|----------|----------|
-| `npm run dev` | backend + frontend + agent (v1) + monitor | **Default** &mdash; full stack with AI agent and monitoring dashboard |
-| `npm run dev:stack:agent` | backend + frontend + agent (v1) | AI agent without monitor |
-| `npm run dev:stack:agent-v2` | backend + frontend + agent (v2) + monitor | Experimental agent version |
+| `npm run dev` | backend + frontend + agent + monitor | **Default** &mdash; full stack with AI agent and monitoring dashboard |
+| `npm run dev:stack:agent` | backend + frontend + agent | AI agent without monitor |
 | `npm run dev:stack:system` | backend + frontend | UI/API dev only, no agent |
 | `npm run dev:stack:all` | backend + frontend + agent-test | Manual testing with test console |
 
@@ -111,8 +110,7 @@ You can also run any service individually:
 ```bash
 npm run dev:backend      # Backend only
 npm run dev:frontend     # Frontend only
-npm run dev:agent        # Agent v1 only
-npm run dev:agent-v2     # Agent v2 only
+npm run dev:agent        # Agent only
 npm run dev:monitor      # Monitor dashboard only
 npm run dev:agent-test   # Agent test console only
 ```
@@ -131,21 +129,17 @@ tuning-movie/
 ├── apps/
 │   ├── frontend/                  # React chat-style booking UI
 │   ├── backend/                   # Fastify REST API + SQLite + WebSocket relay
-│   ├── tuning-agent-typescript/   # AI agent v1 (LLM planner + prompts)
-│   ├── tuning-agent-v2/           # AI agent v2 (experimental fork of v1)
+│   ├── tuning-agent/              # AI agent runtime (LLM planner + prompts)
 │   ├── agent-monitor/             # Real-time agent monitoring dashboard
 │   └── agent-test/                # Manual agent test console
 ├── scripts/
 │   ├── dev-orchestrator.mjs       # Multi-service dev runner
-│   ├── run-tuning-agent-typescript.sh
-│   └── run-tuning-agent-v2.sh
+│   └── run-tuning-agent.sh
 ├── docs/                          # Project documentation
 ├── .env                           # Shared environment config
 ├── package.json                   # Monorepo root
 └── README.md
 ```
-
-The two agent workspaces (`tuning-agent-typescript` and `tuning-agent-v2`) are independent copies. All LLM calls, prompts, and planning logic live inside each agent's `src/llm/` and `src/core/planner.ts`. You can modify v2 freely without affecting the original.
 
 ## 🛠️ Development
 
@@ -154,19 +148,16 @@ The two agent workspaces (`tuning-agent-typescript` and `tuning-agent-v2`) are i
 **Root Level**
 ```bash
 # Dev stacks (orchestrated)
-npm run dev                      # Default: backend + frontend + agent v1 + monitor
+npm run dev                      # Default: backend + frontend + agent + monitor
 npm run dev:stack:system         # backend + frontend only
-npm run dev:stack:agent          # backend + frontend + agent v1
-npm run dev:stack:agent-monitor  # backend + frontend + agent v1 + monitor
-npm run dev:stack:agent-v2       # backend + frontend + agent v2
-npm run dev:stack:agent-v2-monitor # backend + frontend + agent v2 + monitor
+npm run dev:stack:agent          # backend + frontend + agent
+npm run dev:stack:agent-monitor  # backend + frontend + agent + monitor
 npm run dev:stack:all            # backend + frontend + agent-test
 
 # Individual services
 npm run dev:backend              # Backend only
 npm run dev:frontend             # Frontend only
-npm run dev:agent                # Agent v1 only
-npm run dev:agent-v2             # Agent v2 only
+npm run dev:agent                # Agent only
 npm run dev:monitor              # Monitor dashboard only
 npm run dev:agent-test           # Agent test console only
 
@@ -174,8 +165,7 @@ npm run dev:agent-test           # Agent test console only
 npm run build                    # Build all workspaces
 npm run build:backend
 npm run build:frontend
-npm run build:agent              # Build agent v1
-npm run build:agent-v2           # Build agent v2
+npm run build:agent              # Build agent
 npm run build:monitor
 npm run build:agent-test
 ```
@@ -292,7 +282,7 @@ This repository now includes production deployment files matching your existing 
 
 Deployed services:
 - `backend` (Fastify + SQLite + main frontend)
-- `agent` (`apps/tuning-agent-typescript`)
+- `agent` (`apps/tuning-agent`)
 - `nginx` (public routing + `/agent-monitor/` + `/monitor-api/*`)
 
 Note: monitor routes are localhost-only by default for security.
@@ -327,7 +317,7 @@ Then open `http://localhost:3400`.
 
 1. Start all services:
 ```bash
-npm run dev:all
+npm run dev:stack:all
 ```
 2. Open frontend (`http://localhost:5173`) and agent test console (`http://localhost:3400`).
 3. In frontend, wait until a stage UI is visible (movie list).

@@ -21,18 +21,6 @@ const COMMANDS_BY_MODE = {
     { label: 'agent', script: 'dev:agent' },
     { label: 'monitor', script: 'dev:monitor' },
   ],
-  agent_v2: [
-    { label: 'backend', script: 'dev:backend' },
-    { label: 'frontend', script: 'dev:frontend' },
-    { label: 'agent-v2', script: 'dev:agent-v2' },
-    { label: 'monitor', script: 'dev:monitor' },
-  ],
-  agent_v2_monitor: [
-    { label: 'backend', script: 'dev:backend' },
-    { label: 'frontend', script: 'dev:frontend' },
-    { label: 'agent-v2', script: 'dev:agent-v2' },
-    { label: 'monitor', script: 'dev:monitor' },
-  ],
   all: [
     { label: 'backend', script: 'dev:backend' },
     { label: 'frontend', script: 'dev:frontend' },

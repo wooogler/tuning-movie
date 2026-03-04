@@ -1,10 +1,10 @@
-# Tuning Agent (TypeScript)
+# Tuning Agent
 
 Dedicated workspace for implementing the external agent runtime.
 
 This package is separated from `apps/agent-test`:
 - `apps/agent-test`: manual relay/control panel tool
-- `apps/tuning-agent-typescript`: actual agent runtime implementation
+- `apps/tuning-agent`: actual agent runtime implementation
 
 ## Structure
 
@@ -29,19 +29,19 @@ src/
 ## Run
 
 ```bash
-npm run dev --workspace=apps/tuning-agent-typescript
+npm run dev --workspace=apps/tuning-agent
 ```
 
 recommended (auto-loads repo-root `.env`):
 
 ```bash
-npm run dev:tuning-agent-typescript
+npm run dev:agent
 ```
 
 run backend+frontend+agent together:
 
 ```bash
-npm run dev:system+tuning-agent-typescript
+npm run dev:stack:agent
 ```
 
 Important:
@@ -55,15 +55,15 @@ Important:
 start mode (non-watch, uses compiled `dist`):
 
 ```bash
-npm run build:tuning-agent-typescript
-npm run start:tuning-agent-typescript
+npm run build:agent
+npm run start:agent
 ```
 
 or
 
 ```bash
-npm run build --workspace=apps/tuning-agent-typescript
-npm run start --workspace=apps/tuning-agent-typescript
+npm run build --workspace=apps/tuning-agent
+npm run start --workspace=apps/tuning-agent
 ```
 
 ## Environment

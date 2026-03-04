@@ -2,7 +2,7 @@
 
 `npm run dev` currently starts this stack:
 - backend (Fastify + SQLite + main frontend runtime)
-- agent (`apps/tuning-agent-typescript`)
+- agent (`apps/tuning-agent`)
 - monitor UI (`apps/agent-monitor`)
 
 Production deployment in this repo maps that to:
@@ -14,7 +14,7 @@ Production deployment in this repo maps that to:
 - `/` -> backend app
 - `/agent/ws` -> backend relay websocket
 - `/agent-monitor/` -> monitor web UI
-- `/monitor-api/*` -> agent monitor API (`apps/tuning-agent-typescript` monitor server)
+- `/monitor-api/*` -> agent monitor API (`apps/tuning-agent` monitor server)
 
 ## 1) One-time server setup
 

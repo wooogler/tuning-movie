@@ -250,7 +250,7 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
       : baseBody;
 
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][llm] planner request input:', JSON.stringify(input));
+    console.log('[tuning-agent][llm] planner request input:', JSON.stringify(input));
   }
   emitLlmTrace('request', {
     model: OPENAI_MODEL,
@@ -276,7 +276,7 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
     if (shouldRetryWithoutTemperature) {
       if (DEBUG_LLM) {
         console.warn(
-          '[tuning-agent-v2][llm] planner temperature rejected; retrying without temperature'
+          '[tuning-agent][llm] planner temperature rejected; retrying without temperature'
         );
       }
       emitLlmTrace('request', {
@@ -298,7 +298,7 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
     if (!response.ok) {
       const errorText = await response.text();
       if (DEBUG_LLM) {
-        console.error('[tuning-agent-v2][llm] planner error response:', errorText);
+        console.error('[tuning-agent][llm] planner error response:', errorText);
       }
       emitLlmTrace('error', { status: response.status, errorText });
       throw new Error(`OpenAI planner failed (${response.status}): ${errorText}`);
@@ -308,13 +308,13 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   const payload = (await response.json()) as unknown;
   const outputText = parseOpenAIOutputText(payload);
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][llm] planner raw output_text:', outputText);
+    console.log('[tuning-agent][llm] planner raw output_text:', outputText);
   }
   emitLlmTrace('response.raw', { outputText });
   if (!outputText) return null;
   const parsed = parseJsonObject(outputText);
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][llm] planner parsed output:', JSON.stringify(parsed));
+    console.log('[tuning-agent][llm] planner parsed output:', JSON.stringify(parsed));
   }
   emitLlmTrace('response.parsed', { parsed });
   if (!parsed) return null;
@@ -377,7 +377,7 @@ export async function planActionWithGemini(input: PlannerInput): Promise<Planner
   };
 
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][llm:gemini] planner request input:', JSON.stringify(input));
+    console.log('[tuning-agent][llm:gemini] planner request input:', JSON.stringify(input));
   }
   emitLlmTrace('request', { model: GEMINI_MODEL, input });
 
@@ -392,7 +392,7 @@ export async function planActionWithGemini(input: PlannerInput): Promise<Planner
   if (!response.ok) {
     const errorText = await response.text();
     if (DEBUG_LLM) {
-      console.error('[tuning-agent-v2][llm:gemini] planner error response:', errorText);
+      console.error('[tuning-agent][llm:gemini] planner error response:', errorText);
     }
     emitLlmTrace('error', { status: response.status, errorText });
     throw new Error(`Gemini planner failed (${response.status}): ${errorText}`);
@@ -401,14 +401,14 @@ export async function planActionWithGemini(input: PlannerInput): Promise<Planner
   const payload = (await response.json()) as unknown;
   const outputText = extractGeminiText(payload);
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][llm:gemini] planner raw output:', outputText);
+    console.log('[tuning-agent][llm:gemini] planner raw output:', outputText);
   }
   emitLlmTrace('response.raw', { outputText });
   if (!outputText) return null;
 
   const parsed = parseJsonObject(outputText);
   if (DEBUG_LLM) {
-    console.log('[tuning-agent-v2][llm:gemini] planner parsed output:', JSON.stringify(parsed));
+    console.log('[tuning-agent][llm:gemini] planner parsed output:', JSON.stringify(parsed));
   }
   emitLlmTrace('response.parsed', { parsed });
   if (!parsed) return null;
