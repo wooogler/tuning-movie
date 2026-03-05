@@ -49,6 +49,10 @@ const TOKEN_SECRET =
 
 const sessions = new Map<string, StudySessionRecord>();
 
+function shouldEnforceSingleActiveAgentSession(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
 function sessionsFileCandidates(): string[] {
   return [
     path.resolve(process.cwd(), 'apps/backend/.runtime/study-sessions.json'),
@@ -156,6 +160,54 @@ function loadPersistedSessions(): void {
   }
 }
 
+function deactivateSession(
+  record: StudySessionRecord,
+  status: 'finished' | 'expired'
+): void {
+  sessions.set(record.sessionId, {
+    ...record,
+    status,
+    finishedAt: now().toISOString(),
+  });
+  stopAgentForSession(record.sessionId);
+  destroySessionDb(record.sessionId);
+}
+
+function deactivateOtherActiveAgentSessions(keepSessionId?: string): boolean {
+  if (!shouldEnforceSingleActiveAgentSession()) return false;
+
+  let changed = false;
+  for (const record of sessions.values()) {
+    if (record.status !== 'active') continue;
+    if (keepSessionId && record.sessionId === keepSessionId) continue;
+    const studyModeConfig = getStudyModeConfig(record.studyMode);
+    if (!studyModeConfig.agentEnabled) continue;
+    deactivateSession(record, 'expired');
+    changed = true;
+  }
+  return changed;
+}
+
+function keepLatestActiveAgentSession(): boolean {
+  if (!shouldEnforceSingleActiveAgentSession()) return false;
+
+  const activeAgentSessions = Array.from(sessions.values())
+    .filter((record) => {
+      if (record.status !== 'active') return false;
+      return getStudyModeConfig(record.studyMode).agentEnabled;
+    })
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+
+  if (activeAgentSessions.length <= 1) return false;
+  const [, ...stale] = activeAgentSessions;
+  let changed = false;
+  for (const record of stale) {
+    deactivateSession(record, 'expired');
+    changed = true;
+  }
+  return changed;
+}
+
 function restartAgentsForActiveSessions(): void {
   for (const record of sessions.values()) {
     if (record.status !== 'active') continue;
@@ -216,7 +268,14 @@ function buildSessionContext(record: StudySessionRecord): StudySessionContext | 
 }
 
 loadPersistedSessions();
+let normalizedActiveSessions = false;
+if (keepLatestActiveAgentSession()) {
+  normalizedActiveSessions = true;
+}
 if (markExpiredSessions()) {
+  normalizedActiveSessions = true;
+}
+if (normalizedActiveSessions) {
   persistSessions();
 }
 restartAgentsForActiveSessions();
@@ -226,16 +285,28 @@ export function listScenarios(): ScenarioDefinition[] {
 }
 
 export function createStudySession(input: CreateSessionInput): CreateSessionResult {
-  if (markExpiredSessions()) {
-    persistSessions();
-  }
-
   const scenario = getScenarioById(input.scenarioId);
   if (!scenario) {
     throw new Error(`Unknown scenario: ${input.scenarioId}`);
   }
-  const studyMode = parseStudyMode(input.studyMode);
-  const studyModeConfig = getStudyModeConfig(studyMode);
+
+  let changed = false;
+  if (markExpiredSessions()) {
+    changed = true;
+  }
+
+  const requestedStudyMode = parseStudyMode(input.studyMode);
+  const requestedStudyModeConfig = getStudyModeConfig(requestedStudyMode);
+  if (requestedStudyModeConfig.agentEnabled && deactivateOtherActiveAgentSessions()) {
+    changed = true;
+  }
+
+  if (changed) {
+    persistSessions();
+  }
+
+  const studyMode = requestedStudyMode;
+  const studyModeConfig = requestedStudyModeConfig;
 
   const templateDbPath = getScenarioTemplatePath(scenario);
   const sessionId = `st_${randomUUID().replace(/-/g, '')}`;
