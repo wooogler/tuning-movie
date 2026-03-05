@@ -71,7 +71,7 @@ export function StudyStartPage({
           <div>
             <h1 className="text-2xl font-semibold text-fg-strong">User Study Setup</h1>
             <p className="mt-1 text-sm text-fg-muted">
-              Select one TUNING mode and one scenario before starting.
+              Select one study mode and one scenario before starting.
             </p>
           </div>
           <button
@@ -90,7 +90,7 @@ export function StudyStartPage({
         <div className="grid gap-5 lg:grid-cols-2">
           <section className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">
-              TUNING Mode
+              Study Mode
             </h2>
             {STUDY_MODE_OPTIONS.map((option) => {
               const checked = selectedMode === option.id;

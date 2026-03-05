@@ -7,6 +7,7 @@ interface MonitorOptions {
   relayUrl: string;
   sessionId: string;
   agentName: string;
+  routingMode: 'planner' | 'baseline';
   llmSystemPrompts: {
     planner: string;
     extractor: string;
@@ -25,6 +26,7 @@ interface MonitorState {
   agentName: string;
   relayUrl: string;
   sessionId: string;
+  routingMode: 'planner' | 'baseline';
   phase: string;
   relayConnected: boolean;
   waitingForHost: boolean;
@@ -83,6 +85,7 @@ export class AgentMonitorServer {
       agentName: options.agentName,
       relayUrl: options.relayUrl,
       sessionId: options.sessionId,
+      routingMode: options.routingMode,
       phase: 'booting',
       relayConnected: false,
       waitingForHost: false,

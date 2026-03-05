@@ -10,7 +10,7 @@
 ## Setup Checks
 - Setup page shows exactly one scenario:
   - `T1: College Weekend Group Booking`
-- Start session with any non-GUI-only mode or GUI-only mode.
+- Start session with any study mode, including `Baseline`.
 
 ## Data Checks (UI/API)
 - Movie list includes:

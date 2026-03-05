@@ -36,6 +36,18 @@ function readTrimmedString(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 function toHistoryType(value: unknown): HistoryMessageType | null {
   const type = readTrimmedString(value);
   if (type === 'system' || type === 'user' || type === 'agent') return type;
@@ -254,7 +266,9 @@ function buildWorkflowContext(
   let proceedRule = 'Only advance stage when required selections are complete.';
 
   if (stage === 'seat') {
-    proceedRule = `Call next only if selectedListCount > 0 (current: ${selectedListCount}).`;
+    proceedRule =
+      `Use select for a single-seat toggle, or selectMultiple to replace the full selected seat set. ` +
+      `Call next only if selectedListCount > 0 (current: ${selectedListCount}).`;
   } else if (stage === 'confirm') {
     const bookingConfirmed = containsBookingConfirmed(context.messageHistoryTail);
     proceedRule = bookingConfirmed
@@ -386,6 +400,24 @@ function validateLlmAction(
     if (!itemId) return null;
     const selectable = new Set(getEnabledVisibleItems(spec).map((item) => item.id));
     if (!selectable.has(itemId)) return null;
+    return {
+      action: toolCall(toolName, { itemId }, decision.action.reason),
+      explainText,
+      source: 'llm',
+    };
+  }
+
+  if (toolName === 'selectMultiple') {
+    if (spec.stage !== 'seat') return null;
+    const itemIds = normalizeStringArray(params.itemIds);
+    if (itemIds.length === 0) return null;
+    const selectable = new Set(getEnabledVisibleItems(spec).map((item) => item.id));
+    if (itemIds.some((itemId) => !selectable.has(itemId))) return null;
+    return {
+      action: toolCall(toolName, { itemIds }, decision.action.reason),
+      explainText,
+      source: 'llm',
+    };
   }
 
   return {

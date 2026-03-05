@@ -12,7 +12,12 @@ import {
   getScenarioCatalog,
   getScenarioTemplatePath,
 } from './scenarioCatalog';
-import { getStudyModeConfig, isStudyModeId, DEFAULT_STUDY_MODE } from './modes';
+import {
+  getStudyModeConfig,
+  isStudyModeId,
+  normalizeStudyMode,
+  DEFAULT_STUDY_MODE,
+} from './modes';
 import { startAgentForSession, stopAgentForSession } from './agentSupervisor';
 import type {
   ScenarioDefinition,
@@ -97,6 +102,10 @@ function ensureScenarioTemplateDb(scenario: ScenarioDefinition): string {
   return templateDbPath;
 }
 
+function shouldEnforceSingleActiveAgentSession(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
 function sessionsFileCandidates(): string[] {
   return [
     path.resolve(process.cwd(), 'apps/backend/.runtime/study-sessions.json'),
@@ -178,7 +187,7 @@ function createToken(record: StudySessionRecord): string {
 
 function parseStudyMode(input: string | undefined): StudyModeId {
   if (input && isStudyModeId(input)) return input;
-  return DEFAULT_STUDY_MODE;
+  return normalizeStudyMode(input);
 }
 
 function loadPersistedSessions(): void {
@@ -191,10 +200,82 @@ function loadPersistedSessions(): void {
     for (const record of records) {
       if (!record || typeof record !== 'object') continue;
       if (record.status !== 'active') continue;
-      sessions.set(record.sessionId, record);
+      const normalizedStudyMode = normalizeStudyMode(
+        typeof record.studyMode === 'string' ? record.studyMode : undefined
+      );
+      sessions.set(record.sessionId, {
+        ...record,
+        studyMode: normalizedStudyMode,
+      });
     }
   } catch {
     // Ignore malformed runtime files; service will rebuild state.
+  }
+}
+
+function deactivateSession(
+  record: StudySessionRecord,
+  status: 'finished' | 'expired'
+): void {
+  sessions.set(record.sessionId, {
+    ...record,
+    status,
+    finishedAt: now().toISOString(),
+  });
+  stopAgentForSession(record.sessionId);
+  destroySessionDb(record.sessionId);
+}
+
+function deactivateOtherActiveAgentSessions(keepSessionId?: string): boolean {
+  if (!shouldEnforceSingleActiveAgentSession()) return false;
+
+  let changed = false;
+  for (const record of sessions.values()) {
+    if (record.status !== 'active') continue;
+    if (keepSessionId && record.sessionId === keepSessionId) continue;
+    const studyModeConfig = getStudyModeConfig(record.studyMode);
+    if (!studyModeConfig.agentEnabled) continue;
+    deactivateSession(record, 'expired');
+    changed = true;
+  }
+  return changed;
+}
+
+function keepLatestActiveAgentSession(): boolean {
+  if (!shouldEnforceSingleActiveAgentSession()) return false;
+
+  const activeAgentSessions = Array.from(sessions.values())
+    .filter((record) => {
+      if (record.status !== 'active') return false;
+      return getStudyModeConfig(record.studyMode).agentEnabled;
+    })
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+
+  if (activeAgentSessions.length <= 1) return false;
+  const [, ...stale] = activeAgentSessions;
+  let changed = false;
+  for (const record of stale) {
+    deactivateSession(record, 'expired');
+    changed = true;
+  }
+  return changed;
+}
+
+function restartAgentsForActiveSessions(): void {
+  for (const record of sessions.values()) {
+    if (record.status !== 'active') continue;
+    const scenario = getScenarioById(record.scenarioId);
+    if (!scenario) continue;
+    const studyModeConfig = getStudyModeConfig(record.studyMode);
+    if (!studyModeConfig.agentEnabled) continue;
+    startAgentForSession({
+      sessionId: record.sessionId,
+      relaySessionId: record.relaySessionId,
+      scenarioId: scenario.id,
+      participantId: record.participantId,
+      studyMode: record.studyMode,
+      modeConfig: studyModeConfig,
+    });
   }
 }
 
@@ -240,25 +321,45 @@ function buildSessionContext(record: StudySessionRecord): StudySessionContext | 
 }
 
 loadPersistedSessions();
+let normalizedActiveSessions = false;
+if (keepLatestActiveAgentSession()) {
+  normalizedActiveSessions = true;
+}
 if (markExpiredSessions()) {
+  normalizedActiveSessions = true;
+}
+if (normalizedActiveSessions) {
   persistSessions();
 }
+restartAgentsForActiveSessions();
 
 export function listScenarios(): ScenarioDefinition[] {
   return getScenarioCatalog();
 }
 
 export function createStudySession(input: CreateSessionInput): CreateSessionResult {
-  if (markExpiredSessions()) {
-    persistSessions();
-  }
-
   const scenario = getScenarioById(input.scenarioId);
   if (!scenario) {
     throw new Error(`Unknown scenario: ${input.scenarioId}`);
   }
-  const studyMode = parseStudyMode(input.studyMode);
-  const studyModeConfig = getStudyModeConfig(studyMode);
+
+  let changed = false;
+  if (markExpiredSessions()) {
+    changed = true;
+  }
+
+  const requestedStudyMode = parseStudyMode(input.studyMode);
+  const requestedStudyModeConfig = getStudyModeConfig(requestedStudyMode);
+  if (requestedStudyModeConfig.agentEnabled && deactivateOtherActiveAgentSessions()) {
+    changed = true;
+  }
+
+  if (changed) {
+    persistSessions();
+  }
+
+  const studyMode = requestedStudyMode;
+  const studyModeConfig = requestedStudyModeConfig;
 
   const templateDbPath = ensureScenarioTemplateDb(scenario);
   const sessionId = `st_${randomUUID().replace(/-/g, '')}`;
@@ -290,6 +391,7 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
       relaySessionId,
       scenarioId: scenario.id,
       participantId,
+      studyMode,
       modeConfig: studyModeConfig,
     });
   }

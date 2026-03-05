@@ -147,13 +147,14 @@ const BASE_SYSTEM_PROMPT =
   '- If intent is reasonably clear, prefer one concrete action over repetitive clarifications.\n' +
   '- If user intent or preference is uncertain, use a concise conversational clarification (respond/action.type="none") before applying potentially assumption-heavy GUI changes.\n' +
   '- Use non-committal GUI modification tools when they clearly narrow options without assuming unstated preferences.\n' +
-  '- Use navigation/commitment actions (select/next/prev/startOver) only when user intent is clear and sufficiently confirmed.\n' +
+  '- Use navigation/commitment actions (select/selectMultiple/next/prev/startOver) only when user intent is clear and sufficiently confirmed.\n' +
   '- Do not treat assistant-generated recommendations, options, or questions as user confirmation.\n' +
   '- Require user-originated explicit or unambiguous confirmation before commitment actions.\n' +
   '- Do not infer unstated optimization objectives (for example highest-rated, lowest price, earliest time, shortest duration, nearest location).\n' +
   '- Apply optimization-oriented actions only when the objective is explicit in the latest user request or current workflow guidance.\n' +
   '- If optimization objective is unspecified, prefer neutral narrowing or concise clarification instead of arbitrary ranking.\n' +
   '- If multiple viable options remain without explicit user commitment to one item, ask concise confirmation.\n' +
+  '- On seat stage, use select for a single-seat toggle and selectMultiple only when the user clearly specifies multiple seats to select as the full seat set.\n' +
   '- Choose exactly one action for this turn.';
 
 const CP_MEMORY_PROMPT_RULES =
@@ -168,7 +169,8 @@ const JSON_ACTION_FORMAT_RULES =
   '- If action.type="tool.call", toolName must be one of available tools.\n' +
   '- Keep assistantMessage consistent with action: if action.type="tool.call", describe the action being taken and do not ask for permission.\n' +
   '- If assistantMessage asks for confirmation or permission, action.type must be "none".\n' +
-  '- select requires params.itemId from visible item ids.';
+  '- select requires params.itemId from visible item ids.\n' +
+  '- selectMultiple requires params.itemIds as a non-empty array of visible enabled seat ids and is valid only on seat stage. It replaces the full selected seat set.';
 
 const NATIVE_TOOL_CALLING_RULES =
   'Native tool-calling rules:\n' +
@@ -177,6 +179,7 @@ const NATIVE_TOOL_CALLING_RULES =
   '- Put a concise user-facing message in "assistantMessage" argument.\n' +
   '- Put a concise rationale in "reason" argument.\n' +
   '- For tool calls, assistantMessage must describe the action and must not ask for permission.\n' +
+  '- On seat stage, prefer selectMultiple over repeated select calls when the user clearly specifies multiple seats.\n' +
   '- Do not output plain text without a function call.\n' +
   '- Never include internal item ids (for example m1, t2) in assistantMessage; refer to human-readable item values only.';
 

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn, type ChildProcess } from 'child_process';
-import type { StudyModeConfig } from './types';
+import type { StudyModeConfig, StudyModeId } from './types';
 
 interface AgentProcessHandle {
   child: ChildProcess;
@@ -66,10 +66,11 @@ export function startAgentForSession(
     relaySessionId: string;
     scenarioId: string;
     participantId: string;
+    studyMode: StudyModeId;
     modeConfig: StudyModeConfig;
   }
 ): void {
-  const { sessionId, relaySessionId, scenarioId, participantId, modeConfig } = params;
+  const { sessionId, relaySessionId, scenarioId, participantId, studyMode, modeConfig } = params;
   if (!modeConfig.agentEnabled) return;
 
   stopAgentForSession(sessionId);
@@ -87,6 +88,7 @@ export function startAgentForSession(
       AGENT_SESSION_ID: relaySessionId,
       AGENT_STUDY_ID: scenarioId,
       AGENT_PARTICIPANT_ID: participantId,
+      AGENT_STUDY_MODE: studyMode,
       AGENT_ENABLE_GUI_ADAPTATION: modeConfig.guiAdaptationEnabled ? 'true' : 'false',
       AGENT_DEFAULT_CP_MEMORY_LIMIT: String(modeConfig.cpMemoryWindow),
       AGENT_MONITOR_PORT: resolveSupervisorAgentMonitorPort(),

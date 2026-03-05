@@ -71,6 +71,7 @@ const MIN_SCENARIO_PANEL_WIDTH_PX = 280;
 const MAX_SCENARIO_PANEL_WIDTH_PX = 620;
 const MIN_MAIN_CONTENT_WIDTH_PX = 700;
 const guiAdaptationTools = ['filter', 'sort', 'highlight', 'augment', 'clearModification'] as const;
+const baselineAutoAdvanceStages = new Set<Stage>(['movie', 'theater', 'date', 'time']);
 const AGENT_BRIDGE_ENABLED_STORAGE_KEY = 'tuning-movie-agent-bridge-enabled';
 const PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY = 'tuning-movie-planner-cp-memory-limit';
 const AGENT_MODEL_STORAGE_KEY = 'tuning-movie-agent-model';
@@ -134,17 +135,24 @@ function canUseNextTool(spec: UISpec): boolean {
 function buildToolSchemaForStage(
   spec: UISpec | null,
   fallbackStage: Stage,
-  guiAdaptationEnabled: boolean
+  guiAdaptationEnabled: boolean,
+  studyModePreset?: StudyModeId
 ): ToolDefinition[] {
+  const isBaselineMode = studyModePreset === 'baseline';
   if (!spec) {
-    return agentTools.filter((tool) => tool.name === 'postMessage');
+    return agentTools.filter((tool) => (isBaselineMode ? tool.name === 'repeatStep' : tool.name === 'postMessage'));
   }
 
   const stage = spec.stage ?? fallbackStage;
-  const allowed = new Set<string>([
-    ...(stageInteractionTools[stage] ?? ['postMessage']),
-    'postMessage',
-  ]);
+  const allowed = new Set<string>(stageInteractionTools[stage] ?? ['postMessage']);
+  if (stage === 'seat') {
+    allowed.add('selectMultiple');
+  }
+  if (isBaselineMode) {
+    allowed.add('repeatStep');
+  } else {
+    allowed.add('postMessage');
+  }
 
   if (guiAdaptationEnabled) {
     for (const toolName of guiAdaptationTools) {
@@ -154,10 +162,13 @@ function buildToolSchemaForStage(
 
   if (!spec.visibleItems.some((item) => !item.isDisabled)) {
     allowed.delete('select');
+    allowed.delete('selectMultiple');
   }
 
   if (canUseNextTool(spec)) {
-    allowed.add('next');
+    if (!(isBaselineMode && baselineAutoAdvanceStages.has(stage))) {
+      allowed.add('next');
+    }
   } else {
     allowed.delete('next');
   }
@@ -280,6 +291,7 @@ export function ChatPage({
     [studyModePreset]
   );
   const sessionLocked = Boolean(studySession);
+  const isBaselineMode = studyModePreset === 'baseline';
 
   const getMaxChatWidth = useCallback(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_WIDTH_PX;
@@ -686,16 +698,18 @@ export function ChatPage({
     }
   }, [activeSpec, addUserMessage]);
 
-  const handleNext = useCallback(async (context?: ToolApplyContext) => {
-    if (!activeSpec) return;
+  const handleNext = useCallback(async (context?: ToolApplyContext, specOverride?: UISpec | null) => {
+    const spec = specOverride ?? activeSpec;
+    if (!spec) return;
 
+    const stage = spec.stage ?? currentStage;
     let selectionLabel = '';
-    const currentBooking = getBookingContext(activeSpec);
+    const currentBooking = getBookingContext(spec);
     let nextBooking: BookingContext = currentBooking;
 
-    switch (currentStage) {
+    switch (stage) {
       case 'movie': {
-        const selectedId = activeSpec.state.selected?.id;
+        const selectedId = spec.state.selected?.id;
         if (!selectedId) return;
 
         const selectedMovie = movies.find((movie) => movie.id === selectedId);
@@ -710,7 +724,7 @@ export function ChatPage({
       }
 
       case 'theater': {
-        const selectedId = activeSpec.state.selected?.id;
+        const selectedId = spec.state.selected?.id;
         if (!selectedId) return;
 
         const selectedTheater = theaters.find((theater) => theater.id === selectedId);
@@ -728,7 +742,7 @@ export function ChatPage({
       }
 
       case 'date': {
-        const selectedDate = activeSpec.state.selected?.id;
+        const selectedDate = spec.state.selected?.id;
         if (!selectedDate) return;
 
         selectionLabel = selectedDate;
@@ -742,7 +756,7 @@ export function ChatPage({
       }
 
       case 'time': {
-        const selectedId = activeSpec.state.selected?.id;
+        const selectedId = spec.state.selected?.id;
         if (!selectedId) return;
 
         const selectedShowing = showings.find((showing) => showing.id === selectedId);
@@ -761,7 +775,7 @@ export function ChatPage({
       }
 
       case 'seat': {
-        const selectedSeats = activeSpec.state.selectedList ?? [];
+        const selectedSeats = spec.state.selectedList ?? [];
         if (selectedSeats.length === 0) return;
 
         selectionLabel = `${selectedSeats.length} seat(s) selected`;
@@ -779,10 +793,10 @@ export function ChatPage({
     }
 
     if (!context) {
-      addUserMessage(currentStage, 'select', selectionLabel);
+      addUserMessage(stage, 'select', selectionLabel);
     }
 
-    const nextStage = getNextStage(currentStage);
+    const nextStage = getNextStage(stage);
     if (nextStage) {
       const source: 'agent' | 'devtools' =
         context?.source === 'devtools' ? 'devtools' : 'agent';
@@ -791,7 +805,7 @@ export function ChatPage({
           ? context.reason.trim()
           : 'Move to the next stage because the current step is ready.';
       if (context) {
-        annotateLastAgentMessage(currentStage, {
+        annotateLastAgentMessage(stage, {
           toolName: 'next',
           source,
           reason: transitionReason,
@@ -910,12 +924,19 @@ export function ChatPage({
     loadStageData('movie', { booking: {} });
   }, [activeSpec, currentStage, addUserMessage, annotateLastAgentMessage, loadStageData]);
 
+  const handleRepeatStep = useCallback((_context?: ToolApplyContext) => {
+    if (!activeSpec) return;
+    addSystemMessage(activeSpec.stage, activeSpec);
+    setUiSpec(activeSpec);
+  }, [activeSpec, addSystemMessage, setUiSpec]);
+
   useToolHandler({
     spec: activeSpec,
     setSpec: handleSetSpec,
     onNext: handleNext,
     onBack: handleBack,
     onStartOver: handleStartOver,
+    onRepeatStep: handleRepeatStep,
     onPostMessage: (text: string) => {
       const stage = activeSpec?.stage ?? currentStage;
       addAgentMessage(stage, text);
@@ -939,8 +960,8 @@ export function ChatPage({
   }, [resetChat, movies, addSystemMessage, setUiSpec, loadStageData]);
 
   const agentToolSchema = useMemo(
-    () => buildToolSchemaForStage(activeSpec, currentStage, guiAdaptationEnabled),
-    [activeSpec, currentStage, guiAdaptationEnabled]
+    () => buildToolSchemaForStage(activeSpec, currentStage, guiAdaptationEnabled, studyModePreset),
+    [activeSpec, currentStage, guiAdaptationEnabled, studyModePreset]
   );
 
   const handleAgentToolCall = useCallback((
@@ -949,8 +970,17 @@ export function ChatPage({
     context?: ToolApplyContext
   ) => {
     setAwaitingAgentResponse(false);
-    return onToolApply(toolName, params, context);
-  }, [onToolApply]);
+    const result = onToolApply(toolName, params, context);
+    if (
+      isBaselineMode &&
+      toolName === 'select' &&
+      result &&
+      baselineAutoAdvanceStages.has(result.stage)
+    ) {
+      void handleNext(context, result);
+    }
+    return result;
+  }, [onToolApply, isBaselineMode, handleNext]);
 
   const handleAgentMessage = useCallback((text: string) => {
     setAwaitingAgentResponse(false);
@@ -1100,7 +1130,11 @@ export function ChatPage({
     : !isAgentBridgeJoined
     ? 'Joining agent session...'
     : !hasConnectedAgent
-    ? 'No external agent connected'
+    ? isBaselineMode
+      ? 'No baseline router connected'
+      : 'No external agent connected'
+    : isBaselineMode
+    ? 'Baseline router connected'
     : 'External agent connected';
   const inputStatusTone: 'default' | 'warning' | 'success' = !agentBridgeEnabled ||
     !isAgentBridgeConnected ||
@@ -1269,7 +1303,7 @@ export function ChatPage({
                     title="0 disables CP memory injection. N injects the latest N memory items per list."
                   />
                 </label>
-                {agentBridgeEnabled && (
+                {agentBridgeEnabled && !isBaselineMode && (
                   <div className="relative flex">
                     <button
                       type="button"
@@ -1302,6 +1336,11 @@ export function ChatPage({
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+                {agentBridgeEnabled && isBaselineMode && (
+                  <div className="rounded border border-info-border px-3 py-1 text-xs text-info-label">
+                    Baseline uses OpenAI
                   </div>
                 )}
                 <button

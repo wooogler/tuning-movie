@@ -16,6 +16,8 @@ interface ExtractionInput {
   currentStage: string;
   contextHistory: unknown[];
   visibleItems: VisibleItemSummary[];
+  itemFacts: Record<string, unknown>[];
+  uiFlow: Record<string, unknown>;
   selectedItem: { id: string; value: string } | null;
   existingPreferences: string[];
   existingConstraints: string[];
@@ -73,7 +75,7 @@ const EXTRACTION_SYSTEM_PROMPT =
   '- System\'s Constraints: objective availability or limitation facts from the system state.\n' +
   '- Conflicts: contradictions between preferences and constraints.\n' +
   '\n' +
-  'Inputs include existingPreferences, existingConstraints, existingConflicts, userMessage, updateFocus, trigger, contextHistory, visibleItems, selectedItem, and currentStage.\n' +
+  'Inputs include existingPreferences, existingConstraints, existingConflicts, userMessage, updateFocus, trigger, contextHistory, currentStage, visibleItems, itemFacts, uiFlow, and selectedItem.\n' +
   '\n' +
   'Update policy:\n' +
   '- Return the full updated list for all categories on every turn.\n' +
@@ -92,6 +94,7 @@ const EXTRACTION_SYSTEM_PROMPT =
   'Constraint rules:\n' +
   '- Constraints must be objective system facts, not user desires.\n' +
   '- Prefer specific, durable facts over temporary UI states.\n' +
+  '- For stage-dependent constraints, include binding context from uiFlow (for example selected movie/theater/date/time) when relevant.\n' +
   '- Keep each item as a short standalone sentence.\n' +
   '\n' +
   'Conflict rules:\n' +
@@ -99,7 +102,7 @@ const EXTRACTION_SYSTEM_PROMPT =
   '- Keep each conflict explicit and actionable.\n' +
   '- Detect mismatches across any preference dimension (for example time/date, budget, brand, location, content attributes, seating).\n' +
   '- If current options cannot satisfy a stated preference, add a conflict even when other non-matching options exist.\n' +
-  '- Use currentStage and visibleItems to decide what is currently satisfiable right now.\n' +
+  '- Use currentStage, visibleItems, itemFacts, and uiFlow to decide what is currently satisfiable right now.\n' +
   '- Keep unresolved conflicts until either preferences change or constraints/options change.\n' +
   '- Write conflicts with both sides: desired preference + blocking constraint fact.\n' +
   '\n' +
@@ -698,6 +701,8 @@ export interface ExtractionContext {
   currentStage: string;
   contextHistory: unknown[];
   visibleItems: VisibleItemSummary[];
+  itemFacts: Record<string, unknown>[];
+  uiFlow: Record<string, unknown>;
   selectedItem: { id: string; value: string } | null;
   existingPreferences: string[];
   existingConstraints: string[];
@@ -732,6 +737,8 @@ export async function extractPreferencesAndConstraints(
     currentStage: ctx.currentStage,
     contextHistory: focusedHistory,
     visibleItems: ctx.visibleItems,
+    itemFacts: ctx.itemFacts,
+    uiFlow: ctx.uiFlow,
     selectedItem: ctx.selectedItem,
     existingPreferences: ctx.existingPreferences,
     existingConstraints: ctx.existingConstraints,

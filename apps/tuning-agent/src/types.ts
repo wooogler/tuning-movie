@@ -60,7 +60,7 @@ export interface PlannedAction {
 export interface PlanDecision {
   action: PlannedAction | null;
   explainText?: string;
-  source: 'llm' | 'rule';
+  source: 'llm' | 'rule' | 'baseline';
   fallbackReason?: string;
 }
 

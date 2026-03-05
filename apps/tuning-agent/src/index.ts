@@ -1,7 +1,12 @@
 import { executePlannedAction } from './core/executor';
 import { AgentMemory } from './core/memory';
 import { applyStateUpdated, applyUserMessage, fromSnapshot } from './core/perception';
+import { planBaselineAction } from './core/baselinePlanner';
 import { planNextAction } from './core/planner';
+import {
+  getBaselineRouterSystemPrompt,
+  subscribeLlmTrace as subscribeBaselineRouterLlmTrace,
+} from './llm/baselineRouter';
 import {
   getPlannerSystemPrompt,
   subscribeLlmTrace as subscribePlannerLlmTrace,
@@ -31,9 +36,11 @@ const sessionId = process.env.AGENT_SESSION_ID || 'default';
 const agentName = process.env.AGENT_NAME || 'tuning-agent';
 const studyId = process.env.AGENT_STUDY_ID || 'pilot-01';
 const participantId = process.env.AGENT_PARTICIPANT_ID || 'P01';
+const studyMode = process.env.AGENT_STUDY_MODE || 'basic-tuning';
 const monitorPort = Number(process.env.AGENT_MONITOR_PORT || 3500);
 const monitorWebPort = Number(process.env.AGENT_MONITOR_WEB_PORT || 3501);
 const isProduction = process.env.NODE_ENV === 'production';
+const isBaselineMode = studyMode === 'baseline';
 
 function parseBooleanEnv(value: string | undefined): boolean | null {
   if (typeof value !== 'string') return null;
@@ -53,9 +60,10 @@ const monitor = new AgentMonitorServer({
   relayUrl,
   sessionId,
   agentName,
+  routingMode: isBaselineMode ? 'baseline' : 'planner',
   llmSystemPrompts: {
-    planner: getPlannerSystemPrompt(),
-    extractor: getExtractorSystemPrompt(),
+    planner: isBaselineMode ? getBaselineRouterSystemPrompt() : getPlannerSystemPrompt(),
+    extractor: isBaselineMode ? 'Disabled in baseline mode.' : getExtractorSystemPrompt(),
   },
 });
 const llmTraceHandler = (event: { component?: string; type: string; payload: unknown }) => {
@@ -63,8 +71,12 @@ const llmTraceHandler = (event: { component?: string; type: string; payload: unk
     typeof event.component === 'string' && event.component.trim() ? event.component.trim() : 'unknown';
   monitor.pushEvent(`llm.${component}.${event.type}`, event.payload);
 };
-const unsubscribePlannerLlmTrace = subscribePlannerLlmTrace(llmTraceHandler);
-const unsubscribeExtractorLlmTrace = subscribeExtractorLlmTrace(llmTraceHandler);
+const unsubscribePlannerLlmTrace = isBaselineMode
+  ? subscribeBaselineRouterLlmTrace(llmTraceHandler)
+  : subscribePlannerLlmTrace(llmTraceHandler);
+const unsubscribeExtractorLlmTrace = isBaselineMode
+  ? () => {}
+  : subscribeExtractorLlmTrace(llmTraceHandler);
 
 function unsubscribeAllLlmTraces(): void {
   unsubscribePlannerLlmTrace();
@@ -102,6 +114,7 @@ const DEFAULT_CP_MEMORY_LIMIT = Math.max(
   0,
   Number.parseInt(process.env.AGENT_DEFAULT_CP_MEMORY_LIMIT || '10', 10) || 10
 );
+const EXTRACTION_STAGE_ORDER = ['movie', 'theater', 'date', 'time', 'seat', 'confirm'] as const;
 
 function getMonitorApiPort(): number {
   if (!monitor.isEnabled()) return monitorPort;
@@ -121,6 +134,124 @@ function asRecord(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function readNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function compactExtractionItemFacts(uiSpec: unknown, maxItems = 16): Record<string, unknown>[] {
+  const uiSpecRecord = asRecord(uiSpec);
+  const rawItems = Array.isArray(uiSpecRecord.items) ? uiSpecRecord.items : [];
+  const compacted: Record<string, unknown>[] = [];
+
+  for (const rawItem of rawItems) {
+    const item = asRecord(rawItem);
+    const summary: Record<string, unknown> = {};
+
+    const id = readNonEmptyString(item.id);
+    if (id) summary.id = id;
+
+    for (const key of ['value', 'name', 'title', 'displayLabel', 'date', 'time', 'location'] as const) {
+      const text = readNonEmptyString(item[key]);
+      if (text) summary[key] = text;
+    }
+
+    if (typeof item.distanceMiles === 'number' && Number.isFinite(item.distanceMiles)) {
+      summary.distanceMiles = item.distanceMiles;
+    }
+    if (typeof item.rating === 'string' || typeof item.rating === 'number') {
+      summary.rating = item.rating;
+    }
+    if (typeof item.duration === 'number' && Number.isFinite(item.duration)) {
+      summary.duration = item.duration;
+    }
+    if (typeof item.price === 'number' && Number.isFinite(item.price)) {
+      summary.price = item.price;
+    }
+
+    if (Array.isArray(item.genre)) {
+      const genres = item.genre
+        .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+        .slice(0, 4);
+      if (genres.length > 0) summary.genre = genres;
+    }
+    if (Array.isArray(item.amenities)) {
+      const amenities = item.amenities
+        .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+        .slice(0, 6);
+      if (amenities.length > 0) summary.amenities = amenities;
+    }
+
+    if (Object.keys(summary).length === 0) continue;
+    compacted.push(summary);
+    if (compacted.length >= maxItems) break;
+  }
+
+  return compacted;
+}
+
+function buildExtractionUiFlow(context: PerceivedContext): Record<string, unknown> {
+  const currentStage = context.stage ?? '';
+  const stageIndex = EXTRACTION_STAGE_ORDER.indexOf(currentStage as (typeof EXTRACTION_STAGE_ORDER)[number]);
+  const previousStage = stageIndex > 0 ? EXTRACTION_STAGE_ORDER[stageIndex - 1] : null;
+  const nextStage =
+    stageIndex >= 0 && stageIndex < EXTRACTION_STAGE_ORDER.length - 1
+      ? EXTRACTION_STAGE_ORDER[stageIndex + 1]
+      : null;
+
+  const uiSpecRecord = asRecord(context.uiSpec);
+  const state = asRecord(uiSpecRecord.state);
+  const booking = asRecord(state.booking);
+  const bookingSummary: Record<string, unknown> = {};
+
+  const movie = asRecord(booking.movie);
+  const movieId = readNonEmptyString(movie.id);
+  const movieTitle = readNonEmptyString(movie.title);
+  if (movieId || movieTitle) {
+    bookingSummary.movie = {
+      ...(movieId ? { id: movieId } : {}),
+      ...(movieTitle ? { title: movieTitle } : {}),
+    };
+  }
+
+  const theater = asRecord(booking.theater);
+  const theaterId = readNonEmptyString(theater.id);
+  const theaterName = readNonEmptyString(theater.name);
+  if (theaterId || theaterName) {
+    bookingSummary.theater = {
+      ...(theaterId ? { id: theaterId } : {}),
+      ...(theaterName ? { name: theaterName } : {}),
+    };
+  }
+
+  const date = readNonEmptyString(booking.date);
+  if (date) bookingSummary.date = date;
+
+  const showing = asRecord(booking.showing);
+  const showingId = readNonEmptyString(showing.id);
+  const showingTime = readNonEmptyString(showing.time);
+  if (showingId || showingTime) {
+    bookingSummary.showing = {
+      ...(showingId ? { id: showingId } : {}),
+      ...(showingTime ? { time: showingTime } : {}),
+    };
+  }
+
+  const selectedSeats = Array.isArray(booking.selectedSeats) ? booking.selectedSeats : [];
+  if (selectedSeats.length > 0) {
+    bookingSummary.selectedSeatsCount = selectedSeats.length;
+  }
+
+  return {
+    stageOrder: EXTRACTION_STAGE_ORDER,
+    currentStage,
+    previousStage,
+    nextStage,
+    ...(Object.keys(bookingSummary).length > 0 ? { booking: bookingSummary } : {}),
+  };
 }
 
 function resolvePlannerCpMemoryLimit(payload: Record<string, unknown>, fallback: number): number {
@@ -200,7 +331,10 @@ function buildUiFingerprint(uiSpec: unknown): string {
 
 function buildExtractionViewContext(
   context: PerceivedContext
-): Pick<ExtractionContext, 'currentStage' | 'contextHistory' | 'visibleItems' | 'selectedItem'> {
+): Pick<
+  ExtractionContext,
+  'currentStage' | 'contextHistory' | 'visibleItems' | 'itemFacts' | 'uiFlow' | 'selectedItem'
+> {
   const spec = toUISpecLike(context.uiSpec);
   const visibleItems: Array<{ id: string; value: string; disabled?: boolean }> = [];
   if (Array.isArray(spec?.visibleItems)) {
@@ -222,11 +356,15 @@ function buildExtractionViewContext(
   const selectedValue = spec?.state?.selected?.value;
   const selectedItem =
     selectedId && typeof selectedValue === 'string' ? { id: selectedId, value: selectedValue } : null;
+  const itemFacts = compactExtractionItemFacts(context.uiSpec);
+  const uiFlow = buildExtractionUiFlow(context);
 
   return {
     currentStage: context.stage ?? '',
     contextHistory: context.messageHistoryTail,
     visibleItems,
+    itemFacts,
+    uiFlow,
     selectedItem,
   };
 }
@@ -422,6 +560,7 @@ function buildAgentMessageAction(text: string): import('./types').PlannedAction 
 }
 
 async function maybeSendAssistantMessage(context: PerceivedContext, text: string): Promise<void> {
+  if (isBaselineMode) return;
   const trimmed = text.trim();
   if (!trimmed) return;
   const action = buildAgentMessageAction(trimmed);
@@ -554,6 +693,15 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
 
   const context = memory.getContext();
   if (!context) return;
+  const isBaselineUserTrigger =
+    trigger === 'state.updated:user-message' || trigger === 'deferred:state.updated:user-message';
+  if (isBaselineMode && !isBaselineUserTrigger) {
+    monitor.pushEvent('planner.ignored_trigger_baseline', {
+      trigger,
+      stage: context.stage,
+    });
+    return;
+  }
   if (!userConversationStarted && trigger !== 'state.updated:user-message') {
     monitor.pushEvent('planner.blocked_until_user_message', {
       trigger,
@@ -568,7 +716,9 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
 
   try {
     const planningContext = memory.getContext() ?? context;
-    const decision: PlanDecision = await planNextAction(planningContext, memory);
+    const decision: PlanDecision = isBaselineMode
+      ? await planBaselineAction(planningContext)
+      : await planNextAction(planningContext, memory);
     const action = decision.action;
     const decisionExplainText = decision.explainText ?? '';
 
@@ -598,7 +748,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       payload: action.payload,
     });
     const now = Date.now();
-    if (actionFingerprint === lastActionFingerprint && now - lastActionAt < 700) {
+    if (!isBaselineMode && actionFingerprint === lastActionFingerprint && now - lastActionAt < 700) {
       return;
     }
 
@@ -621,7 +771,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     lastActionFingerprint = actionFingerprint;
     lastActionAt = now;
 
-    if (action.type !== 'agent.message') {
+    if (!isBaselineMode && action.type !== 'agent.message') {
       await maybeSendAssistantMessage(
         planningContext,
         decisionExplainText || `I will run ${getToolName(action)} next. Reason: ${action.reason}`
@@ -649,6 +799,10 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         'The host connection is not ready yet. I will retry once the host is available.'
       );
       await ensureSessionReady('runtime-action');
+      if (isBaselineMode) {
+        await maybePlanAndExecute('state.updated:user-message');
+        return;
+      }
       requestDeferredReplan('runtime-action');
       return;
     }
@@ -796,7 +950,13 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       syncUserConversationStarted(next);
       markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
-      await maybePlanAndExecute('snapshot.state');
+      if (!isBaselineMode) {
+        await maybePlanAndExecute('snapshot.state');
+      } else {
+        monitor.pushEvent('planner.ignored_snapshot_baseline', {
+          stage: next.stage,
+        });
+      }
       return;
     }
     case 'state.updated': {
@@ -813,7 +973,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
 
-      if (isFirstSnapshotSeen && uiFingerprintChanged) {
+      if (!isBaselineMode && isFirstSnapshotSeen && uiFingerprintChanged) {
         await runConstraintExtractionFromUiChange(
           next,
           'state.updated:ui-changed',
@@ -824,13 +984,21 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
 
       if (userTurnAwaitingStateUpdate) {
         userTurnAwaitingStateUpdate = false;
-        if (userPreferenceExtractionInFlight) {
+        if (!isBaselineMode && userPreferenceExtractionInFlight) {
           monitor.pushEvent('planner.waiting_preference_extraction', {
             trigger: 'state.updated:user-message',
           });
           await userPreferenceExtractionInFlight;
         }
         await maybePlanAndExecute('state.updated:user-message');
+        return;
+      }
+
+      if (isBaselineMode) {
+        monitor.pushEvent('planner.ignored_state_updated_baseline', {
+          stage: next.stage,
+          reason: 'non-user state update',
+        });
         return;
       }
 
@@ -861,6 +1029,9 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       monitor.pushEvent('planner.waiting_state_updated_after_user_message', {
         stage: userMessage.stage ?? null,
       });
+      if (isBaselineMode) {
+        return;
+      }
       const extractionPromise = runPreferenceExtractionFromUserMessage(next, userMessage.text);
       userPreferenceExtractionInFlight = extractionPromise.finally(() => {
         if (userPreferenceExtractionInFlight === extractionPromise) {
@@ -904,6 +1075,8 @@ async function main(): Promise<void> {
   monitor.pushEvent('runtime.start', {
     relayUrl,
     sessionId,
+    studyMode,
+    routingMode: isBaselineMode ? 'baseline' : 'planner',
     monitorEnabled: monitor.isEnabled(),
     monitorPort: activeMonitorPort,
   });

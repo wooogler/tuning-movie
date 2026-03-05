@@ -1,4 +1,9 @@
-import type { StudyModeConfig, StudyModeId } from '../pages/studyOptions';
+import {
+  getStudyModeConfig,
+  normalizeStudyMode,
+  type StudyModeConfig,
+  type StudyModeId,
+} from '../pages/studyOptions';
 
 export interface StudyScenarioSummary {
   id: string;
@@ -49,7 +54,12 @@ export function getStoredStudySession(): StudySessionState | null {
     ) {
       return null;
     }
-    return parsed as StudySessionState;
+    const studyMode = normalizeStudyMode(parsed.studyMode);
+    return {
+      ...(parsed as StudySessionState),
+      studyMode,
+      studyModeConfig: getStudyModeConfig(studyMode),
+    };
   } catch {
     return null;
   }

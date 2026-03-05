@@ -6,11 +6,11 @@ export interface StudyModeConfig {
 
 export const STUDY_MODE_OPTIONS = [
   {
-    id: 'gui-only',
-    label: 'GUI-only: No Agent',
-    description: 'Run the prototype without connecting an external agent.',
+    id: 'baseline',
+    label: 'Baseline',
+    description: 'Agent-backed baseline router with GUI-only navigation and selection.',
     config: {
-      agentEnabled: false,
+      agentEnabled: true,
       guiAdaptationEnabled: false,
       cpMemoryWindow: 0,
     },
@@ -49,10 +49,16 @@ export const STUDY_MODE_OPTIONS = [
 
 export type StudyModeId = (typeof STUDY_MODE_OPTIONS)[number]['id'];
 
-export const DEFAULT_STUDY_MODE: StudyModeId = 'gui-only';
+export const DEFAULT_STUDY_MODE: StudyModeId = 'baseline';
+
+export function normalizeStudyMode(id: string | null | undefined): StudyModeId {
+  if (id === 'gui-only') return 'baseline';
+  return STUDY_MODE_OPTIONS.find((item) => item.id === id)?.id ?? DEFAULT_STUDY_MODE;
+}
 
 export function getStudyModeOption(id: string) {
-  return STUDY_MODE_OPTIONS.find((item) => item.id === id) ?? STUDY_MODE_OPTIONS[0];
+  const normalized = normalizeStudyMode(id);
+  return STUDY_MODE_OPTIONS.find((item) => item.id === normalized) ?? STUDY_MODE_OPTIONS[0];
 }
 
 export function getStudyModeLabel(id: string): string {
