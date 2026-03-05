@@ -6,6 +6,8 @@ function getToolActionLabel(toolName: string): string {
   switch (toolName) {
     case 'select':
       return 'is selecting';
+    case 'selectMultiple':
+      return 'is selecting multiple seats';
     case 'filter':
       return 'is filtering';
     case 'sort':

@@ -1,8 +1,8 @@
 import type { StudyModeConfig, StudyModeId } from './types';
 
 const MODE_CONFIG: Record<StudyModeId, StudyModeConfig> = {
-  'gui-only': {
-    agentEnabled: false,
+  baseline: {
+    agentEnabled: true,
     guiAdaptationEnabled: false,
     cpMemoryWindow: 0,
   },
@@ -23,7 +23,15 @@ const MODE_CONFIG: Record<StudyModeId, StudyModeConfig> = {
   },
 };
 
-export const DEFAULT_STUDY_MODE: StudyModeId = 'gui-only';
+export const DEFAULT_STUDY_MODE: StudyModeId = 'baseline';
+
+export function normalizeStudyMode(value: string | null | undefined): StudyModeId {
+  if (value === 'gui-only') return 'baseline';
+  if (value && value in MODE_CONFIG) {
+    return value as StudyModeId;
+  }
+  return DEFAULT_STUDY_MODE;
+}
 
 export function isStudyModeId(value: string): value is StudyModeId {
   return value in MODE_CONFIG;

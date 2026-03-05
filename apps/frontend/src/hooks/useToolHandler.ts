@@ -4,6 +4,7 @@ import { isModificationTool } from '../agent/tools';
 import type { ToolApplyContext } from '../components/devToolsContextShared';
 import {
   selectItem,
+  selectItems,
   toggleItem,
   applyFilter,
   applySort,
@@ -32,6 +33,7 @@ interface UseToolHandlerOptions<T extends DataItem> {
   onNext?: (context?: ToolApplyContext) => void;
   onBack?: (context?: ToolApplyContext) => void;
   onStartOver?: (context?: ToolApplyContext) => void;
+  onRepeatStep?: (context?: ToolApplyContext) => void;
   onPostMessage?: (text: string) => void;
   multiSelect?: boolean;
 }
@@ -42,6 +44,7 @@ export function useToolHandler<T extends DataItem>({
   onNext,
   onBack,
   onStartOver,
+  onRepeatStep,
   onPostMessage,
   multiSelect = false,
 }: UseToolHandlerOptions<T>) {
@@ -103,6 +106,42 @@ export function useToolHandler<T extends DataItem>({
             }
             break;
           }
+          case 'selectMultiple': {
+            if (!multiSelect) {
+              throw new Error('selectMultiple is only supported in multi-select stages');
+            }
+            const rawItemIds = params.itemIds;
+            if (!Array.isArray(rawItemIds)) {
+              throw new Error('selectMultiple requires an "itemIds" array');
+            }
+
+            const itemIds = Array.from(
+              new Set(
+                rawItemIds
+                  .filter((value): value is string => typeof value === 'string')
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+              )
+            );
+
+            if (itemIds.length === 0) {
+              throw new Error('selectMultiple requires at least one non-empty item ID');
+            }
+
+            const selectable = new Set(
+              spec.visibleItems
+                .filter((item) => !item.isDisabled)
+                .map((item) => item.id)
+            );
+            for (const itemId of itemIds) {
+              if (!selectable.has(itemId)) {
+                throw new Error(`selectMultiple received unavailable item ID "${itemId}"`);
+              }
+            }
+
+            newSpec = selectItems(spec, itemIds);
+            break;
+          }
           case 'next':
             onNext?.(context);
             return null;
@@ -111,6 +150,9 @@ export function useToolHandler<T extends DataItem>({
             return null;
           case 'startOver':
             onStartOver?.(context);
+            return null;
+          case 'repeatStep':
+            onRepeatStep?.(context);
             return null;
           case 'postMessage': {
             const text = params.text as string;
@@ -126,7 +168,8 @@ export function useToolHandler<T extends DataItem>({
         }
 
         const isModification = isModificationTool(toolName);
-        const shouldAppendSystemSnapshot = isModification || toolName === 'select';
+        const shouldAppendSystemSnapshot =
+          isModification || toolName === 'select' || toolName === 'selectMultiple';
         const source = context?.source === 'devtools' ? 'devtools' : 'agent';
         const reason = typeof context?.reason === 'string' && context.reason.trim()
           ? context.reason.trim()
@@ -151,7 +194,7 @@ export function useToolHandler<T extends DataItem>({
         throw error; // Re-throw to let DevTools display the error
       }
     },
-    [spec, setSpec, setUiSpec, onNext, onBack, onStartOver, onPostMessage, multiSelect]
+    [spec, setSpec, setUiSpec, onNext, onBack, onStartOver, onRepeatStep, onPostMessage, multiSelect]
   );
 
   // Register tool handler

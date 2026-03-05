@@ -111,6 +111,16 @@ export const interactionTools: ToolDefinition[] = [
     },
   },
   {
+    name: 'selectMultiple',
+    description: 'Seat-stage only: replace the current selected seat set with the provided item IDs',
+    parameters: {
+      itemIds: {
+        type: 'array',
+        description: 'Array of seat item IDs that should become the full selected seat set',
+      },
+    },
+  },
+  {
     name: 'next',
     description: 'Proceed to next stage with current state (selected item is passed to next stage)',
     parameters: {},
@@ -123,6 +133,11 @@ export const interactionTools: ToolDefinition[] = [
   {
     name: 'startOver',
     description: 'Reset the workflow and return to the first stage',
+    parameters: {},
+  },
+  {
+    name: 'repeatStep',
+    description: 'Repeat the current step card without changing the current UI state',
     parameters: {},
   },
   {
@@ -155,9 +170,11 @@ export const toolCategories: Record<string, 'modification' | 'interaction'> = {
   augment: 'modification',
   clearModification: 'modification',
   select: 'interaction',
+  selectMultiple: 'interaction',
   next: 'interaction',
   prev: 'interaction',
   startOver: 'interaction',
+  repeatStep: 'interaction',
   postMessage: 'interaction',
 };
 

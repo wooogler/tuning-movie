@@ -12,6 +12,7 @@ type MonitorState = {
   agentName?: string;
   relayUrl: string;
   sessionId: string;
+  routingMode?: 'planner' | 'baseline';
   phase: string;
   relayConnected: boolean;
   waitingForHost: boolean;
@@ -186,9 +187,14 @@ function getInteractionStatus(item: LlmInteraction): 'pending' | 'completed' | '
   return 'pending';
 }
 
-function getComponentLabel(component: LlmComponent): string {
+function getComponentLabel(
+  component: LlmComponent,
+  routingMode?: 'planner' | 'baseline'
+): string {
   if (component === 'extractor') return 'Extractor';
-  if (component === 'planner') return 'Planner';
+  if (component === 'planner') {
+    return routingMode === 'baseline' ? 'Planner (Baseline Router)' : 'Planner';
+  }
   return 'Unknown';
 }
 
@@ -473,6 +479,7 @@ export default function App() {
         <section className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Agent" value={monitorState?.agentName ?? '-'} />
+            <StatCard label="Routing Mode" value={monitorState?.routingMode ?? 'planner'} />
             <StatCard label="Phase" value={monitorState?.phase ?? '-'} />
             <StatCard label="Stage" value={monitorState?.contextStage ?? '-'} />
             <StatCard label="Session Ready" value={String(Boolean(monitorState?.sessionReady))} />
@@ -489,6 +496,7 @@ export default function App() {
               agentName: monitorState?.agentName,
               relayUrl: monitorState?.relayUrl,
               sessionId: monitorState?.sessionId,
+              routingMode: monitorState?.routingMode,
               relayConnected: monitorState?.relayConnected,
               waitingForHost: monitorState?.waitingForHost,
               sessionReady: monitorState?.sessionReady,
@@ -578,7 +586,7 @@ export default function App() {
                 onClick={() => setLlmFilter('planner')}
                 type="button"
               >
-                Planner ({llmCounts.planner})
+                {monitorState?.routingMode === 'baseline' ? 'Planner (Baseline Router)' : 'Planner'} ({llmCounts.planner})
               </button>
               <button
                 className={`rounded-lg border px-2.5 py-1 ${
@@ -601,7 +609,7 @@ export default function App() {
               </p>
               <div className="grid gap-3 xl:grid-cols-2">
                 <PromptBlock
-                  title="Planner"
+                  title={monitorState?.routingMode === 'baseline' ? 'Planner (Baseline Router)' : 'Planner'}
                   prompt={monitorState?.llmSystemPrompts?.planner}
                 />
                 <PromptBlock
@@ -618,7 +626,7 @@ export default function App() {
           ) : (
             filteredLlmInteractions.map((item) => {
               const status = getInteractionStatus(item);
-              const componentLabel = getComponentLabel(item.component);
+              const componentLabel = getComponentLabel(item.component, monitorState?.routingMode);
               const extractorMode = item.component === 'extractor' ? getExtractorMode(item.request) : null;
               const extractorTrigger =
                 item.component === 'extractor' ? getExtractorTrigger(item.request) : null;
@@ -713,7 +721,7 @@ export default function App() {
                         : 'bg-ink-700/60 text-mist-300'
                   }`}
                 >
-                  {getComponentLabel(selectedLlmInteraction.component)}
+                  {getComponentLabel(selectedLlmInteraction.component, monitorState?.routingMode)}
                 </span>
                 <span className="text-mist-300">
                   #{selectedLlmInteraction.id} · {shortTime(selectedLlmInteraction.timestamp)}

@@ -3,7 +3,7 @@ import type { db as defaultDb } from '../db';
 export type StudyDb = typeof defaultDb;
 
 export type StudyModeId =
-  | 'gui-only'
+  | 'baseline'
   | 'basic-tuning'
   | 'adaptive-tuning'
   | 'full-tuning';

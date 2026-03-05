@@ -11,7 +11,12 @@ import {
   getScenarioCatalog,
   getScenarioTemplatePath,
 } from './scenarioCatalog';
-import { getStudyModeConfig, isStudyModeId, DEFAULT_STUDY_MODE } from './modes';
+import {
+  getStudyModeConfig,
+  isStudyModeId,
+  normalizeStudyMode,
+  DEFAULT_STUDY_MODE,
+} from './modes';
 import { startAgentForSession, stopAgentForSession } from './agentSupervisor';
 import type {
   ScenarioDefinition,
@@ -125,7 +130,7 @@ function createToken(record: StudySessionRecord): string {
 
 function parseStudyMode(input: string | undefined): StudyModeId {
   if (input && isStudyModeId(input)) return input;
-  return DEFAULT_STUDY_MODE;
+  return normalizeStudyMode(input);
 }
 
 function loadPersistedSessions(): void {
@@ -138,10 +143,34 @@ function loadPersistedSessions(): void {
     for (const record of records) {
       if (!record || typeof record !== 'object') continue;
       if (record.status !== 'active') continue;
-      sessions.set(record.sessionId, record);
+      const normalizedStudyMode = normalizeStudyMode(
+        typeof record.studyMode === 'string' ? record.studyMode : undefined
+      );
+      sessions.set(record.sessionId, {
+        ...record,
+        studyMode: normalizedStudyMode,
+      });
     }
   } catch {
     // Ignore malformed runtime files; service will rebuild state.
+  }
+}
+
+function restartAgentsForActiveSessions(): void {
+  for (const record of sessions.values()) {
+    if (record.status !== 'active') continue;
+    const scenario = getScenarioById(record.scenarioId);
+    if (!scenario) continue;
+    const studyModeConfig = getStudyModeConfig(record.studyMode);
+    if (!studyModeConfig.agentEnabled) continue;
+    startAgentForSession({
+      sessionId: record.sessionId,
+      relaySessionId: record.relaySessionId,
+      scenarioId: scenario.id,
+      participantId: record.participantId,
+      studyMode: record.studyMode,
+      modeConfig: studyModeConfig,
+    });
   }
 }
 
@@ -190,6 +219,7 @@ loadPersistedSessions();
 if (markExpiredSessions()) {
   persistSessions();
 }
+restartAgentsForActiveSessions();
 
 export function listScenarios(): ScenarioDefinition[] {
   return getScenarioCatalog();
@@ -237,6 +267,7 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
       relaySessionId,
       scenarioId: scenario.id,
       participantId,
+      studyMode,
       modeConfig: studyModeConfig,
     });
   }
