@@ -12,6 +12,13 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DATABASE_URL=/app/apps/backend/data/tuning-movie.db
+      - AGENT_ENABLE_OPENAI=${AGENT_ENABLE_OPENAI:-true}
+      - AGENT_OPENAI_MODEL=${AGENT_OPENAI_MODEL:-gpt-5.2}
+      - AGENT_ENABLE_GEMINI=${AGENT_ENABLE_GEMINI:-false}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AGENT_LLM_DEBUG=${AGENT_LLM_DEBUG:-false}
+      - AGENT_MONITOR_ENABLED=${AGENT_MONITOR_ENABLED:-false}
     volumes:
       - ./apps/backend/data:/app/apps/backend/data:z
     networks:
