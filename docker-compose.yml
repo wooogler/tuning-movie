@@ -37,6 +37,7 @@ services:
       - AGENT_PARTICIPANT_ID=${AGENT_PARTICIPANT_ID:-P01}
       - AGENT_MONITOR_PORT=3500
       - AGENT_MONITOR_WEB_PORT=3501
+      - AGENT_MONITOR_ENABLED=${AGENT_MONITOR_ENABLED:-true}
       - AGENT_ENABLE_OPENAI=${AGENT_ENABLE_OPENAI:-true}
       - AGENT_OPENAI_MODEL=${AGENT_OPENAI_MODEL:-gpt-5.2}
       - AGENT_LLM_DEBUG=${AGENT_LLM_DEBUG:-false}
@@ -47,7 +48,7 @@ services:
     networks:
       - tuning-movie-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3500/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      test: ["CMD-SHELL", "grep -q '^node$' /proc/1/comm"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -74,7 +75,7 @@ services:
     networks:
       - tuning-movie-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
