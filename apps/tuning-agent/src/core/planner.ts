@@ -380,6 +380,10 @@ function buildPlannerMemory(
   deadEnds: DeadEnd[],
   plannerCpMemoryLimit: number
 ): PlannerWorkflowMemory | null {
+  if (!Number.isFinite(plannerCpMemoryLimit) || plannerCpMemoryLimit <= 0) {
+    return null;
+  }
+
   const limitedDeadEnds = plannerCpMemoryLimit > 0 ? sliceRecent(deadEnds, plannerCpMemoryLimit) : [];
   if (preferences.length === 0 && activeConflicts.length === 0 && limitedDeadEnds.length === 0) {
     return null;
