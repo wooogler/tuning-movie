@@ -135,7 +135,7 @@ export interface StateModel {
 // =============================================================================
 
 export interface ModificationState {
-  filter?: FilterState;
+  filter?: FilterState | FilterState[];
   sort?: SortState;
   highlight?: HighlightState;
   augment?: AugmentState[];

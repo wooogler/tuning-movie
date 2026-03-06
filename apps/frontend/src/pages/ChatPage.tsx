@@ -70,7 +70,14 @@ const DEFAULT_SCENARIO_PANEL_WIDTH_PX = 620;
 const MIN_SCENARIO_PANEL_WIDTH_PX = 280;
 const MAX_SCENARIO_PANEL_WIDTH_PX = 620;
 const MIN_MAIN_CONTENT_WIDTH_PX = 700;
-const guiAdaptationTools = ['filter', 'sort', 'highlight', 'augment', 'clearModification'] as const;
+const guiAdaptationToolsByStage: Record<Stage, readonly string[]> = {
+  movie: ['filter', 'sort', 'highlight', 'augment', 'clearModification'],
+  theater: ['filter', 'sort', 'highlight', 'augment', 'clearModification'],
+  date: ['highlight', 'clearModification'],
+  time: ['filter', 'sort', 'highlight', 'augment', 'clearModification'],
+  seat: ['highlight', 'clearModification'],
+  confirm: [],
+};
 const baselineAutoAdvanceStages = new Set<Stage>(['movie', 'theater', 'date', 'time']);
 const AGENT_BRIDGE_ENABLED_STORAGE_KEY = 'tuning-movie-agent-bridge-enabled';
 const PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY = 'tuning-movie-planner-cp-memory-limit';
@@ -155,7 +162,7 @@ function buildToolSchemaForStage(
   }
 
   if (guiAdaptationEnabled) {
-    for (const toolName of guiAdaptationTools) {
+    for (const toolName of guiAdaptationToolsByStage[stage] ?? []) {
       allowed.add(toolName);
     }
   }

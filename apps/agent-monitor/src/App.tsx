@@ -7,6 +7,38 @@ type MonitorEvent = {
   payload: unknown;
 };
 
+type Preference = {
+  id: string;
+  description: string;
+  strength: 'hard' | 'soft';
+};
+
+type ConflictScope = {
+  stage: string;
+  movie?: string;
+  theater?: string;
+  date?: string;
+  showing?: string;
+};
+
+type ActiveConflict = {
+  id: string;
+  preferenceIds: string[];
+  scope: ConflictScope;
+  severity: 'blocking' | 'soft';
+  reason: string;
+};
+
+type DeadEnd = {
+  id: string;
+  preferenceIds: string[];
+  scope: ConflictScope;
+  reason: string;
+  createdAt: string;
+  lastSeenAt: string;
+  count: number;
+};
+
 type MonitorState = {
   startedAt: string;
   agentName?: string;
@@ -23,9 +55,9 @@ type MonitorState = {
   lastTrigger: string | null;
   lastPlan: unknown;
   lastOutcome: unknown;
-  memoryPreferences: string[];
-  memoryConstraints: string[];
-  memoryConflicts?: string[];
+  memoryPreferences: Preference[];
+  memoryActiveConflicts: ActiveConflict[];
+  memoryDeadEnds: DeadEnd[];
   actionCount: number;
   pendingUserMessages: number;
   llmSystemPrompts?: {
@@ -48,7 +80,11 @@ type EventPayload = {
 };
 
 type LlmComponent = 'planner' | 'extractor' | 'unknown';
-type ExtractionUpdateFocus = 'preferences_conflicts' | 'constraints_conflicts';
+type ExtractorBadge =
+  | 'preferences'
+  | 'active_conflicts'
+  | 'preferences_conflicts'
+  | 'constraints_conflicts';
 
 type LlmInteraction = {
   id: number;
@@ -205,7 +241,13 @@ function getExtractorRequestInput(request: unknown): Record<string, unknown> | n
   return nestedInput ?? requestRecord;
 }
 
-function getExtractorMode(request: unknown): ExtractionUpdateFocus | null {
+function getExtractorBadge(request: unknown): ExtractorBadge | null {
+  const requestRecord = asRecord(request);
+  const kind = requestRecord?.kind;
+  if (kind === 'preferences' || kind === 'active_conflicts') {
+    return kind;
+  }
+
   const input = getExtractorRequestInput(request);
   const mode = input?.updateFocus;
   if (mode === 'preferences_conflicts' || mode === 'constraints_conflicts') {
@@ -351,10 +393,10 @@ export default function App() {
     () => (selectedLlmId === null ? null : llmInteractions.find((item) => item.id === selectedLlmId) ?? null),
     [llmInteractions, selectedLlmId]
   );
-  const selectedExtractorMode = useMemo(
+  const selectedExtractorBadge = useMemo(
     () =>
       selectedLlmInteraction?.component === 'extractor'
-        ? getExtractorMode(selectedLlmInteraction.request)
+        ? getExtractorBadge(selectedLlmInteraction.request)
         : null,
     [selectedLlmInteraction]
   );
@@ -485,8 +527,11 @@ export default function App() {
             <StatCard label="Session Ready" value={String(Boolean(monitorState?.sessionReady))} />
             <StatCard label="Action In Flight" value={String(Boolean(monitorState?.actionInFlight))} />
             <StatCard label="Preference Count" value={String(monitorState?.memoryPreferences?.length ?? 0)} />
-            <StatCard label="Constraint Count" value={String(monitorState?.memoryConstraints?.length ?? 0)} />
-            <StatCard label="Conflict Count" value={String(monitorState?.memoryConflicts?.length ?? 0)} />
+            <StatCard
+              label="Active Conflict Count"
+              value={String(monitorState?.memoryActiveConflicts?.length ?? 0)}
+            />
+            <StatCard label="Dead End Count" value={String(monitorState?.memoryDeadEnds?.length ?? 0)} />
           </div>
 
           <JsonCard
@@ -510,8 +555,8 @@ export default function App() {
             title="Agent Memory"
             value={{
               preferences: monitorState?.memoryPreferences ?? [],
-              constraints: monitorState?.memoryConstraints ?? [],
-              conflicts: monitorState?.memoryConflicts ?? [],
+              activeConflicts: monitorState?.memoryActiveConflicts ?? [],
+              deadEnds: monitorState?.memoryDeadEnds ?? [],
             }}
           />
           <JsonCard title="Last Plan" value={monitorState?.lastPlan ?? null} />
@@ -627,7 +672,7 @@ export default function App() {
             filteredLlmInteractions.map((item) => {
               const status = getInteractionStatus(item);
               const componentLabel = getComponentLabel(item.component, monitorState?.routingMode);
-              const extractorMode = item.component === 'extractor' ? getExtractorMode(item.request) : null;
+              const extractorBadge = item.component === 'extractor' ? getExtractorBadge(item.request) : null;
               const extractorTrigger =
                 item.component === 'extractor' ? getExtractorTrigger(item.request) : null;
               return (
@@ -660,9 +705,9 @@ export default function App() {
                       <span className="text-mist-300">
                         #{item.id} · {shortTime(item.timestamp)}
                       </span>
-                      {extractorMode ? (
+                      {extractorBadge ? (
                         <span className="rounded-full border border-cyan-500/35 bg-cyan-500/10 px-2 py-1 font-semibold text-cyan-200">
-                          mode: {extractorMode}
+                          kind: {extractorBadge}
                         </span>
                       ) : null}
                       {extractorTrigger ? (
@@ -726,9 +771,9 @@ export default function App() {
                 <span className="text-mist-300">
                   #{selectedLlmInteraction.id} · {shortTime(selectedLlmInteraction.timestamp)}
                 </span>
-                {selectedExtractorMode ? (
+                {selectedExtractorBadge ? (
                   <span className="rounded-full border border-cyan-500/35 bg-cyan-500/10 px-2 py-1 font-semibold text-cyan-200">
-                    mode: {selectedExtractorMode}
+                    kind: {selectedExtractorBadge}
                   </span>
                 ) : null}
                 {selectedExtractorTrigger ? (

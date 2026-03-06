@@ -1,6 +1,16 @@
-import { planActionWithOpenAI, planActionWithGemini, type PlannerWorkflow } from '../llm/llmPlanner';
+import {
+  planActionWithOpenAI,
+  planActionWithGemini,
+  type PlannerWorkflow,
+  type PlannerWorkflowMemory,
+} from '../llm/llmPlanner';
 import { refreshModelEnvVars } from './envRefresh';
 import type { AgentMemory } from './memory';
+import {
+  summarizeActiveConflict,
+  summarizeDeadEnd,
+  summarizePreference,
+} from './cpMemory';
 import {
   getEnabledVisibleItems,
   getSelectedId,
@@ -8,10 +18,23 @@ import {
   toUISpecLike,
   type UISpecLike,
 } from './uiModel';
-import type { PerceivedContext, PlanDecision, PlannedAction, ToolSchemaItem } from '../types';
+import {
+  buildWorkflowSelectionState,
+  WORKFLOW_STAGE_ORDER,
+  type WorkflowStage,
+} from './workflowState';
+import type {
+  ActiveConflict,
+  DeadEnd,
+  PerceivedContext,
+  PlanDecision,
+  PlannedAction,
+  Preference,
+  ToolSchemaItem,
+} from '../types';
 
-type Stage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'confirm';
-const STAGE_ORDER: Stage[] = ['movie', 'theater', 'date', 'time', 'seat', 'confirm'];
+type Stage = WorkflowStage;
+const STAGE_ORDER = WORKFLOW_STAGE_ORDER;
 const RAW_SCAN_WINDOW = 24;
 const RECENT_WINDOW = 8;
 const MAX_HISTORY_ENTRIES = 12;
@@ -249,9 +272,7 @@ function buildWorkflowContext(
   stage: Stage,
   spec: UISpecLike,
   plannerTools: ToolSchemaItem[],
-  preferences: string[],
-  constraints: string[],
-  conflicts: string[],
+  plannerMemory: PlannerWorkflowMemory | null,
   cpMemoryEnabled: boolean
 ): PlannerWorkflow {
   const selectedId = getSelectedId(spec);
@@ -278,6 +299,11 @@ function buildWorkflowContext(
     proceedRule = `Call next only when selectedId exists (current: ${selectedId ?? 'null'}).`;
   }
 
+  const workflowState = buildWorkflowSelectionState({
+    currentStage: stage,
+    messageHistory: context.messageHistoryTail,
+    uiSpec: context.uiSpec,
+  });
   const workflow: PlannerWorkflow = {
     stageOrder: STAGE_ORDER,
     currentStage: stage,
@@ -287,14 +313,10 @@ function buildWorkflowContext(
     proceedRule,
     availableToolNames: plannerTools.map((tool) => tool.name),
     guardrails,
+    ...(workflowState ? { state: workflowState } : {}),
+    ...(plannerMemory ? { memory: plannerMemory } : {}),
     cpMemoryEnabled,
   };
-
-  if (cpMemoryEnabled) {
-    workflow.preferences = preferences;
-    workflow.constraints = constraints;
-    workflow.conflicts = conflicts;
-  }
 
   return workflow;
 }
@@ -345,11 +367,34 @@ function buildPlannerHistory(
   return bounded.map((entry) => entry.value);
 }
 
-function sliceRecent(list: string[], maxItems: number): string[] {
+function sliceRecent<T>(list: T[], maxItems: number): T[] {
   if (!Number.isFinite(maxItems) || maxItems <= 0) return [];
   const limit = Math.floor(maxItems);
   if (limit <= 0) return [];
   return list.slice(-limit);
+}
+
+function buildPlannerMemory(
+  preferences: Preference[],
+  activeConflicts: ActiveConflict[],
+  deadEnds: DeadEnd[],
+  plannerCpMemoryLimit: number
+): PlannerWorkflowMemory | null {
+  const limitedDeadEnds = plannerCpMemoryLimit > 0 ? sliceRecent(deadEnds, plannerCpMemoryLimit) : [];
+  if (preferences.length === 0 && activeConflicts.length === 0 && limitedDeadEnds.length === 0) {
+    return null;
+  }
+
+  return {
+    preferences,
+    activeConflicts,
+    deadEnds: limitedDeadEnds,
+    summaries: {
+      preferences: preferences.map(summarizePreference),
+      activeConflicts: activeConflicts.map(summarizeActiveConflict),
+      deadEnds: limitedDeadEnds.map(summarizeDeadEnd),
+    },
+  };
 }
 
 function validateLlmAction(
@@ -465,10 +510,13 @@ export async function planNextAction(
   try {
     const plannerTools = getPlannerToolSchema(context.toolSchema);
     const plannerCpMemoryLimit = Math.max(0, Math.floor(context.plannerCpMemoryLimit ?? 0));
-    const cpMemoryEnabled = plannerCpMemoryLimit > 0;
-    const plannerPreferences = sliceRecent(memory.getPreferences(), plannerCpMemoryLimit);
-    const plannerConstraints = sliceRecent(memory.getConstraints(), plannerCpMemoryLimit);
-    const plannerConflicts = sliceRecent(memory.getConflicts(), plannerCpMemoryLimit);
+    const plannerMemory = buildPlannerMemory(
+      memory.getPreferences(),
+      memory.getActiveConflicts(),
+      memory.getDeadEnds(),
+      plannerCpMemoryLimit
+    );
+    const cpMemoryEnabled = plannerMemory !== null;
     const plannerInput = {
       history: buildPlannerHistory(context),
       availableTools: plannerTools,
@@ -477,9 +525,7 @@ export async function planNextAction(
         stage,
         spec,
         plannerTools,
-        plannerPreferences,
-        plannerConstraints,
-        plannerConflicts,
+        plannerMemory,
         cpMemoryEnabled
       ),
     };

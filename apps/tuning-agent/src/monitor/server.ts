@@ -1,5 +1,12 @@
 import http from 'node:http';
-import type { ActionOutcome, PerceivedContext, PlannedAction } from '../types';
+import type {
+  ActionOutcome,
+  ActiveConflict,
+  DeadEnd,
+  PerceivedContext,
+  PlannedAction,
+  Preference,
+} from '../types';
 
 interface MonitorOptions {
   enabled?: boolean;
@@ -37,9 +44,9 @@ interface MonitorState {
   lastTrigger: string | null;
   lastPlan: PlannedAction | null;
   lastOutcome: ActionOutcome | null;
-  memoryPreferences: string[];
-  memoryConstraints: string[];
-  memoryConflicts: string[];
+  memoryPreferences: Preference[];
+  memoryActiveConflicts: ActiveConflict[];
+  memoryDeadEnds: DeadEnd[];
   actionCount: number;
   pendingUserMessages: number;
   llmSystemPrompts: {
@@ -97,8 +104,8 @@ export class AgentMonitorServer {
       lastPlan: null,
       lastOutcome: null,
       memoryPreferences: [],
-      memoryConstraints: [],
-      memoryConflicts: [],
+      memoryActiveConflicts: [],
+      memoryDeadEnds: [],
       actionCount: 0,
       pendingUserMessages: 0,
       llmSystemPrompts: {
@@ -231,15 +238,23 @@ export class AgentMonitorServer {
   }
 
   updateMemory(
-    preferences: string[],
-    constraints: string[],
-    conflicts: string[]
+    preferences: Preference[],
+    activeConflicts: ActiveConflict[],
+    deadEnds: DeadEnd[]
   ): void {
     if (!this.enabled) return;
     this.updateState({
-      memoryPreferences: preferences.slice(),
-      memoryConstraints: constraints.slice(),
-      memoryConflicts: conflicts.slice(),
+      memoryPreferences: preferences.map((item) => ({ ...item })),
+      memoryActiveConflicts: activeConflicts.map((item) => ({
+        ...item,
+        preferenceIds: item.preferenceIds.slice(),
+        scope: { ...item.scope },
+      })),
+      memoryDeadEnds: deadEnds.map((item) => ({
+        ...item,
+        preferenceIds: item.preferenceIds.slice(),
+        scope: { ...item.scope },
+      })),
     });
   }
 

@@ -1,4 +1,15 @@
-import type { ToolSchemaItem } from '../types';
+import type { ActiveConflict, DeadEnd, Preference, ToolSchemaItem } from '../types';
+
+export interface PlannerWorkflowMemory {
+  preferences: Preference[];
+  activeConflicts: ActiveConflict[];
+  deadEnds: DeadEnd[];
+  summaries: {
+    preferences: string[];
+    activeConflicts: string[];
+    deadEnds: string[];
+  };
+}
 
 export interface PlannerWorkflow {
   stageOrder: string[];
@@ -9,10 +20,9 @@ export interface PlannerWorkflow {
   proceedRule: string;
   availableToolNames: string[];
   guardrails: string[];
+  state?: Record<string, unknown>;
+  memory?: PlannerWorkflowMemory;
   cpMemoryEnabled?: boolean;
-  constraints?: string[];
-  preferences?: string[];
-  conflicts?: string[];
 }
 
 interface PlannerInput {
@@ -142,23 +152,33 @@ const BASE_SYSTEM_PROMPT =
   'You are a UI agent. Pick exactly one next step that best reflects user intent and current GUI state.\n' +
   'Constraints:\n' +
   '- Use history and workflow together to infer intent, prioritizing unresolved recent user preferences.\n' +
+  '- Use workflow.state to understand the raw selections already made across earlier stages.\n' +
   '- Treat workflow.currentStage and available tools as hard operational boundaries.\n' +
   '- Primary goal: help the user complete booking efficiently and safely.\n' +
   '- If intent is reasonably clear, prefer one concrete action over repetitive clarifications.\n' +
   '- If user intent or preference is uncertain, use a concise conversational clarification (respond/action.type="none") before applying potentially assumption-heavy GUI changes.\n' +
   '- Use non-committal GUI modification tools when they clearly narrow options without assuming unstated preferences.\n' +
+  '- Highlight is non-committal and may be used for one or multiple candidate options only when it adds meaningful distinction among still-visible choices.\n' +
+  '- Do not use highlight when the current UI already communicates the narrowed set clearly enough, or when highlight would simply restate the effect of an existing filter/sort.\n' +
+  '- Do not chain highlight immediately after filter/sort by default. Use highlight after narrowing only when a smaller subset among the remaining visible items deserves extra emphasis.\n' +
+  '- Do not use highlight when it would simply mark every currently visible item or repeat an already-applied highlight without adding new distinction.\n' +
   '- Use navigation/commitment actions (select/selectMultiple/next/prev/startOver) only when user intent is clear and sufficiently confirmed.\n' +
   '- Do not treat assistant-generated recommendations, options, or questions as user confirmation.\n' +
   '- Require user-originated explicit or unambiguous confirmation before commitment actions.\n' +
   '- Do not infer unstated optimization objectives (for example highest-rated, lowest price, earliest time, shortest duration, nearest location).\n' +
   '- Apply optimization-oriented actions only when the objective is explicit in the latest user request or current workflow guidance.\n' +
   '- If optimization objective is unspecified, prefer neutral narrowing or concise clarification instead of arbitrary ranking.\n' +
-  '- If multiple viable options remain without explicit user commitment to one item, ask concise confirmation.\n' +
+  '- If multiple viable options remain without explicit user commitment to one item, ask concise confirmation by default. Use highlight instead only when it materially helps distinguish a subset of the remaining options.\n' +
+  '- Repeated filter tool calls accumulate additional conditions instead of replacing earlier filters.\n' +
   '- On seat stage, use select for a single-seat toggle and selectMultiple only when the user clearly specifies multiple seats to select as the full seat set.\n' +
   '- Choose exactly one action for this turn.';
 
 const CP_MEMORY_PROMPT_RULES =
-  '- Use workflow.preferences as accumulated user intent, workflow.constraints as accumulated system availability facts, and workflow.conflicts as active contradictions to resolve before committing.';
+  '- Use workflow.memory.preferences as structured user intent.\n' +
+  '- Use workflow.memory.activeConflicts as the current blockers for the active branch.\n' +
+  '- Use workflow.memory.deadEnds as advisory history about branches that previously failed after backtracking.\n' +
+  '- Prefer workflow.memory.activeConflicts over workflow.memory.deadEnds when they disagree.\n' +
+  '- workflow.memory.summaries contains concise natural-language projections of the structured memory for quick scanning.';
 
 const JSON_ACTION_FORMAT_RULES =
   'JSON action format rules:\n' +
@@ -190,11 +210,7 @@ export function getPlannerSystemPrompt(): string {
 function hasCpMemoryContext(workflow: PlannerWorkflow): boolean {
   if (workflow.cpMemoryEnabled === true) return true;
   if (workflow.cpMemoryEnabled === false) return false;
-  return (
-    Array.isArray(workflow.preferences) ||
-    Array.isArray(workflow.constraints) ||
-    Array.isArray(workflow.conflicts)
-  );
+  return Boolean(workflow.memory);
 }
 
 function buildSystemPrompt(workflow: PlannerWorkflow): string {

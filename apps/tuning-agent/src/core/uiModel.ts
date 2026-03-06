@@ -15,6 +15,7 @@ export interface QuantityLike {
 export interface UISpecLike {
   stage?: string;
   visibleItems?: DisplayItemLike[];
+  items?: unknown[];
   state?: {
     selected?: { id?: string; value?: string };
     selectedList?: Array<{ id?: string; value?: string }>;

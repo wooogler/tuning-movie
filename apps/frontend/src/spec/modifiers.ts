@@ -15,6 +15,35 @@ import type {
   AugmentState,
 } from './types';
 
+function normalizeFilters(filters: FilterState | FilterState[] | undefined): FilterState[] {
+  if (!filters) return [];
+  return Array.isArray(filters) ? filters : [filters];
+}
+
+function getItemFieldValue<T extends DataItem>(
+  item: T,
+  field: string,
+  valueField: string
+): unknown {
+  if (field === 'value') {
+    return item[valueField];
+  }
+  return item[field];
+}
+
+function areFilterValuesEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function hasSameFilter(existing: FilterState[], next: FilterState): boolean {
+  return existing.some(
+    (filter) =>
+      filter.field === next.field &&
+      filter.operator === next.operator &&
+      areFilterValuesEqual(filter.value, next.value)
+  );
+}
+
 // =============================================================================
 // Visible Items Computation
 // =============================================================================
@@ -30,13 +59,14 @@ export function computeVisibleItems<T extends DataItem>(
 
   // 1. Filter 적용
   let filteredItems = [...items];
-  if (modification.filter) {
-    filteredItems = applyFilterLogic(filteredItems, modification.filter);
+  const filters = normalizeFilters(modification.filter);
+  for (const filter of filters) {
+    filteredItems = applyFilterLogic(filteredItems, filter, valueField);
   }
 
   // 2. Sort 적용
   if (modification.sort) {
-    filteredItems = applySortLogic(filteredItems, modification.sort);
+    filteredItems = applySortLogic(filteredItems, modification.sort, valueField);
   }
 
   // 3. Augment 맵 생성
@@ -213,9 +243,13 @@ export function applyFilter<T extends DataItem>(
   spec: UISpec<T>,
   params: FilterState
 ): UISpec<T> {
+  const existingFilters = normalizeFilters(spec.modification.filter);
+  const nextFilters = hasSameFilter(existingFilters, params)
+    ? existingFilters
+    : [...existingFilters, params];
   const newSpec = {
     ...spec,
-    modification: { ...spec.modification, filter: params },
+    modification: { ...spec.modification, filter: nextFilters },
   };
   return refreshSpec(newSpec);
 }
@@ -293,12 +327,13 @@ export function clearModification<T extends DataItem>(
 
 function applyFilterLogic<T extends DataItem>(
   items: T[],
-  filter: FilterState
+  filter: FilterState,
+  valueField: string
 ): T[] {
   const { field, operator, value } = filter;
 
   return items.filter((item) => {
-    const itemValue = item[field];
+    const itemValue = getItemFieldValue(item, field, valueField);
 
     switch (operator) {
       case 'eq':
@@ -326,12 +361,16 @@ function applyFilterLogic<T extends DataItem>(
   });
 }
 
-function applySortLogic<T extends DataItem>(items: T[], sort: SortState): T[] {
+function applySortLogic<T extends DataItem>(
+  items: T[],
+  sort: SortState,
+  valueField: string
+): T[] {
   const { field, order } = sort;
 
   return [...items].sort((a, b) => {
-    const aVal = a[field];
-    const bVal = b[field];
+    const aVal = getItemFieldValue(a, field, valueField);
+    const bVal = getItemFieldValue(b, field, valueField);
 
     let comparison: number;
     if (typeof aVal === 'string' && typeof bVal === 'string') {

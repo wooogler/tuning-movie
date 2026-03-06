@@ -15,6 +15,40 @@ export interface ToolSchemaItem {
   params?: unknown;
 }
 
+export type ConflictStage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'confirm';
+
+export interface Preference {
+  id: string;
+  description: string;
+  strength: 'hard' | 'soft';
+}
+
+export interface ConflictScope {
+  stage: ConflictStage;
+  movie?: string;
+  theater?: string;
+  date?: string;
+  showing?: string;
+}
+
+export interface ActiveConflict {
+  id: string;
+  preferenceIds: string[];
+  scope: ConflictScope;
+  severity: 'blocking' | 'soft';
+  reason: string;
+}
+
+export interface DeadEnd {
+  id: string;
+  preferenceIds: string[];
+  scope: ConflictScope;
+  reason: string;
+  createdAt: string;
+  lastSeenAt: string;
+  count: number;
+}
+
 export interface UserMessagePayload {
   text: string;
   stage?: string;

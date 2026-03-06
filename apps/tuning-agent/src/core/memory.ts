@@ -1,4 +1,15 @@
-import type { EpisodicRecord, PerceivedContext } from '../types';
+import {
+  normalizeActiveConflicts,
+  normalizeDeadEnds,
+  normalizePreferenceList,
+} from './cpMemory';
+import type {
+  ActiveConflict,
+  DeadEnd,
+  EpisodicRecord,
+  PerceivedContext,
+  Preference,
+} from '../types';
 
 const MAX_EPISODIC_RECORDS = 200;
 const INFRA_ERROR_CODES = new Set(['SESSION_NOT_ACTIVE', 'RELAY_ERROR']);
@@ -6,40 +17,68 @@ const INFRA_ERROR_CODES = new Set(['SESSION_NOT_ACTIVE', 'RELAY_ERROR']);
 export class AgentMemory {
   private context: PerceivedContext | null = null;
   private episodic: EpisodicRecord[] = [];
-  private preferences: string[] = [];
-  private constraints: string[] = [];
-  private conflicts: string[] = [];
+  private preferences: Preference[] = [];
+  private activeConflicts: ActiveConflict[] = [];
+  private deadEnds: DeadEnd[] = [];
 
   reset(): void {
     this.context = null;
     this.episodic = [];
     this.preferences = [];
-    this.constraints = [];
-    this.conflicts = [];
+    this.activeConflicts = [];
+    this.deadEnds = [];
   }
 
-  getPreferences(): string[] {
-    return this.preferences.slice();
+  getPreferences(): Preference[] {
+    return this.preferences.map((item) => ({ ...item }));
   }
 
-  getConstraints(): string[] {
-    return this.constraints.slice();
+  getActiveConflicts(): ActiveConflict[] {
+    return this.activeConflicts.map((item) => ({
+      ...item,
+      preferenceIds: item.preferenceIds.slice(),
+      scope: { ...item.scope },
+    }));
   }
 
-  getConflicts(): string[] {
-    return this.conflicts.slice();
+  getBlockingActiveConflicts(): ActiveConflict[] {
+    return this.getActiveConflicts().filter((item) => item.severity === 'blocking');
   }
 
-  setPreferences(items: string[]): void {
-    this.preferences = this.normalizeList(items);
+  getDeadEnds(): DeadEnd[] {
+    return this.deadEnds.map((item) => ({
+      ...item,
+      preferenceIds: item.preferenceIds.slice(),
+      scope: { ...item.scope },
+    }));
   }
 
-  setConstraints(items: string[]): void {
-    this.constraints = this.normalizeList(items);
+  setPreferences(items: Preference[]): void {
+    this.preferences = normalizePreferenceList(items);
   }
 
-  setConflicts(items: string[]): void {
-    this.conflicts = this.normalizeList(items);
+  setActiveConflicts(items: ActiveConflict[]): void {
+    this.activeConflicts = normalizeActiveConflicts(items);
+  }
+
+  upsertDeadEnds(items: DeadEnd[]): void {
+    const incoming = normalizeDeadEnds(items);
+    if (incoming.length === 0) return;
+
+    const byId = new Map<string, DeadEnd>(this.deadEnds.map((item) => [item.id, item]));
+    for (const next of incoming) {
+      const existing = byId.get(next.id);
+      if (!existing) {
+        byId.set(next.id, next);
+        continue;
+      }
+      byId.set(next.id, {
+        ...existing,
+        lastSeenAt: next.lastSeenAt,
+        count: existing.count + next.count,
+      });
+    }
+    this.deadEnds = Array.from(byId.values()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
   setContext(context: PerceivedContext): void {
@@ -66,17 +105,5 @@ export class AgentMemory {
       .slice(-windowSize)
       .filter((entry) => entry.stage === stage && !entry.ok && !INFRA_ERROR_CODES.has(entry.code ?? ''))
       .length;
-  }
-
-  private normalizeList(items: string[]): string[] {
-    const normalized: string[] = [];
-    const seen = new Set<string>();
-    for (const item of items) {
-      const trimmed = item.trim();
-      if (!trimmed || seen.has(trimmed)) continue;
-      seen.add(trimmed);
-      normalized.push(trimmed);
-    }
-    return normalized;
   }
 }

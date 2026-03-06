@@ -12,12 +12,19 @@ import {
   subscribeLlmTrace as subscribePlannerLlmTrace,
 } from './llm/llmPlanner';
 import {
-  extractPreferencesAndConstraints,
+  deriveActiveConflicts,
+  extractStructuredPreferences,
   getExtractorSystemPrompt,
   subscribeLlmTrace as subscribeExtractorLlmTrace,
-  type ExtractionContext,
+  type ActiveConflictDerivationContext,
+  type PreferenceExtractionContext,
 } from './llm/llmExtractor';
-import { toUISpecLike, getSelectedId } from './core/uiModel';
+import { materializeDeadEndsFromConflicts } from './core/cpMemory';
+import {
+  buildWorkflowSelectionState,
+  toWorkflowStage,
+  WORKFLOW_STAGE_ORDER,
+} from './core/workflowState';
 import { shouldResync } from './core/verifier';
 import { isActionSafe } from './policies/safetyPolicy';
 import { RelayClient } from './runtime/relayClient';
@@ -114,7 +121,7 @@ const DEFAULT_CP_MEMORY_LIMIT = Math.max(
   0,
   Number.parseInt(process.env.AGENT_DEFAULT_CP_MEMORY_LIMIT || '10', 10) || 10
 );
-const EXTRACTION_STAGE_ORDER = ['movie', 'theater', 'date', 'time', 'seat', 'confirm'] as const;
+const EXTRACTION_STAGE_ORDER = WORKFLOW_STAGE_ORDER;
 
 function getMonitorApiPort(): number {
   if (!monitor.isEnabled()) return monitorPort;
@@ -124,8 +131,8 @@ function getMonitorApiPort(): number {
 function syncMonitorMemoryState(): void {
   monitor.updateMemory(
     memory.getPreferences(),
-    memory.getConstraints(),
-    memory.getConflicts()
+    memory.getActiveConflicts(),
+    memory.getDeadEnds()
   );
 }
 
@@ -140,57 +147,6 @@ function readNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
-}
-
-function compactExtractionItemFacts(uiSpec: unknown, maxItems = 16): Record<string, unknown>[] {
-  const uiSpecRecord = asRecord(uiSpec);
-  const rawItems = Array.isArray(uiSpecRecord.items) ? uiSpecRecord.items : [];
-  const compacted: Record<string, unknown>[] = [];
-
-  for (const rawItem of rawItems) {
-    const item = asRecord(rawItem);
-    const summary: Record<string, unknown> = {};
-
-    const id = readNonEmptyString(item.id);
-    if (id) summary.id = id;
-
-    for (const key of ['value', 'name', 'title', 'displayLabel', 'date', 'time', 'location'] as const) {
-      const text = readNonEmptyString(item[key]);
-      if (text) summary[key] = text;
-    }
-
-    if (typeof item.distanceMiles === 'number' && Number.isFinite(item.distanceMiles)) {
-      summary.distanceMiles = item.distanceMiles;
-    }
-    if (typeof item.rating === 'string' || typeof item.rating === 'number') {
-      summary.rating = item.rating;
-    }
-    if (typeof item.duration === 'number' && Number.isFinite(item.duration)) {
-      summary.duration = item.duration;
-    }
-    if (typeof item.price === 'number' && Number.isFinite(item.price)) {
-      summary.price = item.price;
-    }
-
-    if (Array.isArray(item.genre)) {
-      const genres = item.genre
-        .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
-        .slice(0, 4);
-      if (genres.length > 0) summary.genre = genres;
-    }
-    if (Array.isArray(item.amenities)) {
-      const amenities = item.amenities
-        .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
-        .slice(0, 6);
-      if (amenities.length > 0) summary.amenities = amenities;
-    }
-
-    if (Object.keys(summary).length === 0) continue;
-    compacted.push(summary);
-    if (compacted.length >= maxItems) break;
-  }
-
-  return compacted;
 }
 
 function buildExtractionUiFlow(context: PerceivedContext): Record<string, unknown> {
@@ -329,43 +285,37 @@ function buildUiFingerprint(uiSpec: unknown): string {
   }
 }
 
+function sanitizeExtractionUiSpec(uiSpec: unknown): unknown {
+  if (uiSpec === null || uiSpec === undefined || Array.isArray(uiSpec) || typeof uiSpec !== 'object') {
+    return uiSpec ?? null;
+  }
+
+  const spec = uiSpec as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(spec, 'state')) {
+    return spec;
+  }
+
+  const nextSpec: Record<string, unknown> = { ...spec };
+  delete nextSpec.state;
+  return nextSpec;
+}
+
 function buildExtractionViewContext(
   context: PerceivedContext
-): Pick<
-  ExtractionContext,
-  'currentStage' | 'contextHistory' | 'visibleItems' | 'itemFacts' | 'uiFlow' | 'selectedItem'
-> {
-  const spec = toUISpecLike(context.uiSpec);
-  const visibleItems: Array<{ id: string; value: string; disabled?: boolean }> = [];
-  if (Array.isArray(spec?.visibleItems)) {
-    for (const item of spec.visibleItems) {
-      if (!item || typeof item.id !== 'string' || !item.id) continue;
-      const value = typeof item.value === 'string' ? item.value : '';
-      if (!value.trim()) continue;
-      const normalized: { id: string; value: string; disabled?: boolean } = {
-        id: item.id,
-        value,
-      };
-      if (item.isDisabled === true) {
-        normalized.disabled = true;
-      }
-      visibleItems.push(normalized);
-    }
-  }
-  const selectedId = spec ? getSelectedId(spec) : null;
-  const selectedValue = spec?.state?.selected?.value;
-  const selectedItem =
-    selectedId && typeof selectedValue === 'string' ? { id: selectedId, value: selectedValue } : null;
-  const itemFacts = compactExtractionItemFacts(context.uiSpec);
-  const uiFlow = buildExtractionUiFlow(context);
+): Pick<PreferenceExtractionContext, 'currentStage' | 'state' | 'uiSpec'> {
+  const currentStage = toWorkflowStage(context.stage ?? null);
+  const state = currentStage
+    ? buildWorkflowSelectionState({
+        currentStage,
+        messageHistory: context.messageHistoryTail,
+        uiSpec: context.uiSpec,
+      })
+    : null;
 
   return {
     currentStage: context.stage ?? '',
-    contextHistory: context.messageHistoryTail,
-    visibleItems,
-    itemFacts,
-    uiFlow,
-    selectedItem,
+    uiSpec: sanitizeExtractionUiSpec(context.uiSpec),
+    state,
   };
 }
 
@@ -378,88 +328,81 @@ async function runPreferenceExtractionFromUserMessage(
 
   const extractionView = buildExtractionViewContext(context);
   const existingPreferences = memory.getPreferences();
-  const existingConstraints = memory.getConstraints();
-  const existingConflicts = memory.getConflicts();
   const uiFingerprint = buildUiFingerprint(context.uiSpec);
 
-  const extractionCtx: ExtractionContext = {
+  const extractionCtx: PreferenceExtractionContext = {
     userMessage,
-    updateFocus: 'preferences_conflicts',
-    trigger: 'user_message',
     ...extractionView,
     existingPreferences,
-    existingConstraints,
-    existingConflicts,
   };
 
   try {
-    const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
-    memory.setPreferences(extractionResult.updatedPreferences);
-    memory.setConflicts(extractionResult.updatedConflicts);
+    const updatedPreferences = await extractStructuredPreferences(extractionCtx);
+    memory.setPreferences(updatedPreferences);
+    const activeConflictCtx: ActiveConflictDerivationContext = {
+      currentStage: extractionView.currentStage,
+      state: extractionView.state,
+      uiSpec: extractionView.uiSpec,
+      preferences: updatedPreferences,
+    };
+    const updatedActiveConflicts = await deriveActiveConflicts(activeConflictCtx);
+    memory.setActiveConflicts(updatedActiveConflicts);
     syncMonitorMemoryState();
     monitor.pushEvent('extraction.completed', {
       trigger: 'user.message',
-      updateFocus: 'preferences_conflicts',
+      mode: 'preferences+active-conflicts',
       uiFingerprint,
-      updatedPreferences: extractionResult.updatedPreferences,
-      updatedConstraints: existingConstraints,
-      updatedConflicts: extractionResult.updatedConflicts,
+      updatedPreferences,
+      updatedActiveConflicts,
       preferences: memory.getPreferences(),
-      constraints: memory.getConstraints(),
-      conflicts: memory.getConflicts(),
+      activeConflicts: memory.getActiveConflicts(),
+      deadEnds: memory.getDeadEnds(),
     });
   } catch (extractionError) {
     monitor.pushEvent('extraction.failed', {
       trigger: 'user.message',
-      updateFocus: 'preferences_conflicts',
+      mode: 'preferences+active-conflicts',
       uiFingerprint,
       message: extractionError instanceof Error ? extractionError.message : String(extractionError),
     });
   }
 }
 
-async function runConstraintExtractionFromUiChange(
+async function runActiveConflictDerivationFromUiChange(
   context: PerceivedContext,
   trigger: string,
   uiFingerprint: string,
   uiFingerprintChanged: boolean
 ): Promise<void> {
   const extractionView = buildExtractionViewContext(context);
-  const existingPreferences = memory.getPreferences();
-  const existingConstraints = memory.getConstraints();
-  const existingConflicts = memory.getConflicts();
+  const preferences = memory.getPreferences();
 
-  const extractionCtx: ExtractionContext = {
-    userMessage: '',
-    updateFocus: 'constraints_conflicts',
-    trigger: 'ui_changed',
-    ...extractionView,
-    existingPreferences,
-    existingConstraints,
-    existingConflicts,
+  const extractionCtx: ActiveConflictDerivationContext = {
+    currentStage: extractionView.currentStage,
+    state: extractionView.state,
+    uiSpec: extractionView.uiSpec,
+    preferences,
   };
 
   try {
-    const extractionResult = await extractPreferencesAndConstraints(extractionCtx);
-    memory.setConstraints(extractionResult.updatedConstraints);
-    memory.setConflicts(extractionResult.updatedConflicts);
+    const updatedActiveConflicts = await deriveActiveConflicts(extractionCtx);
+    memory.setActiveConflicts(updatedActiveConflicts);
     syncMonitorMemoryState();
     monitor.pushEvent('extraction.completed', {
       trigger,
-      updateFocus: 'constraints_conflicts',
+      mode: 'active-conflicts',
       uiFingerprint,
       uiFingerprintChanged,
-      updatedPreferences: existingPreferences,
-      updatedConstraints: extractionResult.updatedConstraints,
-      updatedConflicts: extractionResult.updatedConflicts,
+      updatedPreferences: preferences,
+      updatedActiveConflicts,
       preferences: memory.getPreferences(),
-      constraints: memory.getConstraints(),
-      conflicts: memory.getConflicts(),
+      activeConflicts: memory.getActiveConflicts(),
+      deadEnds: memory.getDeadEnds(),
     });
   } catch (extractionError) {
     monitor.pushEvent('extraction.failed', {
       trigger,
-      updateFocus: 'constraints_conflicts',
+      mode: 'active-conflicts',
       uiFingerprint,
       uiFingerprintChanged,
       message: extractionError instanceof Error ? extractionError.message : String(extractionError),
@@ -816,17 +759,36 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       reason: action.reason,
     });
 
+    const toolName =
+      action.type === 'tool.call' && typeof action.payload.toolName === 'string'
+        ? action.payload.toolName
+        : '';
+
+    if (
+      outcome.ok &&
+      action.type === 'tool.call' &&
+      (toolName === 'prev' || toolName === 'startOver')
+    ) {
+      const blockingConflicts = memory.getBlockingActiveConflicts();
+      if (blockingConflicts.length > 0) {
+        const timestamp = new Date().toISOString();
+        const deadEnds = materializeDeadEndsFromConflicts(blockingConflicts, timestamp);
+        memory.upsertDeadEnds(deadEnds);
+        syncMonitorMemoryState();
+        monitor.pushEvent('memory.dead_ends_updated', {
+          trigger,
+          toolName,
+          deadEnds: memory.getDeadEnds(),
+        });
+      }
+    }
+
     if (!outcome.ok) {
       await maybeSendAssistantMessage(
         planningContext,
         `The action failed (${outcome.code ?? 'UNKNOWN'}). ${outcome.message ?? 'Please try again.'}`
       );
     }
-
-    const toolName =
-      action.type === 'tool.call' && typeof action.payload.toolName === 'string'
-        ? action.payload.toolName
-        : '';
     const shouldResyncAfterSuccess =
       outcome.ok && action.type === 'tool.call' && toolName !== 'next' && toolName !== 'prev';
     const shouldResyncNow = shouldResync(action, outcome) || shouldResyncAfterSuccess;
@@ -974,7 +936,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       monitor.updateContext(memory.getContext());
 
       if (!isBaselineMode && isFirstSnapshotSeen && uiFingerprintChanged) {
-        await runConstraintExtractionFromUiChange(
+        await runActiveConflictDerivationFromUiChange(
           next,
           'state.updated:ui-changed',
           nextUiFingerprint,

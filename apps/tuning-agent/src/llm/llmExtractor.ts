@@ -1,33 +1,41 @@
 import { refreshModelEnvVars } from '../core/envRefresh';
+import {
+  buildActiveConflictId,
+  buildConflictScope,
+  buildPreferenceId,
+  normalizeActiveConflicts,
+  normalizePreferenceList,
+} from '../core/cpMemory';
+import type { ActiveConflict, ConflictStage, Preference } from '../types';
 
-interface VisibleItemSummary {
-  id: string;
-  value: string;
-  disabled?: boolean;
-}
-
-export type ExtractionFocus = 'preferences_conflicts' | 'constraints_conflicts';
-type ExtractionTrigger = 'user_message' | 'ui_changed';
-
-interface ExtractionInput {
+interface PreferenceExtractionInput {
   userMessage: string;
-  updateFocus: ExtractionFocus;
-  trigger: ExtractionTrigger;
   currentStage: string;
-  contextHistory: unknown[];
-  visibleItems: VisibleItemSummary[];
-  itemFacts: Record<string, unknown>[];
-  uiFlow: Record<string, unknown>;
-  selectedItem: { id: string; value: string } | null;
-  existingPreferences: string[];
-  existingConstraints: string[];
-  existingConflicts: string[];
+  state: Record<string, unknown> | null;
+  uiSpec: unknown;
+  existingPreferences: Preference[];
 }
 
-interface ExtractionOutput {
-  updatedPreferences: string[];
-  updatedConstraints: string[];
-  updatedConflicts: string[];
+interface PreferenceExtractionOutput {
+  preferences: Array<{
+    description: string;
+    strength: 'hard' | 'soft';
+  }>;
+}
+
+interface ActiveConflictDerivationInput {
+  currentStage: string;
+  preferences: Preference[];
+  state: Record<string, unknown> | null;
+  uiSpec: unknown;
+}
+
+interface ActiveConflictDerivationOutput {
+  activeConflicts: Array<{
+    preferenceIds: string[];
+    severity: 'blocking' | 'soft';
+    reason: string;
+  }>;
 }
 
 interface LlmTraceEvent {
@@ -37,6 +45,7 @@ interface LlmTraceEvent {
 }
 
 type LlmTraceListener = (event: LlmTraceEvent) => void;
+type ExtractionKind = 'preferences' | 'active_conflicts';
 
 const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
 
@@ -69,173 +78,62 @@ export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
   };
 }
 
-const EXTRACTION_SYSTEM_PROMPT =
-  'You maintain three memory lists for an interactive agent turn.\n' +
-  '- User\'s Preferences: what the user wants, from user intent.\n' +
-  '- System\'s Constraints: objective availability or limitation facts from the system state.\n' +
-  '- Conflicts: contradictions between preferences and constraints.\n' +
-  '\n' +
-  'Inputs include existingPreferences, existingConstraints, existingConflicts, userMessage, updateFocus, trigger, contextHistory, currentStage, visibleItems, itemFacts, uiFlow, and selectedItem.\n' +
-  '\n' +
-  'Update policy:\n' +
-  '- Return the full updated list for all categories on every turn.\n' +
-  '- Start from existing lists, then revise by this turn\'s evidence.\n' +
-  '- If a previous item becomes obsolete, remove it by not including it in the updated list.\n' +
-  '- If no change is needed, return existing lists as-is.\n' +
-  '- updateFocus values: "preferences_conflicts" or "constraints_conflicts".\n' +
-  '- If updateFocus is "preferences_conflicts", keep constraints unchanged unless there is explicit new constraint evidence in the provided inputs.\n' +
-  '- If updateFocus is "constraints_conflicts", keep preferences unchanged unless there is explicit new user intent evidence in the provided inputs.\n' +
-  '\n' +
-  'Preference rules:\n' +
-  '- Preferences must come from user intent, not inferred solely from system state.\n' +
-  '- Ignore trivial acknowledgements that add no durable intent.\n' +
-  '- Keep each item as a short standalone sentence.\n' +
-  '\n' +
-  'Constraint rules:\n' +
-  '- Constraints must be objective system facts, not user desires.\n' +
-  '- Prefer specific, durable facts over temporary UI states.\n' +
-  '- For stage-dependent constraints, include binding context from uiFlow (for example selected movie/theater/date/time) when relevant.\n' +
-  '- Keep each item as a short standalone sentence.\n' +
-  '\n' +
-  'Conflict rules:\n' +
-  '- Add a conflict only when a specific preference cannot currently be satisfied due to constraints.\n' +
-  '- Keep each conflict explicit and actionable.\n' +
-  '- Detect mismatches across any preference dimension (for example time/date, budget, brand, location, content attributes, seating).\n' +
-  '- If current options cannot satisfy a stated preference, add a conflict even when other non-matching options exist.\n' +
-  '- Use currentStage, visibleItems, itemFacts, and uiFlow to decide what is currently satisfiable right now.\n' +
-  '- Keep unresolved conflicts until either preferences change or constraints/options change.\n' +
-  '- Write conflicts with both sides: desired preference + blocking constraint fact.\n' +
-  '\n' +
-  'Output rules:\n' +
-  '- Do not include duplicates.\n' +
-  '- Return JSON only matching this schema: { "updatedPreferences": string[], "updatedConstraints": string[], "updatedConflicts": string[] }';
+const PREFERENCE_SYSTEM_PROMPT =
+  'You maintain the structured user preference memory for an interactive booking agent.\n' +
+  'Inputs include userMessage, currentStage, state, uiSpec, and existingPreferences.\n' +
+  'Return the full updated preference list for the current turn.\n' +
+  'Rules:\n' +
+  '- Preferences must come from user intent, not from system availability.\n' +
+  '- Preserve existing preference wording when the meaning remains unchanged so the system can keep stable ids.\n' +
+  '- Remove obsolete preferences by omitting them from the returned list.\n' +
+  '- Ignore trivial acknowledgements, assistant suggestions, and system state that the user did not ask for.\n' +
+  '- Use strength="hard" for requirements/constraints the user clearly insists on.\n' +
+  '- Use strength="soft" for softer wishes, preferences, or nice-to-haves.\n' +
+  '- Keep each description as a short standalone sentence.\n' +
+  '- Do not include ids in the output.\n' +
+  'Return JSON only matching this schema: { "preferences": Array<{ "description": string, "strength": "hard" | "soft" }> }';
+
+const ACTIVE_CONFLICT_SYSTEM_PROMPT =
+  'You derive the current active conflicts for an interactive booking agent.\n' +
+  'Inputs include currentStage, preferences, state, and raw uiSpec.\n' +
+  'Return only conflicts that are active right now for the current branch.\n' +
+  'Rules:\n' +
+  '- Read the preferences first. Evaluate them one by one against the current state and raw uiSpec.\n' +
+  '- Before declaring a conflict, check whether at least one currently available option still satisfies the preference.\n' +
+  '- If any currently available option satisfies a preference, do not create a conflict for that preference.\n' +
+  '- Use existential satisfaction, not universal satisfaction: a preference is satisfied when at least one currently available option works, even if other matching options are unavailable.\n' +
+  '- Do not treat "some matching options are unavailable" as a conflict when another currently available matching option still exists.\n' +
+  '- Judge conflicts against the set of currently viable options, not against whether every matching option remains available.\n' +
+  '- Only create a conflict when the current branch has no viable option that can satisfy the preference now.\n' +
+  '- A conflict exists only when one or more provided preferences cannot currently be satisfied from the current UI/state.\n' +
+  '- If no conflict is active right now, return an empty list.\n' +
+  '- Never carry over stale or historical conflicts.\n' +
+  '- If the situation is uncertain or not yet evaluable, do not create a conflict.\n' +
+  '- Use only preferenceIds that already exist in the provided preferences input.\n' +
+  '- Use severity="blocking" for hard blockers that prevent progress on the current branch.\n' +
+  '- Use severity="soft" when the branch is viable but misses a soft preference.\n' +
+  '- Keep reason concise, factual, and grounded in the current UI/state.\n' +
+  '- Do not include scope or ids in the output.\n' +
+  'Return JSON only matching this schema: { "activeConflicts": Array<{ "preferenceIds": string[], "severity": "blocking" | "soft", "reason": string }> }';
 
 export function getExtractorSystemPrompt(): string {
-  return EXTRACTION_SYSTEM_PROMPT;
+  return [
+    'Preference Extraction Prompt:',
+    PREFERENCE_SYSTEM_PROMPT,
+    '',
+    'Active Conflict Derivation Prompt:',
+    ACTIVE_CONFLICT_SYSTEM_PROMPT,
+  ].join('\n');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function trimText(value: unknown, maxLength = 240): string | null {
+function readTrimmedString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  if (!trimmed) return null;
-  return trimmed.length <= maxLength ? trimmed : `${trimmed.slice(0, maxLength)}...`;
-}
-
-function compactVisibleItems(value: unknown, maxItems = 8): VisibleItemSummary[] {
-  if (!Array.isArray(value)) return [];
-  const compacted: VisibleItemSummary[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry)) continue;
-    const id = trimText(entry.id, 64);
-    const itemValue = trimText(entry.value, 200);
-    if (!id || !itemValue) continue;
-    compacted.push({
-      id,
-      value: itemValue,
-      disabled: entry.isDisabled === true || entry.disabled === true,
-    });
-    if (compacted.length >= maxItems) break;
-  }
-  return compacted;
-}
-
-function compactSystemSpec(value: unknown): Record<string, unknown> | null {
-  if (!isRecord(value)) return null;
-
-  const stage = trimText(value.stage, 24);
-  const state = isRecord(value.state) ? value.state : null;
-  const selected =
-    state && isRecord(state.selected)
-      ? {
-          id: trimText(state.selected.id, 64),
-          value: trimText(state.selected.value, 200),
-        }
-      : null;
-  const selectedListCount =
-    state && Array.isArray(state.selectedList) ? state.selectedList.length : 0;
-  const modification = isRecord(value.modification) ? value.modification : null;
-
-  const summary: Record<string, unknown> = {};
-  if (stage) summary.stage = stage;
-  if (selected && selected.id && selected.value) summary.selected = selected;
-  if (selectedListCount > 0) summary.selectedListCount = selectedListCount;
-  if (modification) summary.modification = modification;
-  return Object.keys(summary).length > 0 ? summary : null;
-}
-
-function compactMessageEntry(entry: unknown): Record<string, unknown> | null {
-  if (!isRecord(entry)) return null;
-  const type = trimText(entry.type, 16);
-  if (!type) return null;
-
-  const compacted: Record<string, unknown> = { type };
-  const stage = trimText(entry.stage, 24);
-  if (stage) compacted.stage = stage;
-
-  if (type === 'user') {
-    const action = trimText(entry.action, 24);
-    const label = trimText(entry.label, 280);
-    if (action) compacted.action = action;
-    if (label) compacted.label = label;
-    return label || action ? compacted : null;
-  }
-
-  if (type === 'agent') {
-    const text = trimText(entry.text, 320);
-    if (!text) return null;
-    compacted.text = text;
-    return compacted;
-  }
-
-  if (type === 'system') {
-    const spec = compactSystemSpec(entry.spec);
-    const annotation = isRecord(entry.annotation) ? entry.annotation : null;
-    if (spec) compacted.spec = spec;
-    if (annotation) compacted.annotation = annotation;
-    return spec || annotation ? compacted : null;
-  }
-
-  return null;
-}
-
-function compactHistory(history: unknown[]): Record<string, unknown>[] {
-  const compacted: Record<string, unknown>[] = [];
-  for (const entry of history) {
-    const normalized = compactMessageEntry(entry);
-    if (normalized) compacted.push(normalized);
-  }
-  return compacted;
-}
-
-function focusHistoryForConstraintUpdate(
-  history: Record<string, unknown>[]
-): Record<string, unknown>[] {
-  let latestAgentIndex = -1;
-  let latestSystemIndex = -1;
-
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    const type = history[i].type;
-    if (latestAgentIndex < 0 && type === 'agent') {
-      latestAgentIndex = i;
-      continue;
-    }
-    if (latestSystemIndex < 0 && type === 'system') {
-      latestSystemIndex = i;
-    }
-    if (latestAgentIndex >= 0 && latestSystemIndex >= 0) break;
-  }
-
-  const indices = [latestAgentIndex, latestSystemIndex]
-    .filter((index): index is number => index >= 0)
-    .sort((a, b) => a - b);
-  if (indices.length === 0) {
-    return history.slice(-3);
-  }
-  return indices.map((index) => history[index]);
+  return trimmed ? trimmed : null;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -261,177 +159,127 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   return null;
 }
 
-const DAY_TOKEN_TO_UTC: Record<string, number> = {
-  sun: 0,
-  mon: 1,
-  tue: 2,
-  wed: 3,
-  thu: 4,
-  fri: 5,
-  sat: 6,
-};
-
-const UTC_DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-
-function normalizeDayToken(token: string): string {
-  return token.trim().toLowerCase().slice(0, 3);
-}
-
-function isIsoDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-function getUtcWeekdayFromIsoDate(value: string): number | null {
-  if (!isIsoDate(value)) return null;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.getUTCDay();
-}
-
-function getVisibleDateWeekdays(items: VisibleItemSummary[]): Set<number> {
-  const weekdays = new Set<number>();
-  for (const item of items) {
-    const weekdayFromId = getUtcWeekdayFromIsoDate(item.id);
-    if (weekdayFromId !== null) {
-      weekdays.add(weekdayFromId);
-      continue;
-    }
-
-    for (const match of item.value.matchAll(/\b(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/gi)) {
-      const normalized = normalizeDayToken(match[0]);
-      const mapped = DAY_TOKEN_TO_UTC[normalized];
-      if (typeof mapped === 'number') {
-        weekdays.add(mapped);
-      }
-    }
+function toConflictStage(value: string): ConflictStage | null {
+  switch (value) {
+    case 'movie':
+    case 'theater':
+    case 'date':
+    case 'time':
+    case 'seat':
+    case 'confirm':
+      return value;
+    default:
+      return null;
   }
-  return weekdays;
 }
 
-function getVisibleIsoDates(items: VisibleItemSummary[]): Set<string> {
-  const dates = new Set<string>();
-  for (const item of items) {
-    if (isIsoDate(item.id)) {
-      dates.add(item.id);
-    }
+function normalizeDescription(value: unknown): string | null {
+  const text = readTrimmedString(value);
+  if (!text) return null;
+  return text.replace(/\s+/g, ' ');
+}
+
+function normalizePreferenceStrength(value: unknown): Preference['strength'] {
+  return value === 'soft' ? 'soft' : 'hard';
+}
+
+function materializePreferences(raw: PreferenceExtractionOutput): Preference[] {
+  const preferences: Preference[] = [];
+  for (const rawPreference of raw.preferences) {
+    const description = normalizeDescription(rawPreference.description);
+    if (!description) continue;
+    const strength = normalizePreferenceStrength(rawPreference.strength);
+    preferences.push({
+      id: buildPreferenceId(description, strength),
+      description,
+      strength,
+    });
   }
-  return dates;
+  return normalizePreferenceList(preferences);
 }
 
-function mergeUnique(base: string[], extras: string[]): string[] {
-  const seen = new Set<string>();
-  const merged: string[] = [];
-  for (const item of [...base, ...extras]) {
-    const trimmed = item.trim();
-    if (!trimmed || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    merged.push(trimmed);
-  }
-  return merged;
-}
+function materializeActiveConflicts(
+  raw: ActiveConflictDerivationOutput,
+  input: ActiveConflictDerivationInput
+): ActiveConflict[] {
+  const stage = toConflictStage(input.currentStage);
+  if (!stage) return [];
 
-interface TemporalPreferenceSignals {
-  wantsWeekend: boolean;
-  wantsWeekday: boolean;
-  wantedDays: Set<number>;
-  explicitDates: Set<string>;
-}
+  const knownPreferenceIds = new Set(input.preferences.map((item) => item.id));
+  const scope = buildConflictScope(stage, input.state);
+  const conflicts: ActiveConflict[] = [];
 
-function collectTemporalPreferenceSignals(preferences: string[], userMessage: string): TemporalPreferenceSignals {
-  const corpus = `${preferences.join(' ')} ${userMessage}`.toLowerCase();
-  const wantedDays = new Set<number>();
-  for (const match of corpus.matchAll(/\b(sun(?:day)?|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?)\b/g)) {
-    const normalized = normalizeDayToken(match[0]);
-    const mapped = DAY_TOKEN_TO_UTC[normalized];
-    if (typeof mapped === 'number') {
-      wantedDays.add(mapped);
-    }
-  }
-  const explicitDates = new Set<string>(corpus.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? []);
-  return {
-    wantsWeekend: /\bweekend\b/.test(corpus),
-    wantsWeekday: /\bweekday\b/.test(corpus),
-    wantedDays,
-    explicitDates,
-  };
-}
-
-function applyConflictHeuristics(
-  input: ExtractionInput,
-  output: ExtractionOutput
-): ExtractionOutput {
-  const conflictsToAdd: string[] = [];
-  const preferences = output.updatedPreferences;
-
-  if (input.currentStage === 'date') {
-    const signals = collectTemporalPreferenceSignals(preferences, input.userMessage);
-    const visibleWeekdays = getVisibleDateWeekdays(input.visibleItems);
-    const visibleIsoDates = getVisibleIsoDates(input.visibleItems);
-
-    if (signals.wantsWeekend) {
-      const weekendAvailable = visibleWeekdays.has(0) || visibleWeekdays.has(6);
-      if (!weekendAvailable) {
-        conflictsToAdd.push(
-          'The user prefers a weekend date, but the currently available date options do not include Saturday or Sunday.'
-        );
-      }
-    }
-
-    if (signals.wantsWeekday) {
-      const weekdayAvailable = Array.from(visibleWeekdays).some((day) => day >= 1 && day <= 5);
-      if (!weekdayAvailable) {
-        conflictsToAdd.push(
-          'The user prefers a weekday date, but the currently available date options include only weekend dates.'
-        );
-      }
-    }
-
-    if (signals.wantedDays.size > 0) {
-      const hasRequestedDay = Array.from(signals.wantedDays).some((day) => visibleWeekdays.has(day));
-      if (!hasRequestedDay) {
-        const requestedDayLabels = Array.from(signals.wantedDays)
-          .sort((a, b) => a - b)
-          .map((day) => UTC_DAY_LABEL[day] ?? String(day))
-          .join(', ');
-        conflictsToAdd.push(
-          `The user requested specific day(s) (${requestedDayLabels}), but none of the currently available date options match those day(s).`
-        );
-      }
-    }
-
-    if (signals.explicitDates.size > 0) {
-      const hasRequestedDate = Array.from(signals.explicitDates).some((date) => visibleIsoDates.has(date));
-      if (!hasRequestedDate) {
-        const requestedDates = Array.from(signals.explicitDates).sort().join(', ');
-        conflictsToAdd.push(
-          `The user requested specific date(s) (${requestedDates}), but those date(s) are not currently available.`
-        );
-      }
-    }
+  for (const rawConflict of raw.activeConflicts) {
+    const reason = normalizeDescription(rawConflict.reason);
+    if (!reason) continue;
+    const preferenceIds = Array.from(
+      new Set(
+        rawConflict.preferenceIds
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0 && knownPreferenceIds.has(item))
+      )
+    );
+    if (preferenceIds.length === 0) continue;
+    const severity = rawConflict.severity === 'soft' ? 'soft' : 'blocking';
+    const baseConflict = {
+      preferenceIds,
+      scope,
+      severity,
+      reason,
+    } satisfies Omit<ActiveConflict, 'id'>;
+    conflicts.push({
+      ...baseConflict,
+      id: buildActiveConflictId(baseConflict),
+    });
   }
 
-  return {
-    ...output,
-    updatedConflicts: mergeUnique(output.updatedConflicts, conflictsToAdd),
-  };
+  return normalizeActiveConflicts(conflicts);
 }
 
-function toExtractionOutput(value: Record<string, unknown>): ExtractionOutput {
-  const updatedPreferences = Array.isArray(value.updatedPreferences)
-    ? (value.updatedPreferences as unknown[]).filter((item): item is string => typeof item === 'string')
-    : [];
-  const updatedConstraints = Array.isArray(value.updatedConstraints)
-    ? (value.updatedConstraints as unknown[]).filter((item): item is string => typeof item === 'string')
-    : [];
-  const updatedConflicts = Array.isArray(value.updatedConflicts)
-    ? (value.updatedConflicts as unknown[]).filter((item): item is string => typeof item === 'string')
-    : [];
-  return { updatedPreferences, updatedConstraints, updatedConflicts };
+function toPreferenceExtractionOutput(value: Record<string, unknown>): PreferenceExtractionOutput | null {
+  const rawPreferences = Array.isArray(value.preferences) ? value.preferences : null;
+  if (!rawPreferences) return null;
+
+  const preferences: PreferenceExtractionOutput['preferences'] = [];
+  for (const entry of rawPreferences) {
+    if (!isRecord(entry)) continue;
+    const description = normalizeDescription(entry.description);
+    if (!description) continue;
+    preferences.push({
+      description,
+      strength: normalizePreferenceStrength(entry.strength),
+    });
+  }
+
+  return { preferences };
 }
 
-// ── OpenAI ──────────────────────────────────────────────────────────────────
+function toActiveConflictDerivationOutput(
+  value: Record<string, unknown>
+): ActiveConflictDerivationOutput | null {
+  const rawConflicts = Array.isArray(value.activeConflicts) ? value.activeConflicts : null;
+  if (!rawConflicts) return null;
+
+  const activeConflicts: ActiveConflictDerivationOutput['activeConflicts'] = [];
+  for (const entry of rawConflicts) {
+    if (!isRecord(entry)) continue;
+    const preferenceIds = Array.isArray(entry.preferenceIds)
+      ? entry.preferenceIds.filter((item): item is string => typeof item === 'string')
+      : [];
+    const reason = normalizeDescription(entry.reason);
+    if (preferenceIds.length === 0 || !reason) continue;
+    activeConflicts.push({
+      preferenceIds,
+      severity: entry.severity === 'soft' ? 'soft' : 'blocking',
+      reason,
+    });
+  }
+
+  return { activeConflicts };
+}
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_OPENAI_TEMPERATURE = 0;
 const OPENAI_TEMPERATURE_OFF_SENTINELS = new Set(['default', 'none', 'omit', 'off']);
 
@@ -465,6 +313,10 @@ function getOpenAIModel(): string {
   return process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
 }
 
+function getGeminiModel(): string {
+  return process.env.AGENT_GEMINI_MODEL || 'gemini-2.5-flash';
+}
+
 function parseOpenAIOutputText(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null;
   const record = body as Record<string, unknown>;
@@ -487,125 +339,6 @@ function parseOpenAIOutputText(body: unknown): string | null {
     }
   }
   return null;
-}
-
-async function extractWithOpenAI(input: ExtractionInput): Promise<ExtractionOutput | null> {
-  if (process.env.AGENT_ENABLE_OPENAI === 'false') return null;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-
-  const model = getOpenAIModel();
-  const temperature = resolveOpenAITemperature();
-  const schemaProperties = {
-    updatedPreferences: { type: 'array', items: { type: 'string' } },
-    updatedConstraints: { type: 'array', items: { type: 'string' } },
-    updatedConflicts: { type: 'array', items: { type: 'string' } },
-  };
-  const requiredKeys = ['updatedPreferences', 'updatedConstraints', 'updatedConflicts'];
-  const baseBody = {
-    model,
-    input: [
-      {
-        role: 'system',
-        content: EXTRACTION_SYSTEM_PROMPT + '\n- Return JSON only via schema.',
-      },
-      { role: 'user', content: JSON.stringify(input) },
-    ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'extraction_result',
-        strict: false,
-        schema: {
-          type: 'object',
-          properties: schemaProperties,
-          required: requiredKeys,
-          additionalProperties: false,
-        },
-      },
-    },
-  };
-  const body =
-    typeof temperature === 'number'
-      ? { ...baseBody, temperature }
-      : baseBody;
-
-  if (DEBUG_LLM) {
-    console.log('[tuning-agent][extractor:openai] request:', JSON.stringify(input));
-  }
-  emitLlmTrace('request', {
-    model,
-    input,
-    temperature: typeof temperature === 'number' ? temperature : null,
-  });
-
-  let response = await fetch(OPENAI_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const firstErrorText = await response.text();
-    const shouldRetryWithoutTemperature =
-      typeof temperature === 'number' &&
-      isUnsupportedTemperatureError(response.status, firstErrorText);
-
-    if (shouldRetryWithoutTemperature) {
-      if (DEBUG_LLM) {
-        console.warn(
-          '[tuning-agent][extractor:openai] temperature rejected; retrying without temperature'
-        );
-      }
-      emitLlmTrace('request', {
-        model,
-        input,
-        temperature: null,
-        retryWithoutTemperature: true,
-      });
-      response = await fetch(OPENAI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(baseBody),
-      });
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      if (DEBUG_LLM) {
-        console.error('[tuning-agent][extractor:openai] error:', errorText);
-      }
-      emitLlmTrace('error', { status: response.status, errorText });
-      throw new Error(`OpenAI extractor failed (${response.status}): ${errorText}`);
-    }
-  }
-
-  const payload = (await response.json()) as unknown;
-  const outputText = parseOpenAIOutputText(payload);
-  if (DEBUG_LLM) {
-    console.log('[tuning-agent][extractor:openai] raw output:', outputText);
-  }
-  emitLlmTrace('response.raw', { outputText });
-  if (!outputText) return null;
-
-  const parsed = parseJsonObject(outputText);
-  emitLlmTrace('response.parsed', { parsed });
-  if (!parsed) return null;
-  return toExtractionOutput(parsed);
-}
-
-// ── Gemini ──────────────────────────────────────────────────────────────────
-
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-
-function getGeminiModel(): string {
-  return process.env.AGENT_GEMINI_MODEL || 'gemini-2.5-flash';
 }
 
 function extractGeminiText(body: unknown): string | null {
@@ -631,21 +364,114 @@ function extractGeminiText(body: unknown): string | null {
   return null;
 }
 
-async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutput | null> {
+async function callOpenAIJson(
+  kind: ExtractionKind,
+  systemPrompt: string,
+  input: unknown,
+  schema: Record<string, unknown>
+): Promise<Record<string, unknown> | null> {
+  if (process.env.AGENT_ENABLE_OPENAI === 'false') return null;
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const model = getOpenAIModel();
+  const temperature = resolveOpenAITemperature();
+  const baseBody = {
+    model,
+    input: [
+      {
+        role: 'system',
+        content: `${systemPrompt}\n- Return JSON only via schema.`,
+      },
+      { role: 'user', content: JSON.stringify(input) },
+    ],
+    text: {
+      format: {
+        type: 'json_schema',
+        name: `${kind}_result`,
+        strict: false,
+        schema,
+      },
+    },
+  };
+  const body = typeof temperature === 'number' ? { ...baseBody, temperature } : baseBody;
+
+  if (DEBUG_LLM) {
+    console.log(`[tuning-agent][extractor:${kind}:openai] request:`, JSON.stringify(input));
+  }
+  emitLlmTrace('request', {
+    kind,
+    provider: 'openai',
+    model,
+    input,
+    temperature: typeof temperature === 'number' ? temperature : null,
+  });
+
+  let response = await fetch(OPENAI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const firstErrorText = await response.text();
+    const shouldRetryWithoutTemperature =
+      typeof temperature === 'number' &&
+      isUnsupportedTemperatureError(response.status, firstErrorText);
+
+    if (shouldRetryWithoutTemperature) {
+      emitLlmTrace('request', {
+        kind,
+        provider: 'openai',
+        model,
+        input,
+        temperature: null,
+        retryWithoutTemperature: true,
+      });
+      response = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(baseBody),
+      });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      emitLlmTrace('error', { kind, provider: 'openai', status: response.status, errorText });
+      throw new Error(`OpenAI extractor failed (${response.status}): ${errorText}`);
+    }
+  }
+
+  const payload = (await response.json()) as unknown;
+  const outputText = parseOpenAIOutputText(payload);
+  emitLlmTrace('response.raw', { kind, provider: 'openai', outputText });
+  if (!outputText) return null;
+
+  const parsed = parseJsonObject(outputText);
+  emitLlmTrace('response.parsed', { kind, provider: 'openai', parsed });
+  return parsed;
+}
+
+async function callGeminiJson(
+  kind: ExtractionKind,
+  systemPrompt: string,
+  input: unknown
+): Promise<Record<string, unknown> | null> {
   if (process.env.AGENT_ENABLE_GEMINI === 'false') return null;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   const model = getGeminiModel();
   const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
-
   const body = {
     systemInstruction: {
-      parts: [
-        {
-          text: EXTRACTION_SYSTEM_PROMPT,
-        },
-      ],
+      parts: [{ text: systemPrompt }],
     },
     contents: [
       {
@@ -659,9 +485,9 @@ async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutp
   };
 
   if (DEBUG_LLM) {
-    console.log('[tuning-agent][extractor:gemini] request:', JSON.stringify(input));
+    console.log(`[tuning-agent][extractor:${kind}:gemini] request:`, JSON.stringify(input));
   }
-  emitLlmTrace('request', { model, input });
+  emitLlmTrace('request', { kind, provider: 'gemini', model, input });
 
   const response = await fetch(url, {
     method: 'POST',
@@ -671,47 +497,26 @@ async function extractWithGemini(input: ExtractionInput): Promise<ExtractionOutp
 
   if (!response.ok) {
     const errorText = await response.text();
-    if (DEBUG_LLM) {
-      console.error('[tuning-agent][extractor:gemini] error:', errorText);
-    }
-    emitLlmTrace('error', { status: response.status, errorText });
+    emitLlmTrace('error', { kind, provider: 'gemini', status: response.status, errorText });
     throw new Error(`Gemini extractor failed (${response.status}): ${errorText}`);
   }
 
   const payload = (await response.json()) as unknown;
   const outputText = extractGeminiText(payload);
-  if (DEBUG_LLM) {
-    console.log('[tuning-agent][extractor:gemini] raw output:', outputText);
-  }
-  emitLlmTrace('response.raw', { outputText });
+  emitLlmTrace('response.raw', { kind, provider: 'gemini', outputText });
   if (!outputText) return null;
 
   const parsed = parseJsonObject(outputText);
-  emitLlmTrace('response.parsed', { parsed });
-  if (!parsed) return null;
-  return toExtractionOutput(parsed);
+  emitLlmTrace('response.parsed', { kind, provider: 'gemini', parsed });
+  return parsed;
 }
 
-// ── Public API ──────────────────────────────────────────────────────────────
-
-export interface ExtractionContext {
-  userMessage: string;
-  updateFocus: ExtractionFocus;
-  trigger: ExtractionTrigger;
-  currentStage: string;
-  contextHistory: unknown[];
-  visibleItems: VisibleItemSummary[];
-  itemFacts: Record<string, unknown>[];
-  uiFlow: Record<string, unknown>;
-  selectedItem: { id: string; value: string } | null;
-  existingPreferences: string[];
-  existingConstraints: string[];
-  existingConflicts: string[];
-}
-
-export async function extractPreferencesAndConstraints(
-  ctx: ExtractionContext
-): Promise<ExtractionOutput> {
+async function callStructuredExtractor(
+  kind: ExtractionKind,
+  systemPrompt: string,
+  input: unknown,
+  schema: Record<string, unknown>
+): Promise<Record<string, unknown> | null> {
   refreshModelEnvVars();
 
   const geminiEnabled =
@@ -723,46 +528,115 @@ export async function extractPreferencesAndConstraints(
     throw new Error('EXTRACTION_PROVIDER_UNAVAILABLE');
   }
 
-  const updateFocus = ctx.updateFocus;
-  const compactedHistory = compactHistory(ctx.contextHistory.slice(-20));
-  const focusedHistory =
-    updateFocus === 'constraints_conflicts'
-      ? focusHistoryForConstraintUpdate(compactedHistory)
-      : compactedHistory.slice(-8);
+  return geminiEnabled
+    ? await callGeminiJson(kind, systemPrompt, input)
+    : await callOpenAIJson(kind, systemPrompt, input, schema);
+}
 
-  const input: ExtractionInput = {
+export interface PreferenceExtractionContext {
+  userMessage: string;
+  currentStage: string;
+  state: Record<string, unknown> | null;
+  uiSpec: unknown;
+  existingPreferences: Preference[];
+}
+
+export interface ActiveConflictDerivationContext {
+  currentStage: string;
+  state: Record<string, unknown> | null;
+  uiSpec: unknown;
+  preferences: Preference[];
+}
+
+export async function extractStructuredPreferences(
+  ctx: PreferenceExtractionContext
+): Promise<Preference[]> {
+  const input: PreferenceExtractionInput = {
     userMessage: ctx.userMessage,
-    updateFocus,
-    trigger: ctx.trigger,
     currentStage: ctx.currentStage,
-    contextHistory: focusedHistory,
-    visibleItems: ctx.visibleItems,
-    itemFacts: ctx.itemFacts,
-    uiFlow: ctx.uiFlow,
-    selectedItem: ctx.selectedItem,
+    state: ctx.state,
+    uiSpec: ctx.uiSpec,
     existingPreferences: ctx.existingPreferences,
-    existingConstraints: ctx.existingConstraints,
-    existingConflicts: ctx.existingConflicts,
   };
 
-  const result = geminiEnabled
-    ? await extractWithGemini(input)
-    : await extractWithOpenAI(input);
+  const schema = {
+    type: 'object',
+    properties: {
+      preferences: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            description: { type: 'string' },
+            strength: { type: 'string', enum: ['hard', 'soft'] },
+          },
+          required: ['description', 'strength'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['preferences'],
+    additionalProperties: false,
+  };
 
-  if (!result) {
-    throw new Error('EXTRACTION_INVALID_OUTPUT');
+  const parsed = await callStructuredExtractor('preferences', PREFERENCE_SYSTEM_PROMPT, input, schema);
+  if (!parsed) {
+    throw new Error('PREFERENCE_EXTRACTION_INVALID_OUTPUT');
   }
 
-  const normalizedResult =
-    updateFocus === 'constraints_conflicts'
-      ? {
-          ...result,
-          updatedPreferences: ctx.existingPreferences.slice(),
-        }
-      : {
-          ...result,
-          updatedConstraints: ctx.existingConstraints.slice(),
-        };
+  const output = toPreferenceExtractionOutput(parsed);
+  if (!output) {
+    throw new Error('PREFERENCE_EXTRACTION_INVALID_OUTPUT');
+  }
 
-  return applyConflictHeuristics(input, normalizedResult);
+  return materializePreferences(output);
+}
+
+export async function deriveActiveConflicts(
+  ctx: ActiveConflictDerivationContext
+): Promise<ActiveConflict[]> {
+  const input: ActiveConflictDerivationInput = {
+    currentStage: ctx.currentStage,
+    preferences: ctx.preferences,
+    state: ctx.state,
+    uiSpec: ctx.uiSpec,
+  };
+
+  const schema = {
+    type: 'object',
+    properties: {
+      activeConflicts: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            preferenceIds: { type: 'array', items: { type: 'string' } },
+            severity: { type: 'string', enum: ['blocking', 'soft'] },
+            reason: { type: 'string' },
+          },
+          required: ['preferenceIds', 'severity', 'reason'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['activeConflicts'],
+    additionalProperties: false,
+  };
+
+  const parsed = await callStructuredExtractor(
+    'active_conflicts',
+    ACTIVE_CONFLICT_SYSTEM_PROMPT,
+    input,
+    schema
+  );
+  if (!parsed) {
+    throw new Error('ACTIVE_CONFLICT_DERIVATION_INVALID_OUTPUT');
+  }
+
+  const output = toActiveConflictDerivationOutput(parsed);
+  if (!output) {
+    throw new Error('ACTIVE_CONFLICT_DERIVATION_INVALID_OUTPUT');
+  }
+
+  return materializeActiveConflicts(output, input);
 }

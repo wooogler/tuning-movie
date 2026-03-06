@@ -27,11 +27,11 @@ export interface ToolDefinition {
 export const modificationTools: ToolDefinition[] = [
   {
     name: 'filter',
-    description: 'Filter items by a specific field condition',
+    description: 'Add a filter condition for visible items; repeated filter calls accumulate with AND semantics',
     parameters: {
       field: {
         type: 'string',
-        description: 'Field to filter by (e.g., "genre", "rating", "duration")',
+        description: 'Field to filter by (e.g., "genre", "rating", "duration", or "value" for the displayed label)',
       },
       operator: {
         type: 'string',
@@ -61,7 +61,7 @@ export const modificationTools: ToolDefinition[] = [
   },
   {
     name: 'highlight',
-    description: 'Highlight specific items visually',
+    description: 'Highlight one or more candidate items visually without committing to a selection',
     parameters: {
       itemIds: {
         type: 'array',
@@ -81,7 +81,7 @@ export const modificationTools: ToolDefinition[] = [
   },
   {
     name: 'clearModification',
-    description: 'Clear applied modifications',
+    description: 'Clear applied modifications, including all accumulated filter conditions',
     parameters: {
       type: {
         type: 'string',

@@ -70,6 +70,12 @@ function isUiSpec(value: unknown): value is UISpec {
   return typeof candidate.stage === 'string' && typeof candidate.state === 'object';
 }
 
+function sanitizeUiSpecForRelay(uiSpec: UISpec | null): Record<string, unknown> | null {
+  if (!uiSpec) return null;
+  const { state: _state, ...rest } = uiSpec as UISpec & Record<string, unknown>;
+  return rest;
+}
+
 export function useAgentBridge({
   uiSpec,
   messageHistory,
@@ -161,7 +167,7 @@ export function useAgentBridge({
     const current = latestRef.current;
     return {
       sessionId: sessionIdRef.current,
-      uiSpec: current.uiSpec,
+      uiSpec: sanitizeUiSpecForRelay(current.uiSpec),
       messageHistory: current.messageHistory,
       toolSchema: current.toolSchema,
       plannerCpMemoryLimit: normalizeCpMemoryLimit(current.plannerCpMemoryLimit),
@@ -253,7 +259,7 @@ export function useAgentBridge({
             payload: {
               ok: true,
               toolName,
-              ...(immediateUiSpec ? { uiSpec: immediateUiSpec } : {}),
+              ...(immediateUiSpec ? { uiSpec: sanitizeUiSpecForRelay(immediateUiSpec) } : {}),
             },
           });
         } catch (error) {
@@ -383,7 +389,7 @@ export function useAgentBridge({
       type: 'state.updated',
       payload: {
         source: 'host',
-        uiSpec: latestRef.current.uiSpec,
+        uiSpec: sanitizeUiSpecForRelay(latestRef.current.uiSpec),
         messageHistory: latestRef.current.messageHistory,
         toolSchema: latestRef.current.toolSchema,
         plannerCpMemoryLimit: normalizeCpMemoryLimit(latestRef.current.plannerCpMemoryLimit),
