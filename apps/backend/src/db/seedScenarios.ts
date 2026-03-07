@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import Database from 'better-sqlite3';
+import { ensureDbSchema } from './ensureSchema';
 import { buildScenarioSeats } from './scenarioSeatBuilder';
 import {
   getScenarioCatalog,
@@ -26,6 +27,8 @@ function createTables(sqlite: Database.Database): void {
       genre TEXT NOT NULL,
       duration INTEGER NOT NULL,
       rating TEXT NOT NULL,
+      age_rating TEXT NOT NULL DEFAULT 'NR',
+      synopsis TEXT NOT NULL DEFAULT '',
       release_date TEXT NOT NULL
     );
 
@@ -45,6 +48,7 @@ function createTables(sqlite: Database.Database): void {
       screen_number INTEGER NOT NULL,
       date TEXT NOT NULL,
       time TEXT NOT NULL,
+      format TEXT NOT NULL DEFAULT 'Standard',
       total_seats INTEGER NOT NULL
     );
 
@@ -74,6 +78,8 @@ function createTables(sqlite: Database.Database): void {
       seat_id TEXT NOT NULL REFERENCES seats(id)
     );
   `);
+
+  ensureDbSchema(sqlite);
 }
 
 function runBaseSeed(targetDbPath: string): void {
@@ -203,13 +209,13 @@ function seedScenarioFromDataset(templatePath: string, scenario: ScenarioDefinit
     sqlite.exec('PRAGMA foreign_keys = ON');
 
     const insertMovie = sqlite.prepare(
-      'INSERT INTO movies (id, title, genre, duration, rating, release_date) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO movies (id, title, genre, duration, rating, age_rating, synopsis, release_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     const insertTheater = sqlite.prepare(
       'INSERT INTO theaters (id, name, location, screen_count, distance_miles, amenities) VALUES (?, ?, ?, ?, ?, ?)'
     );
     const insertShowing = sqlite.prepare(
-      'INSERT INTO showings (id, movie_id, theater_id, screen_number, date, time, total_seats) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO showings (id, movie_id, theater_id, screen_number, date, time, format, total_seats) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
     const insertSeat = sqlite.prepare(
       'INSERT INTO seats (id, showing_id, row, number, type, price, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -229,6 +235,8 @@ function seedScenarioFromDataset(templatePath: string, scenario: ScenarioDefinit
           JSON.stringify(movie.genre),
           movie.duration,
           movie.rating,
+          movie.ageRating,
+          movie.synopsis,
           movie.releaseDate
         );
       }
@@ -252,6 +260,7 @@ function seedScenarioFromDataset(templatePath: string, scenario: ScenarioDefinit
           showing.screenNumber,
           showing.date,
           showing.time,
+          showing.format,
           showing.totalSeats
         );
       }

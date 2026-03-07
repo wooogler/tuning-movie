@@ -8,6 +8,7 @@ const TIME_PATTERN = /^\d{2}:\d{2}$/;
 
 type SeatType = 'standard' | 'premium' | 'couple';
 type SeatStatus = 'available' | 'occupied';
+type ShowingFormat = 'Standard' | 'IMAX' | '3D';
 
 export interface ScenarioDatasetMovie {
   id: string;
@@ -15,6 +16,8 @@ export interface ScenarioDatasetMovie {
   genre: string[];
   duration: number;
   rating: string;
+  ageRating: string;
+  synopsis: string;
   releaseDate: string;
 }
 
@@ -34,6 +37,7 @@ export interface ScenarioDatasetShowing {
   screenNumber: number;
   date: string;
   time: string;
+  format: ShowingFormat;
   totalSeats: number;
 }
 
@@ -131,6 +135,13 @@ function readNonNegativeNumber(value: unknown): number | null {
   return value;
 }
 
+function readShowingFormat(value: unknown): ShowingFormat | null {
+  if (value === 'Standard' || value === 'IMAX' || value === '3D') {
+    return value;
+  }
+  return null;
+}
+
 function validateDate(value: string): boolean {
   return ISO_DATE_PATTERN.test(value);
 }
@@ -157,6 +168,8 @@ function parseMovie(raw: unknown, index: number, scenarioId: string): ScenarioDa
   const genre = readStringArray(record.genre);
   const duration = readPositiveInteger(record.duration);
   const rating = readString(record.rating);
+  const ageRating = readString(record.ageRating) ?? 'NR';
+  const synopsis = readString(record.synopsis) ?? '';
   const releaseDate = readString(record.releaseDate);
 
   if (!id || !title || !genre || duration === null || !rating || !releaseDate) {
@@ -172,6 +185,8 @@ function parseMovie(raw: unknown, index: number, scenarioId: string): ScenarioDa
     genre,
     duration,
     rating,
+    ageRating,
+    synopsis,
     releaseDate,
   };
 }
@@ -222,6 +237,7 @@ function parseShowing(raw: unknown, index: number, scenarioId: string): Scenario
   const screenNumber = readPositiveInteger(record.screenNumber);
   const date = readString(record.date);
   const time = readString(record.time);
+  const format = readShowingFormat(record.format) ?? 'Standard';
   const totalSeats = readPositiveInteger(record.totalSeats);
 
   if (
@@ -249,6 +265,7 @@ function parseShowing(raw: unknown, index: number, scenarioId: string): Scenario
     screenNumber,
     date,
     time,
+    format,
     totalSeats,
   };
 }

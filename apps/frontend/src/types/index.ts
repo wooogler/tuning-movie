@@ -4,6 +4,8 @@ export interface Movie {
   genre: string[];
   duration: number;
   rating: string;
+  ageRating: string;
+  synopsis: string;
   releaseDate: string;
 }
 
@@ -23,6 +25,7 @@ export interface Showing {
   screenNumber: number;
   date: string;
   time: string;
+  format: 'Standard' | 'IMAX' | '3D';
   availableSeats: number;
   totalSeats: number;
 }

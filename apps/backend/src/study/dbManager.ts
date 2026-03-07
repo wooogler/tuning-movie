@@ -3,6 +3,7 @@ import path from 'path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../db/schema';
+import { ensureDbSchema } from '../db/ensureSchema';
 import type { StudyDb } from './types';
 
 interface SessionDbHandle {
@@ -37,6 +38,7 @@ function ensureRuntimeDir(): string {
 
 function openDb(dbPath: string): SessionDbHandle {
   const sqlite = new Database(dbPath);
+  ensureDbSchema(sqlite);
   const db = drizzle(sqlite, { schema });
   return { db, sqlite, dbPath };
 }

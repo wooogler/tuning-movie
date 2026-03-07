@@ -6,6 +6,8 @@ export const movies = sqliteTable('movies', {
   genre: text('genre').notNull(), // JSON string array
   duration: integer('duration').notNull(), // minutes
   rating: text('rating').notNull(),
+  ageRating: text('age_rating').notNull().default('NR'),
+  synopsis: text('synopsis').notNull().default(''),
   releaseDate: text('release_date').notNull(),
 });
 
@@ -25,6 +27,7 @@ export const showings = sqliteTable('showings', {
   screenNumber: integer('screen_number').notNull(),
   date: text('date').notNull(), // YYYY-MM-DD
   time: text('time').notNull(), // HH:MM
+  format: text('format').notNull().default('Standard'), // Standard, IMAX, 3D
   totalSeats: integer('total_seats').notNull(),
 });
 

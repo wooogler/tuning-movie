@@ -186,6 +186,7 @@ export function createDateItems(
 export interface TimeItem extends DataItem {
   id: string;
   time: string;
+  format: 'Standard' | 'IMAX' | '3D';
   availableSeats: number;
   totalSeats: number;
 }
@@ -199,6 +200,7 @@ export function generateTimeSpec(
   const items: TimeItem[] = showings.map((s) => ({
     id: s.id,
     time: s.time,
+    format: s.format,
     availableSeats: s.availableSeats,
     totalSeats: s.totalSeats,
   }));

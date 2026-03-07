@@ -2,6 +2,7 @@ import '../env';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
+import { ensureDbSchema } from './ensureSchema';
 import { getFixedCurrentDateUtc } from '../studyDate';
 
 const dbPath = process.env.DATABASE_URL || 'tuning-movie.db';
@@ -18,6 +19,8 @@ function createTables() {
       genre TEXT NOT NULL,
       duration INTEGER NOT NULL,
       rating TEXT NOT NULL,
+      age_rating TEXT NOT NULL DEFAULT 'NR',
+      synopsis TEXT NOT NULL DEFAULT '',
       release_date TEXT NOT NULL
     );
 
@@ -37,6 +40,7 @@ function createTables() {
       screen_number INTEGER NOT NULL,
       date TEXT NOT NULL,
       time TEXT NOT NULL,
+      format TEXT NOT NULL DEFAULT 'Standard',
       total_seats INTEGER NOT NULL
     );
 
@@ -66,40 +70,7 @@ function createTables() {
       seat_id TEXT NOT NULL REFERENCES seats(id)
     );
   `);
-
-  const theaterColumnNames = new Set(
-    (
-      sqlite.prepare('PRAGMA table_info(theaters)').all() as Array<{
-        name: string;
-      }>
-    ).map((column) => column.name)
-  );
-
-  const hasDistanceKm = theaterColumnNames.has('distance_km');
-  const hasDistanceMiles = theaterColumnNames.has('distance_miles');
-
-  if (!hasDistanceMiles) {
-    sqlite.exec('ALTER TABLE theaters ADD COLUMN distance_miles REAL NOT NULL DEFAULT 0');
-    if (hasDistanceKm) {
-      sqlite.exec('UPDATE theaters SET distance_miles = distance_km');
-    }
-  }
-
-  if (!theaterColumnNames.has('amenities')) {
-    sqlite.exec("ALTER TABLE theaters ADD COLUMN amenities TEXT NOT NULL DEFAULT '[]'");
-  }
-
-  const seatColumnNames = new Set(
-    (
-      sqlite.prepare('PRAGMA table_info(seats)').all() as Array<{
-        name: string;
-      }>
-    ).map((column) => column.name)
-  );
-
-  if (!seatColumnNames.has('price')) {
-    sqlite.exec('ALTER TABLE seats ADD COLUMN price INTEGER NOT NULL DEFAULT 10');
-  }
+  ensureDbSchema(sqlite);
 
   console.log('Tables created/verified');
 }
@@ -125,6 +96,7 @@ interface ShowingSeed {
   screenNumber: number;
   date: string;
   time: string;
+  format: 'Standard' | 'IMAX' | '3D';
   totalSeats: number;
 }
 
@@ -231,6 +203,16 @@ function getShowtimesForDate(schedule: DailySchedule, date: string): string[] {
   return schedule.weekday;
 }
 
+function getShowingFormat(movieId: MovieId, theaterId: TheaterId): 'Standard' | 'IMAX' | '3D' {
+  if (theaterId === 'ta' && (movieId === 'm4' || movieId === 'm5' || movieId === 'm6')) {
+    return 'IMAX';
+  }
+  if (theaterId === 'tc' && (movieId === 'm3' || movieId === 'm8')) {
+    return '3D';
+  }
+  return 'Standard';
+}
+
 function maxAvailabilityDays(): number {
   let maxDays = 0;
   for (const byTheater of Object.values(AVAILABILITY_DAYS)) {
@@ -265,6 +247,7 @@ function buildShowings(baseDateUtc: Date): ShowingSeed[] {
             screenNumber: MOVIE_SCREEN_NUMBER[movieId],
             date,
             time,
+            format: getShowingFormat(movieId, theaterId),
             totalSeats: 48,
           });
         }
@@ -386,6 +369,8 @@ async function seed() {
       genre: JSON.stringify(['Comedy']),
       duration: 100,
       rating: '4.5',
+      ageRating: 'R',
+      synopsis: 'Three longtime friends turn a quiet reunion weekend into a chain reaction of bad lies and worse decisions.',
       releaseDate: '2024-06-14',
     },
     {
@@ -394,6 +379,8 @@ async function seed() {
       genre: JSON.stringify(['Comedy']),
       duration: 113,
       rating: '4.1',
+      ageRating: 'PG-13',
+      synopsis: 'A burned-out teacher and her former rival fake a polished alumni event while their old chaos resurfaces.',
       releaseDate: '2025-02-21',
     },
     {
@@ -402,6 +389,8 @@ async function seed() {
       genre: JSON.stringify(['Comedy', 'Drama']),
       duration: 121,
       rating: '3.8',
+      ageRating: 'PG-13',
+      synopsis: 'Two coworkers stuck sharing the same flex-office desk keep colliding until their personal lives do too.',
       releaseDate: '2025-08-08',
     },
     {
@@ -410,6 +399,8 @@ async function seed() {
       genre: JSON.stringify(['Action']),
       duration: 152,
       rating: '4.7',
+      ageRating: 'PG-13',
+      synopsis: 'A retired covert operative returns to the field when a surveillance network starts targeting his family.',
       releaseDate: '2024-11-22',
     },
     {
@@ -418,6 +409,8 @@ async function seed() {
       genre: JSON.stringify(['Action']),
       duration: 169,
       rating: '4.3',
+      ageRating: 'R',
+      synopsis: 'An ex-financier with a stolen kill list races across Europe before his former employers erase every witness.',
       releaseDate: '2025-01-17',
     },
     {
@@ -426,6 +419,8 @@ async function seed() {
       genre: JSON.stringify(['Action', 'Drama']),
       duration: 131,
       rating: '3.9',
+      ageRating: 'PG-13',
+      synopsis: 'A rescue pilot and a city engineer fight to evacuate millions as a superstorm twists through Manhattan.',
       releaseDate: '2024-09-13',
     },
     {
@@ -434,6 +429,8 @@ async function seed() {
       genre: JSON.stringify(['Thriller']),
       duration: 149,
       rating: '4.4',
+      ageRating: 'R',
+      synopsis: 'A criminal profiler chases a suspect who appears at every crime scene hours before the victims do.',
       releaseDate: '2025-10-03',
     },
     {
@@ -442,6 +439,8 @@ async function seed() {
       genre: JSON.stringify(['Romance']),
       duration: 128,
       rating: '4.2',
+      ageRating: 'PG',
+      synopsis: 'Two strangers in a blackout spend one impossible night walking the city and rewriting their future plans.',
       releaseDate: '2025-12-12',
     },
   ];
@@ -502,7 +501,7 @@ async function seed() {
   );
 
   const insertShowing = sqlite.prepare(
-    'INSERT INTO showings (id, movie_id, theater_id, screen_number, date, time, total_seats) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO showings (id, movie_id, theater_id, screen_number, date, time, format, total_seats) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   );
 
   const insertAllShowings = sqlite.transaction(() => {
@@ -514,6 +513,7 @@ async function seed() {
         showing.screenNumber,
         showing.date,
         showing.time,
+        showing.format,
         showing.totalSeats
       );
     }

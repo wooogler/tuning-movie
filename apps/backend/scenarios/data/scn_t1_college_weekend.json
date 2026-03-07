@@ -9,6 +9,8 @@
       ],
       "duration": 110,
       "rating": "4.2",
+      "ageRating": "PG-13",
+      "synopsis": "Two officemates forced into one shared desk arrangement discover their best chemistry starts after work hours.",
       "releaseDate": "2025-08-08"
     },
     {
@@ -20,6 +22,8 @@
       ],
       "duration": 105,
       "rating": "4.5",
+      "ageRating": "PG-13",
+      "synopsis": "A struggling comic and her ex agree to fake a tour comeback and accidentally sell the old spark as real.",
       "releaseDate": "2025-02-14"
     },
     {
@@ -31,6 +35,8 @@
       ],
       "duration": 190,
       "rating": "4.3",
+      "ageRating": "PG",
+      "synopsis": "A malfunctioning cruise to Mars becomes a workplace comedy when the passengers realize the captain is an improv actor.",
       "releaseDate": "2026-03-15"
     },
     {
@@ -41,6 +47,8 @@
       ],
       "duration": 100,
       "rating": "1.5",
+      "ageRating": "PG",
+      "synopsis": "A dance contest at a failing mall spirals into chaos when every team thinks the prize money is already theirs.",
       "releaseDate": "2024-10-11"
     },
     {
@@ -52,6 +60,8 @@
       ],
       "duration": 128,
       "rating": "3.7",
+      "ageRating": "PG-13",
+      "synopsis": "An air-defense engineer uncovers a sabotage plot hours before a next-generation weapons test goes live.",
       "releaseDate": "2025-12-01"
     },
     {
@@ -62,6 +72,8 @@
       ],
       "duration": 116,
       "rating": "3.9",
+      "ageRating": "PG",
+      "synopsis": "A daughter sorts through her late father's unsent letters and finds a love story no one in the family knew.",
       "releaseDate": "2025-09-20"
     }
   ],
