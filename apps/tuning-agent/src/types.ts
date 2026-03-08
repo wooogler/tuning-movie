@@ -1,4 +1,5 @@
 export const PROTOCOL_VERSION = 'mvp-0.2';
+export const CONFLICT_STAGES = ['movie', 'theater', 'date', 'time', 'seat', 'confirm'] as const;
 
 export interface RelayEnvelope {
   v?: string;
@@ -15,12 +16,13 @@ export interface ToolSchemaItem {
   params?: unknown;
 }
 
-export type ConflictStage = 'movie' | 'theater' | 'date' | 'time' | 'seat' | 'confirm';
+export type ConflictStage = (typeof CONFLICT_STAGES)[number];
 
 export interface Preference {
   id: string;
   description: string;
   strength: 'hard' | 'soft';
+  relevantStages: ConflictStage[];
 }
 
 export interface ConflictScope {
@@ -61,6 +63,7 @@ export interface SnapshotStatePayload {
   toolSchema: ToolSchemaItem[];
   plannerCpMemoryLimit?: number;
   plannerCpEnabled?: boolean;
+  guiAdaptationEnabled?: boolean;
 }
 
 export interface StateUpdatedPayload {
@@ -70,6 +73,7 @@ export interface StateUpdatedPayload {
   toolSchema: ToolSchemaItem[];
   plannerCpMemoryLimit?: number;
   plannerCpEnabled?: boolean;
+  guiAdaptationEnabled?: boolean;
 }
 
 export interface PerceivedContext {
@@ -79,6 +83,7 @@ export interface PerceivedContext {
   messageHistoryTail: unknown[];
   toolSchema: ToolSchemaItem[];
   plannerCpMemoryLimit: number;
+  guiAdaptationEnabled: boolean;
   lastUserMessage: UserMessagePayload | null;
   lastUpdatedAt: string;
 }

@@ -27,11 +27,13 @@ export interface ToolDefinition {
 export const modificationTools: ToolDefinition[] = [
   {
     name: 'filter',
-    description: 'Add a filter condition for visible items; repeated filter calls accumulate with AND semantics',
+    description:
+      'Add a filter condition for visible items; repeated filter calls accumulate with AND semantics. Use only criteria the user explicitly asked for and can already see in the UI, or information already surfaced through the UI.',
     parameters: {
       field: {
         type: 'string',
-        description: 'Field to filter by (e.g., "genre", "rating", "duration", or "value" for the displayed label)',
+        description:
+          'Field to filter by. Prefer user-visible fields such as "value" or other information already surfaced in the UI; do not rely on hidden-only metadata without surfacing it first, and do not add a new filtering objective the user did not ask for.',
       },
       operator: {
         type: 'string',
@@ -46,11 +48,13 @@ export const modificationTools: ToolDefinition[] = [
   },
   {
     name: 'sort',
-    description: 'Sort items by a specific field',
+    description:
+      'Sort items by a specific field only when that ordering basis is already visible or has already been surfaced to the user through the UI, and the user explicitly asked for that comparison objective.',
     parameters: {
       field: {
         type: 'string',
-        description: 'Field to sort by (e.g., "title", "duration", "price")',
+        description:
+          'Field to sort by. Prefer user-visible or already-surfaced comparison fields; avoid hidden-only metadata until it has been exposed to the user. Do not use this to impose an inferred tie-breaker such as rating unless the user asked for it.',
       },
       order: {
         type: 'string',
@@ -61,21 +65,24 @@ export const modificationTools: ToolDefinition[] = [
   },
   {
     name: 'highlight',
-    description: 'Highlight one or more candidate items visually without committing to a selection',
+    description:
+      'Highlight one or more candidate items visually without committing to a selection. Only highlight options based on distinctions the user can already see in the UI.',
     parameters: {
       itemIds: {
         type: 'array',
-        description: 'Array of item IDs to highlight',
+        description: 'Array of item IDs to highlight when their relevance is legible from currently visible information',
       },
     },
   },
   {
     name: 'augment',
-    description: 'Change the display value of specific items',
+    description:
+      'Change the display value of specific items to surface short information tied to the user\'s stated criterion without committing to a selection. Do not use this to add a new comparison dimension.',
     parameters: {
       items: {
         type: 'array',
-        description: 'Array of { itemId: string, value: string } to change display values',
+        description:
+          'Array of { itemId: string, value: string } to change display values by adding short criterion-relevant facts while keeping the original option recognizable',
       },
     },
   },
@@ -102,11 +109,13 @@ export const modificationTools: ToolDefinition[] = [
 export const interactionTools: ToolDefinition[] = [
   {
     name: 'select',
-    description: 'Select an item in the current stage',
+    description:
+      'Select an item in the current stage only when the user has clearly chosen that specific option, or when exactly one visible enabled option remains under the user\'s explicit criteria',
     parameters: {
       itemId: {
         type: 'string',
-        description: 'Item ID to select',
+        description:
+          'Item ID to select. Do not use this to break a tie among multiple viable options based on an inferred default or ranking.',
       },
     },
   },

@@ -73,9 +73,40 @@ const monitor = new AgentMonitorServer({
     extractor: isBaselineMode ? 'Disabled in baseline mode.' : getExtractorSystemPrompt(),
   },
 });
+
+function extractSystemPromptFromTracePayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const record = payload as Record<string, unknown>;
+
+  const direct = typeof record.systemPrompt === 'string' && record.systemPrompt.trim()
+    ? record.systemPrompt.trim()
+    : null;
+  if (direct) return direct;
+
+  const body =
+    record.body && typeof record.body === 'object' && !Array.isArray(record.body)
+      ? (record.body as Record<string, unknown>)
+      : null;
+  const input = body && Array.isArray(body.input) ? body.input : [];
+  if (input.length === 0) return null;
+  const firstMessage =
+    input[0] && typeof input[0] === 'object' && !Array.isArray(input[0])
+      ? (input[0] as Record<string, unknown>)
+      : null;
+  const content =
+    firstMessage && typeof firstMessage.content === 'string' && firstMessage.content.trim()
+      ? firstMessage.content.trim()
+      : null;
+  return content;
+}
+
 const llmTraceHandler = (event: { component?: string; type: string; payload: unknown }) => {
   const component =
     typeof event.component === 'string' && event.component.trim() ? event.component.trim() : 'unknown';
+  const systemPrompt = extractSystemPromptFromTracePayload(event.payload);
+  if (event.type === 'request' && systemPrompt && (component === 'planner' || component === 'extractor')) {
+    monitor.updateLlmSystemPrompt(component, systemPrompt);
+  }
   monitor.pushEvent(`llm.${component}.${event.type}`, event.payload);
 };
 const unsubscribePlannerLlmTrace = isBaselineMode
@@ -376,6 +407,8 @@ function toSnapshotPayload(value: unknown): SnapshotStatePayload {
     plannerCpMemoryLimit: resolvePlannerCpMemoryLimit(payload, DEFAULT_CP_MEMORY_LIMIT),
     plannerCpEnabled:
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
+    guiAdaptationEnabled:
+      typeof payload.guiAdaptationEnabled === 'boolean' ? payload.guiAdaptationEnabled : undefined,
   };
 }
 
@@ -389,6 +422,8 @@ function toStateUpdatedPayload(value: unknown): StateUpdatedPayload {
     plannerCpMemoryLimit: resolvePlannerCpMemoryLimit(payload, DEFAULT_CP_MEMORY_LIMIT),
     plannerCpEnabled:
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
+    guiAdaptationEnabled:
+      typeof payload.guiAdaptationEnabled === 'boolean' ? payload.guiAdaptationEnabled : undefined,
   };
 }
 

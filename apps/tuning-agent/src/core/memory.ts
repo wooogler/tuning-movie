@@ -30,7 +30,10 @@ export class AgentMemory {
   }
 
   getPreferences(): Preference[] {
-    return this.preferences.map((item) => ({ ...item }));
+    return this.preferences.map((item) => ({
+      ...item,
+      relevantStages: item.relevantStages.slice(),
+    }));
   }
 
   getActiveConflicts(): ActiveConflict[] {

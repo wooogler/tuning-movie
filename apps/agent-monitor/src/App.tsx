@@ -126,6 +126,45 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
+function parseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return asRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function getTraceRequestBody(request: unknown): Record<string, unknown> | null {
+  const requestRecord = asRecord(request);
+  if (!requestRecord) return null;
+  return asRecord(requestRecord.body) ?? requestRecord;
+}
+
+function getTraceRequestUserInput(request: unknown): Record<string, unknown> | null {
+  const body = getTraceRequestBody(request);
+  const input = body && Array.isArray(body.input) ? body.input : [];
+  for (const rawMessage of input) {
+    const message = asRecord(rawMessage);
+    if (!message || message.role !== 'user') continue;
+    if (typeof message.content === 'string' && message.content.trim()) {
+      return parseJsonRecord(message.content);
+    }
+  }
+  return null;
+}
+
+function getTraceRequestDisplayValue(request: unknown): unknown {
+  return getTraceRequestUserInput(request) ?? request;
+}
+
+function getTraceRequestSchemaName(request: unknown): string | null {
+  const body = getTraceRequestBody(request);
+  const text = asRecord(body?.text);
+  const format = asRecord(text?.format);
+  return typeof format?.name === 'string' && format.name.trim() ? format.name.trim() : null;
+}
+
 function getLlmEventType(event: MonitorEvent): 'request' | 'response.raw' | 'response.parsed' | 'error' | null {
   if (!event.type.startsWith('llm.')) return null;
 
@@ -171,7 +210,19 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
     let current = currentByComponent[component];
 
     if (llmEventType === 'request') {
-      if (current) interactions.push(current);
+      if (current) {
+        const isRetryRequest =
+          current.raw === null &&
+          current.parsed === null &&
+          current.error === null;
+        if (isRetryRequest) {
+          // Retries can emit another request before any terminal event arrives.
+          // Keep a single card for the logical interaction instead of leaving a stale pending entry behind.
+          current.request = event.payload;
+          continue;
+        }
+        interactions.push(current);
+      }
       currentByComponent[component] = {
         id: event.index,
         timestamp: event.timestamp,
@@ -235,6 +286,8 @@ function getComponentLabel(
 }
 
 function getExtractorRequestInput(request: unknown): Record<string, unknown> | null {
+  const fromTraceBody = getTraceRequestUserInput(request);
+  if (fromTraceBody) return fromTraceBody;
   const requestRecord = asRecord(request);
   if (!requestRecord) return null;
   const nestedInput = asRecord(requestRecord.input);
@@ -242,6 +295,10 @@ function getExtractorRequestInput(request: unknown): Record<string, unknown> | n
 }
 
 function getExtractorBadge(request: unknown): ExtractorBadge | null {
+  const schemaName = getTraceRequestSchemaName(request);
+  if (schemaName === 'preferences_result') return 'preferences';
+  if (schemaName === 'active_conflicts_result') return 'active_conflicts';
+
   const requestRecord = asRecord(request);
   const kind = requestRecord?.kind;
   if (kind === 'preferences' || kind === 'active_conflicts') {
@@ -405,6 +462,10 @@ export default function App() {
       selectedLlmInteraction?.component === 'extractor'
         ? getExtractorTrigger(selectedLlmInteraction.request)
         : null,
+    [selectedLlmInteraction]
+  );
+  const selectedLlmRequestDisplayValue = useMemo(
+    () => (selectedLlmInteraction ? getTraceRequestDisplayValue(selectedLlmInteraction.request) : null),
     [selectedLlmInteraction]
   );
   const recentEvents = useMemo(() => events.slice().reverse().slice(0, 160), [events]);
@@ -650,7 +711,7 @@ export default function App() {
             <section className="rounded-2xl border border-ink-700/70 bg-ink-900/50 p-4">
               <h2 className="mb-1 text-sm font-semibold text-mist-200">System Prompts</h2>
               <p className="mb-3 text-xs text-mist-300">
-                Prompts currently loaded by this agent process for each LLM component.
+                Most recent composed system prompts actually sent for each LLM component.
               </p>
               <div className="grid gap-3 xl:grid-cols-2">
                 <PromptBlock
@@ -729,7 +790,7 @@ export default function App() {
                     </span>
                   </div>
                   <div className="grid gap-3 lg:grid-cols-2">
-                    <TraceBlock title="Request" value={item.request} copyable />
+                    <TraceBlock title="Request" value={getTraceRequestDisplayValue(item.request)} copyable />
                     <TraceBlock title="Response" value={item.parsed} copyable />
                   </div>
                   {item.error !== null && item.error !== undefined ? (
@@ -803,7 +864,7 @@ export default function App() {
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-5">
               <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
-                <TraceBlock fillHeight title="Request" value={selectedLlmInteraction.request} copyable />
+                <TraceBlock fillHeight title="Request" value={selectedLlmRequestDisplayValue} copyable />
                 <TraceBlock fillHeight title="Response" value={selectedLlmInteraction.parsed} copyable />
               </div>
               {selectedLlmInteraction.error !== null && selectedLlmInteraction.error !== undefined ? (

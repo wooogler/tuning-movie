@@ -9,8 +9,6 @@ interface MessageListProps {
   messages: ChatMessage[];
   activeSpec: UISpec | null;
   isAgentTyping?: boolean;
-  agentLoadingLabel?: string;
-  agentLoadingDetail?: string;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
   onNext?: () => void;
@@ -26,8 +24,6 @@ export function MessageList({
   messages,
   activeSpec,
   isAgentTyping = false,
-  agentLoadingLabel,
-  agentLoadingDetail,
   onSelect,
   onToggle,
   onNext,
@@ -138,23 +134,13 @@ export function MessageList({
                 className="rounded-2xl rounded-tl-sm px-4 py-3 bg-info-bg border border-info-border text-info-text"
                 role="status"
                 aria-live="polite"
-                aria-label={agentLoadingLabel ?? 'Agent is typing'}
+                aria-label="Agent is typing"
               >
                 <div className="flex items-center gap-1">
                   <span className="typing-dot" />
                   <span className="typing-dot typing-dot-delay-1" />
                   <span className="typing-dot typing-dot-delay-2" />
                 </div>
-                {(agentLoadingLabel || agentLoadingDetail) && (
-                  <div className="mt-3 space-y-1">
-                    {agentLoadingLabel ? (
-                      <div className="text-sm font-medium">{agentLoadingLabel}</div>
-                    ) : null}
-                    {agentLoadingDetail ? (
-                      <div className="text-xs text-info-label">{agentLoadingDetail}</div>
-                    ) : null}
-                  </div>
-                )}
               </div>
             </div>
           </div>

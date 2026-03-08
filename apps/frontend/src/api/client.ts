@@ -143,12 +143,7 @@ export const api = {
     fetchApi<{ booking: Booking }>(`/bookings/${id}`, { method: 'DELETE' }),
 
   // Agent config
-  getAgentModel: () => fetchApi<{ model: 'openai' | 'gemini' }>('/agent/config/model'),
-  setAgentModel: (model: 'openai' | 'gemini') =>
-    fetchApi<{ model: 'openai' | 'gemini' }>('/agent/config/model', {
-      method: 'PUT',
-      body: JSON.stringify({ model }),
-    }),
+  getAgentModel: () => fetchApi<{ model: 'openai' }>('/agent/config/model'),
   getGuiAdaptationConfig: () => fetchApi<{ enabled: boolean }>('/agent/config/gui-adaptation'),
   setGuiAdaptationConfig: (enabled: boolean) =>
     fetchApi<{ enabled: boolean }>('/agent/config/gui-adaptation', {

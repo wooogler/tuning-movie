@@ -76,23 +76,16 @@ npm run db:seed
 cd ../..
 ```
 
-#### 4. Configure LLM Provider
+#### 4. Configure LLM
 
-Copy and edit the root `.env` file. Set your API keys and choose which model to enable:
+Copy and edit the root `.env` file. Set your OpenAI API key:
 
 ```bash
 # OpenAI
 OPENAI_API_KEY=sk-...
 AGENT_OPENAI_MODEL=gpt-5.2
 AGENT_ENABLE_OPENAI=true
-
-# Gemini
-GEMINI_API_KEY=...
-AGENT_GEMINI_MODEL=gemini-2.5-flash
-AGENT_ENABLE_GEMINI=false
 ```
-
-Set one provider to `true` and the other to `false`. You can also switch models at runtime from the frontend UI when the agent is ON.
 
 #### 5. Start Development Servers
 

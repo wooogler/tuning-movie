@@ -47,8 +47,6 @@ interface StageContext {
 
 type ViewMode = 'chat' | 'carousel';
 type Theme = 'dark' | 'light';
-type AgentModel = 'openai' | 'gemini';
-
 interface ChatPageProps {
   theme: Theme;
   onThemeToggle: () => void;
@@ -82,7 +80,6 @@ const guiAdaptationToolsByStage: Record<Stage, readonly string[]> = {
 const baselineAutoAdvanceStages = new Set<Stage>(['movie', 'theater', 'date', 'time']);
 const AGENT_BRIDGE_ENABLED_STORAGE_KEY = 'tuning-movie-agent-bridge-enabled';
 const PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY = 'tuning-movie-planner-cp-memory-limit';
-const AGENT_MODEL_STORAGE_KEY = 'tuning-movie-agent-model';
 const GUI_ADAPTATION_ENABLED_STORAGE_KEY = 'tuning-movie-gui-adaptation-enabled';
 const SHOW_STUDY_CONTROL_BUTTONS = !import.meta.env.PROD;
 
@@ -117,11 +114,6 @@ function readStoredNonNegativeInt(key: string, fallback: number): number {
   const parsed = Number.parseInt(stored, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(0, parsed);
-}
-
-function readStoredAgentModel(key: string, fallback: AgentModel): AgentModel {
-  const stored = readStorageValue(key);
-  return stored === 'openai' || stored === 'gemini' ? stored : fallback;
 }
 
 function canUseNextTool(spec: UISpec): boolean {
@@ -269,13 +261,9 @@ export function ChatPage({
   const [plannerCpMemoryLimit, setPlannerCpMemoryLimit] = useState<number>(() =>
     readStoredNonNegativeInt(PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY, 10)
   );
-  const [agentModel, setAgentModel] = useState<AgentModel>(() =>
-    readStoredAgentModel(AGENT_MODEL_STORAGE_KEY, 'openai')
-  );
   const [guiAdaptationEnabled, setGuiAdaptationEnabled] = useState<boolean>(() =>
     readStoredBoolean(GUI_ADAPTATION_ENABLED_STORAGE_KEY, true)
   );
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [carouselOffset, setCarouselOffset] = useState(0);
   const [carouselOpacity, setCarouselOpacity] = useState(1);
   const [chatWidthPx, setChatWidthPx] = useState(DEFAULT_CHAT_WIDTH_PX);
@@ -493,13 +481,7 @@ export function ChatPage({
             const data = await api.getSeats(bookingCtx.showing.id);
             setBackendData({ seats: data.seats });
             const spec = withBookingContext(
-              generateSeatSpec(
-                data.seats,
-                bookingCtx.movie.id,
-                bookingCtx.theater.id,
-                bookingCtx.date,
-                bookingCtx.showing.id
-              ),
+              generateSeatSpec(data.seats),
               bookingCtx
             );
             addSystemMessage('seat', spec);
@@ -561,10 +543,6 @@ export function ChatPage({
   }, [loadStageData]);
 
   useEffect(() => {
-    api.getAgentModel().then((res) => setAgentModel(res.model)).catch(() => {});
-  }, []);
-
-  useEffect(() => {
     if (studyModeConfig) return;
     api.getGuiAdaptationConfig().then((res) => setGuiAdaptationEnabled(res.enabled)).catch(() => {});
   }, [studyModeConfig]);
@@ -578,18 +556,8 @@ export function ChatPage({
   }, [plannerCpMemoryLimit]);
 
   useEffect(() => {
-    writeStorageValue(AGENT_MODEL_STORAGE_KEY, agentModel);
-  }, [agentModel]);
-
-  useEffect(() => {
     writeStorageValue(GUI_ADAPTATION_ENABLED_STORAGE_KEY, String(guiAdaptationEnabled));
   }, [guiAdaptationEnabled]);
-
-  const handleModelToggle = useCallback((model: AgentModel) => {
-    setAgentModel(model);
-    setModelPickerOpen(false);
-    api.setAgentModel(model).catch(() => {});
-  }, []);
 
   const handleGuiAdaptationToggle = useCallback(() => {
     const nextEnabled = !guiAdaptationEnabled;
@@ -1005,7 +973,6 @@ export function ChatPage({
     sendSessionResetToAgent,
     isConnected: isAgentBridgeConnected,
     isJoined: isAgentBridgeJoined,
-    joinedSessionId: agentSessionId,
     connectedAgents,
     agentActivityPhase,
     agentStatusSupported,
@@ -1013,6 +980,7 @@ export function ChatPage({
     uiSpec: activeSpec,
     messageHistory: messages,
     toolSchema: agentToolSchema,
+    guiAdaptationEnabled,
     plannerCpMemoryLimit,
     sessionId: studySession?.relaySessionId,
     studyToken: studySession?.studyToken,
@@ -1069,8 +1037,6 @@ export function ChatPage({
   }, [sendSessionResetToAgent, handleBookAnotherLocal]);
 
   const handleAgentBridgeToggle = useCallback(() => {
-    setModelPickerOpen(false);
-
     const nextEnabled = !agentBridgeEnabled;
     if (agentBridgeEnabled) {
       pendingAgentToggleResetReasonRef.current = null;
@@ -1088,7 +1054,6 @@ export function ChatPage({
     if (appliedStudyModePresetRef.current === studyModePreset) return;
     appliedStudyModePresetRef.current = studyModePreset;
 
-    setModelPickerOpen(false);
     setAgentBridgeEnabled(studyModeConfig.agentEnabled);
     setGuiAdaptationEnabled(studyModeConfig.guiAdaptationEnabled);
     setPlannerCpMemoryLimit(studyModeConfig.cpMemoryWindow);
@@ -1110,7 +1075,6 @@ export function ChatPage({
   const previousStage = getPrevStage(currentStage);
   const nextStage = getNextStage(currentStage);
   const hasConnectedAgent = connectedAgents.length > 0;
-  const connectedAgentNames = connectedAgents.map((agent) => agent.name).join(', ');
   const hasLiveAgentSession =
     agentBridgeEnabled &&
     isAgentBridgeConnected &&
@@ -1124,17 +1088,6 @@ export function ChatPage({
       : 'idle';
   const isAgentTyping = hasLiveAgentSession && effectiveAgentActivityPhase !== 'idle';
   const interactionLocked = loading || isAgentTyping;
-  const agentLoadingLabel =
-    effectiveAgentActivityPhase === 'executing'
-      ? 'Agent is applying the next action...'
-      : 'Agent is planning on this step...';
-  const agentLoadingDetail = 'User input and GUI interactions are temporarily locked.';
-  const interactionLockLabel = isAgentTyping
-    ? agentLoadingLabel
-    : 'Loading the current step...';
-  const interactionLockDetail = isAgentTyping
-    ? agentLoadingDetail
-    : 'Please wait until the UI finishes updating.';
 
   useEffect(() => {
     if (!hasLiveAgentSession) {
@@ -1186,38 +1139,6 @@ export function ChatPage({
     !isAgentBridgeConnected ||
     !isAgentBridgeJoined ||
     !hasConnectedAgent;
-  const inputStatusLabel = interactionLocked
-    ? interactionLockLabel
-    : !agentBridgeEnabled
-    ? 'Agent connection is off'
-    : !isAgentBridgeConnected
-    ? 'Relay disconnected'
-    : !isAgentBridgeJoined
-    ? 'Joining agent session...'
-    : !hasConnectedAgent
-    ? isBaselineMode
-      ? 'No baseline router connected'
-      : 'No external agent connected'
-    : isBaselineMode
-    ? 'Baseline router connected'
-    : 'External agent connected';
-  const inputStatusTone: 'default' | 'warning' | 'success' = interactionLocked
-    ? 'default'
-    : !agentBridgeEnabled ||
-      !isAgentBridgeConnected ||
-      !isAgentBridgeJoined ||
-      !hasConnectedAgent
-    ? 'warning'
-    : 'success';
-  const inputStatusDetail = interactionLocked
-    ? interactionLockDetail
-    : !agentBridgeEnabled
-    ? 'Toggle Agent ON to reconnect.'
-    : isAgentBridgeJoined
-    ? `session: ${agentSessionId ?? 'unknown'}${
-        hasConnectedAgent ? ` · agent: ${connectedAgentNames}` : ''
-      }`
-    : undefined;
 
   const stageSpecMap = useMemo(() => {
     const map = new Map<Stage, UISpec>();
@@ -1374,38 +1295,8 @@ export function ChatPage({
                   />
                 </label>
                 {agentBridgeEnabled && !isBaselineMode && (
-                  <div className="relative flex">
-                    <button
-                      type="button"
-                      onClick={() => setModelPickerOpen((prev) => !prev)}
-                      disabled={sessionLocked}
-                      className="px-3 py-1 text-xs rounded border border-info-border text-info-label hover:border-info-label hover:text-info-text transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {agentModel === 'openai' ? 'gpt-5.2' : 'gemini-2.5-flash'}
-                    </button>
-                    {modelPickerOpen && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setModelPickerOpen(false)} />
-                        <div className="absolute left-0 top-full z-20 mt-1 flex flex-col gap-1">
-                          {([['openai', 'gpt-5.2'], ['gemini', 'gemini-2.5-flash']] as const).map(
-                            ([id, label]) => (
-                              <button
-                                key={id}
-                                type="button"
-                                onClick={() => handleModelToggle(id)}
-                                className={`px-3 py-1 text-xs rounded border whitespace-nowrap transition-colors ${
-                                  agentModel === id
-                                    ? 'border-info-label text-info-text bg-info-bg'
-                                    : 'border-info-border text-info-label bg-dark hover:border-info-label hover:text-info-text'
-                                }`}
-                              >
-                                {label}
-                              </button>
-                            )
-                          )}
-                        </div>
-                      </>
-                    )}
+                  <div className="rounded border border-info-border px-3 py-1 text-xs text-info-label">
+                    gpt-5.2
                   </div>
                 )}
                 {agentBridgeEnabled && isBaselineMode && (
@@ -1450,8 +1341,6 @@ export function ChatPage({
             messages={messages}
             activeSpec={activeSpec}
             isAgentTyping={isAgentTyping}
-            agentLoadingLabel={agentLoadingLabel}
-            agentLoadingDetail={agentLoadingDetail}
             onSelect={handleSelect}
             onToggle={handleToggle}
             onNext={handleNext}
@@ -1597,13 +1486,8 @@ export function ChatPage({
             chatWidthPx={chatWidthPx}
             disabled={inputDisabled}
             onSubmit={handleChatInputSubmit}
-            statusLabel={inputStatusLabel}
-            statusDetail={inputStatusDetail}
-            statusTone={inputStatusTone}
             placeholder={
-              interactionLocked
-                ? interactionLockLabel
-                : !isAgentBridgeConnected
+              !isAgentBridgeConnected
                 ? 'Waiting for agent relay connection...'
                 : !isAgentBridgeJoined
                 ? 'Joining agent session...'
@@ -1617,14 +1501,6 @@ export function ChatPage({
         )}
       </div>
       </div>
-      {interactionLocked && (
-        <div className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center bg-dark/35 px-4 py-6">
-          <div className="rounded-2xl border border-info-border bg-dark-light/95 px-4 py-3 text-center shadow-xl backdrop-blur-sm">
-            <div className="text-sm font-medium text-info-text">{interactionLockLabel}</div>
-            <div className="mt-1 text-xs text-info-label">{interactionLockDetail}</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

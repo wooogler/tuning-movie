@@ -19,7 +19,7 @@ export interface PlannerWorkflow {
   stageGoal: string;
   proceedRule: string;
   availableToolNames: string[];
-  guardrails: string[];
+  guiAdaptationEnabled?: boolean;
   state?: Record<string, unknown>;
   memory?: PlannerWorkflowMemory;
   cpMemoryEnabled?: boolean;
@@ -148,30 +148,18 @@ function toPlannerOutput(value: Record<string, unknown>): PlannerOutput | null {
   };
 }
 
-const BASE_SYSTEM_PROMPT =
-  'You are a UI agent. Pick exactly one next step that best reflects user intent and current GUI state.\n' +
-  'Constraints:\n' +
+const CORE_SYSTEM_PROMPT =
+  'You are a movie-booking decision-support assistant. Read the frontend state from the user\'s point of view and help the user make their own choice.\n' +
+  'Core rules:\n' +
   '- Use history and workflow together to infer intent, prioritizing unresolved recent user preferences.\n' +
-  '- Use workflow.state to understand the raw selections already made across earlier stages.\n' +
-  '- Treat workflow.currentStage and available tools as hard operational boundaries.\n' +
-  '- Primary goal: help the user complete booking efficiently and safely.\n' +
-  '- If intent is reasonably clear, prefer one concrete action over repetitive clarifications.\n' +
-  '- If user intent or preference is uncertain, use a concise conversational clarification (respond/action.type="none") before applying potentially assumption-heavy GUI changes.\n' +
-  '- Use non-committal GUI modification tools when they clearly narrow options without assuming unstated preferences.\n' +
-  '- Highlight is non-committal and may be used for one or multiple candidate options only when it adds meaningful distinction among still-visible choices.\n' +
-  '- Do not use highlight when the current UI already communicates the narrowed set clearly enough, or when highlight would simply restate the effect of an existing filter/sort.\n' +
-  '- Do not chain highlight immediately after filter/sort by default. Use highlight after narrowing only when a smaller subset among the remaining visible items deserves extra emphasis.\n' +
-  '- Do not use highlight when it would simply mark every currently visible item or repeat an already-applied highlight without adding new distinction.\n' +
-  '- Use navigation/commitment actions (select/selectMultiple/next/prev/startOver) only when user intent is clear and sufficiently confirmed.\n' +
-  '- Do not treat assistant-generated recommendations, options, or questions as user confirmation.\n' +
-  '- Require user-originated explicit or unambiguous confirmation before commitment actions.\n' +
-  '- Do not infer unstated optimization objectives (for example highest-rated, lowest price, earliest time, shortest duration, nearest location).\n' +
-  '- Apply optimization-oriented actions only when the objective is explicit in the latest user request or current workflow guidance.\n' +
-  '- If optimization objective is unspecified, prefer neutral narrowing or concise clarification instead of arbitrary ranking.\n' +
-  '- If multiple viable options remain without explicit user commitment to one item, ask concise confirmation by default. Use highlight instead only when it materially helps distinguish a subset of the remaining options.\n' +
-  '- Repeated filter tool calls accumulate additional conditions instead of replacing earlier filters.\n' +
-  '- On seat stage, use select for a single-seat toggle and selectMultiple only when the user clearly specifies multiple seats to select as the full seat set.\n' +
-  '- Choose exactly one action for this turn.';
+  '- Treat workflow.currentStage, available tools, proceed rules, and the built-in respond function as hard boundaries.\n' +
+  '- Use workflow.state to understand selections already made across earlier stages.\n' +
+  '- Primary goal: help the user complete booking safely while preserving the user\'s agency over the choice.\n' +
+  '- Prefer concrete progress when intent is clear, but do not turn an unresolved comparison into an autonomous choice.\n' +
+  '- When multiple options remain or the next step would be assumption-heavy, prefer one non-committal GUI modification if it can make the user\'s stated criterion easier to see or apply without assuming a choice; otherwise use respond for a concise clarification.\n' +
+  '- Use navigation or commitment actions only after clear user-originated confirmation, or when exactly one visible enabled option remains under the user\'s explicit criteria.\n' +
+  '- Do not infer unstated optimization goals or tie-breakers such as highest-rated, cheapest, nearest, earliest, latest, shortest, or best default.\n' +
+  '- Choose exactly one next step for this turn.';
 
 const CP_MEMORY_PROMPT_RULES =
   '- Use workflow.memory.preferences as structured user intent.\n' +
@@ -180,31 +168,29 @@ const CP_MEMORY_PROMPT_RULES =
   '- Prefer workflow.memory.activeConflicts over workflow.memory.deadEnds when they disagree.\n' +
   '- workflow.memory.summaries contains concise natural-language projections of the structured memory for quick scanning.';
 
-const JSON_ACTION_FORMAT_RULES =
-  'JSON action format rules:\n' +
-  '- assistantMessage is the user-facing conversational response.\n' +
-  '- assistantMessage must be plain text only (no Markdown, no code fences, no bullet lists, no links).\n' +
-  '- Keep assistantMessage short and natural.\n' +
-  '- Choose action.type="none" when clarification/confirmation is needed, or when the next step would commit to a choice without clear user confirmation.\n' +
-  '- If action.type="tool.call", toolName must be one of available tools.\n' +
-  '- Keep assistantMessage consistent with action: if action.type="tool.call", describe the action being taken and do not ask for permission.\n' +
-  '- If assistantMessage asks for confirmation or permission, action.type must be "none".\n' +
-  '- select requires params.itemId from visible item ids.\n' +
-  '- selectMultiple requires params.itemIds as a non-empty array of visible enabled seat ids and is valid only on seat stage. It replaces the full selected seat set.';
-
-const NATIVE_TOOL_CALLING_RULES =
-  'Native tool-calling rules:\n' +
-  '- Call exactly one available function every turn.\n' +
-  '- If no GUI action should be taken now, call "respond".\n' +
-  '- Put a concise user-facing message in "assistantMessage" argument.\n' +
-  '- Put a concise rationale in "reason" argument.\n' +
-  '- For tool calls, assistantMessage must describe the action and must not ask for permission.\n' +
-  '- On seat stage, prefer selectMultiple over repeated select calls when the user clearly specifies multiple seats.\n' +
+const OPENAI_TOOL_CALLING_RULES =
+  'Tool-calling rules:\n' +
+  '- Use exactly one provided function on every turn.\n' +
+  '- If no GUI tool should be used now, call "respond".\n' +
+  '- Put a short user-facing explanation in "assistantMessage".\n' +
+  '- Put a concise rationale in "reason".\n' +
+  '- For GUI tool calls, assistantMessage should describe the action and should not ask for permission.\n' +
+  '- For respond, keep assistantMessage to the smallest helpful clarification or direct answer. Unless the user explicitly asked for more detail, rely only on currently visible options and do not introduce hidden metadata or a new comparison dimension.\n' +
+  '- Do not use select, selectMultiple, or next to resolve a tie among multiple viable options unless the user has clearly committed to one specific choice.\n' +
+  '- Do not justify a commitment action with an inferred ranking or default ordering.\n' +
   '- Do not output plain text without a function call.\n' +
-  '- Never include internal item ids (for example m1, t2) in assistantMessage; refer to human-readable item values only.';
+  '- Never include internal item ids in assistantMessage; use human-readable labels only.';
+
+const GUI_ADAPTATION_ENABLED_RULES =
+  'GUI adaptation rules when modification tools are enabled:\n' +
+  '- Match the tool to the need: use augment to surface a short fact tied to the user\'s stated criterion, filter to narrow by an explicit criterion, sort to order by an explicit comparison goal, and highlight to mark a small relevant subset.\n' +
+  '- If the user\'s stated criterion is not yet visible in the UI, prefer surfacing or applying that criterion through one non-committal GUI modification before asking for a tie-break.\n' +
+  '- Use only criteria grounded in what the user asked for. Do not introduce a new comparison dimension or hidden optimization goal.\n' +
+  '- Do not mention hidden item metadata directly in assistantMessage; if a criterion-specific fact is not already visible, surface it through the UI first.\n' +
+  '- Do not use sort to create a best default, do not use highlight when it adds no distinction, and let repeated filter calls accumulate additional conditions instead of replacing earlier filters.';
 
 export function getPlannerSystemPrompt(): string {
-  return BASE_SYSTEM_PROMPT;
+  return [CORE_SYSTEM_PROMPT, OPENAI_TOOL_CALLING_RULES].join('\n');
 }
 
 function hasCpMemoryContext(workflow: PlannerWorkflow): boolean {
@@ -214,10 +200,14 @@ function hasCpMemoryContext(workflow: PlannerWorkflow): boolean {
 }
 
 function buildSystemPrompt(workflow: PlannerWorkflow): string {
-  if (!hasCpMemoryContext(workflow)) {
-    return BASE_SYSTEM_PROMPT;
+  const sections = [CORE_SYSTEM_PROMPT];
+  if (hasCpMemoryContext(workflow)) {
+    sections.push(CP_MEMORY_PROMPT_RULES);
   }
-  return `${BASE_SYSTEM_PROMPT}\n${CP_MEMORY_PROMPT_RULES}`;
+  if (workflow.guiAdaptationEnabled !== false) {
+    sections.push(GUI_ADAPTATION_ENABLED_RULES);
+  }
+  return sections.join('\n');
 }
 
 type OpenAiJsonSchemaType = 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array';
@@ -347,13 +337,14 @@ function toOpenAiTools(availableTools: ToolSchemaItem[]): OpenAiFunctionTool[] {
     type: 'function',
     name: NATIVE_NONE_TOOL_NAME,
     description:
-      'Respond to the user without executing any GUI tool. Use this for clarification, confirmation, or when waiting for user input.',
+      'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or when waiting for user input. If the user explicitly asks for information, answer directly and concisely.',
     parameters: {
       type: 'object',
       properties: {
         [TOOL_META_ASSISTANT_MESSAGE_KEY]: {
           type: 'string',
-          description: 'A concise user-facing response.',
+          description:
+            'A concise user-facing response. Keep it to the smallest helpful clarification or direct answer. Unless the user explicitly asked for more detail, rely only on currently visible options and do not introduce hidden metadata or a new comparison dimension.',
         },
         [TOOL_META_REASON_KEY]: {
           type: 'string',
@@ -519,7 +510,7 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   const openAiSystemPrompt =
     buildSystemPrompt(input.workflow) +
     '\n' +
-    NATIVE_TOOL_CALLING_RULES;
+    OPENAI_TOOL_CALLING_RULES;
 
   const baseBody = {
     model: OPENAI_MODEL,
@@ -544,10 +535,12 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
     console.log('[tuning-agent][llm] planner request input:', JSON.stringify(input));
   }
   emitLlmTrace('request', {
-    model: OPENAI_MODEL,
-    input: nativePlannerInput,
-    tools: openAiTools.map((tool) => tool.name),
-    temperature: typeof temperature === 'number' ? temperature : null,
+    method: 'POST',
+    url: OPENAI_API_URL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body,
   });
 
   let response = await fetch(OPENAI_API_URL, {
@@ -572,11 +565,12 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
         );
       }
       emitLlmTrace('request', {
-        model: OPENAI_MODEL,
-        input: nativePlannerInput,
-        tools: openAiTools.map((tool) => tool.name),
-        temperature: null,
-        retryWithoutTemperature: true,
+        method: 'POST',
+        url: OPENAI_API_URL,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: baseBody,
       });
       response = await fetch(OPENAI_API_URL, {
         method: 'POST',
@@ -629,100 +623,4 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   const noToolOutput = plannerOutputFromNoToolCall(outputText);
   emitLlmTrace('response.parsed', { parsed: noToolOutput, parser: 'text-no-tool' });
   return noToolOutput;
-}
-
-// ── Gemini ──────────────────────────────────────────────────────────────────
-
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODEL = process.env.AGENT_GEMINI_MODEL || 'gemini-2.5-flash';
-
-function extractGeminiText(body: unknown): string | null {
-  if (!body || typeof body !== 'object') return null;
-  const record = body as Record<string, unknown>;
-
-  const candidates = Array.isArray(record.candidates) ? record.candidates : [];
-  for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object') continue;
-    const candidateRecord = candidate as Record<string, unknown>;
-    const content = candidateRecord.content;
-    if (!content || typeof content !== 'object') continue;
-    const contentRecord = content as Record<string, unknown>;
-    const parts = Array.isArray(contentRecord.parts) ? contentRecord.parts : [];
-    for (const part of parts) {
-      if (!part || typeof part !== 'object') continue;
-      const partRecord = part as Record<string, unknown>;
-      if (typeof partRecord.text === 'string' && partRecord.text.trim()) {
-        return partRecord.text.trim();
-      }
-    }
-  }
-  return null;
-}
-
-export async function planActionWithGemini(input: PlannerInput): Promise<PlannerOutput | null> {
-  if (process.env.AGENT_ENABLE_GEMINI === 'false') return null;
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-
-  const geminiSystemPrompt =
-    buildSystemPrompt(input.workflow) +
-    '\n' +
-    JSON_ACTION_FORMAT_RULES +
-    '\n- Return JSON only matching this schema: { "assistantMessage": string, "action": { "type": "tool.call" | "none", "toolName": string, "params": object, "reason": string } }';
-
-  const body = {
-    systemInstruction: {
-      parts: [{ text: geminiSystemPrompt }],
-    },
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: JSON.stringify(input) }],
-      },
-    ],
-    generationConfig: {
-      responseMimeType: 'application/json',
-    },
-  };
-
-  if (DEBUG_LLM) {
-    console.log('[tuning-agent][llm:gemini] planner request input:', JSON.stringify(input));
-  }
-  emitLlmTrace('request', { model: GEMINI_MODEL, input });
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    if (DEBUG_LLM) {
-      console.error('[tuning-agent][llm:gemini] planner error response:', errorText);
-    }
-    emitLlmTrace('error', { status: response.status, errorText });
-    throw new Error(`Gemini planner failed (${response.status}): ${errorText}`);
-  }
-
-  const payload = (await response.json()) as unknown;
-  const outputText = extractGeminiText(payload);
-  if (DEBUG_LLM) {
-    console.log('[tuning-agent][llm:gemini] planner raw output:', outputText);
-  }
-  emitLlmTrace('response.raw', { outputText });
-  if (!outputText) return null;
-
-  const parsed = parseJsonObject(outputText);
-  if (DEBUG_LLM) {
-    console.log('[tuning-agent][llm:gemini] planner parsed output:', JSON.stringify(parsed));
-  }
-  emitLlmTrace('response.parsed', { parsed });
-  if (!parsed) return null;
-
-  return toPlannerOutput(parsed);
 }

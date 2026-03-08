@@ -13,9 +13,6 @@ function resizeTextareaToContent(element: HTMLTextAreaElement) {
 interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
-  statusLabel?: string;
-  statusDetail?: string;
-  statusTone?: 'default' | 'warning' | 'success';
   chatWidthPx?: number;
   onSubmit?: (text: string) => void;
 }
@@ -23,9 +20,6 @@ interface ChatInputProps {
 export function ChatInput({
   disabled = true,
   placeholder = 'Type a message...',
-  statusLabel,
-  statusDetail,
-  statusTone = 'default',
   chatWidthPx = 768,
   onSubmit,
 }: ChatInputProps) {
@@ -65,24 +59,6 @@ export function ChatInput({
   return (
     <div className="border-t border-dark-border bg-dark p-4">
       <div className="mx-auto" style={{ width: `min(100%, ${chatWidthPx}px)` }}>
-        {(statusLabel || statusDetail) && (
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-            {statusLabel && (
-              <span
-                className={
-                  statusTone === 'warning'
-                    ? 'text-yellow-400'
-                    : statusTone === 'success'
-                    ? 'text-info-label'
-                    : 'text-fg-faint'
-                }
-              >
-                {statusLabel}
-              </span>
-            )}
-            {statusDetail && <span className="text-fg-faint">{statusDetail}</span>}
-          </div>
-        )}
         <div className="flex items-end gap-3">
           <textarea
             ref={textareaRef}
@@ -123,11 +99,6 @@ export function ChatInput({
             </svg>
           </button>
         </div>
-        {disabled && (
-          <div className="text-center text-fg-faint text-xs mt-2">
-            Input is currently disabled
-          </div>
-        )}
       </div>
     </div>
   );

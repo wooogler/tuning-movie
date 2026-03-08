@@ -38,6 +38,10 @@ function normalizeCpMemoryLimit(raw: unknown, fallback: number): number {
   return fallback;
 }
 
+function normalizeGuiAdaptationEnabled(raw: unknown, fallback: boolean): boolean {
+  return typeof raw === 'boolean' ? raw : fallback;
+}
+
 export function fromSnapshot(payload: SnapshotStatePayload): PerceivedContext {
   const fallbackFromLegacyToggle =
     typeof payload.plannerCpEnabled === 'boolean'
@@ -55,6 +59,7 @@ export function fromSnapshot(payload: SnapshotStatePayload): PerceivedContext {
       payload.plannerCpMemoryLimit,
       fallbackFromLegacyToggle
     ),
+    guiAdaptationEnabled: normalizeGuiAdaptationEnabled(payload.guiAdaptationEnabled, true),
     lastUserMessage: null,
     lastUpdatedAt: nowIso(),
   };
@@ -79,6 +84,10 @@ export function applyStateUpdated(
     plannerCpMemoryLimit: normalizeCpMemoryLimit(
       payload.plannerCpMemoryLimit,
       fallbackFromLegacyToggle
+    ),
+    guiAdaptationEnabled: normalizeGuiAdaptationEnabled(
+      payload.guiAdaptationEnabled,
+      previous.guiAdaptationEnabled
     ),
     lastUpdatedAt: nowIso(),
   };

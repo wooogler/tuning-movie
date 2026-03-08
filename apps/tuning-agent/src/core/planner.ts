@@ -1,6 +1,5 @@
 import {
   planActionWithOpenAI,
-  planActionWithGemini,
   type PlannerWorkflow,
   type PlannerWorkflowMemory,
 } from '../llm/llmPlanner';
@@ -279,11 +278,6 @@ function buildWorkflowContext(
   const selectedListCount = getSelectedListIds(spec).length;
   const canNext = hasTool(plannerTools, 'next');
   const { previousStage, nextStage } = stageTransition(stage);
-
-  const guardrails: string[] = [
-    'Choose exactly one action for this turn.',
-    'Do not call tools outside availableToolNames.',
-  ];
   let proceedRule = 'Only advance stage when required selections are complete.';
 
   if (stage === 'seat') {
@@ -311,8 +305,8 @@ function buildWorkflowContext(
     nextStage,
     stageGoal: stageGoal(stage),
     proceedRule,
-    availableToolNames: plannerTools.map((tool) => tool.name),
-    guardrails,
+    availableToolNames: [...plannerTools.map((tool) => tool.name), 'respond'],
+    guiAdaptationEnabled: context.guiAdaptationEnabled,
     ...(workflowState ? { state: workflowState } : {}),
     ...(plannerMemory ? { memory: plannerMemory } : {}),
     cpMemoryEnabled,
@@ -495,12 +489,10 @@ export async function planNextAction(
 
   refreshModelEnvVars();
 
-  const geminiEnabled =
-    process.env.AGENT_ENABLE_GEMINI !== 'false' && Boolean(process.env.GEMINI_API_KEY);
   const openaiEnabled =
     process.env.AGENT_ENABLE_OPENAI !== 'false' && Boolean(process.env.OPENAI_API_KEY);
 
-  if (!geminiEnabled && !openaiEnabled) {
+  if (!openaiEnabled) {
     return {
       action: null,
       explainText: hasUserRequest
@@ -534,9 +526,7 @@ export async function planNextAction(
       ),
     };
 
-    const llm = geminiEnabled
-      ? await planActionWithGemini(plannerInput)
-      : await planActionWithOpenAI(plannerInput);
+    const llm = await planActionWithOpenAI(plannerInput);
 
     if (!llm) {
       return {

@@ -1,12 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 
-const ENV_KEYS = ['AGENT_ENABLE_OPENAI', 'AGENT_ENABLE_GEMINI'] as const;
+const ENV_KEYS = ['AGENT_ENABLE_OPENAI'] as const;
 
 /**
- * Re-reads AGENT_ENABLE_OPENAI and AGENT_ENABLE_GEMINI from the root .env
- * file so that runtime model-toggle changes made via the UI take effect
- * without restarting the agent process.
+ * Re-reads AGENT_ENABLE_OPENAI from the root .env file so runtime config
+ * changes take effect without restarting the agent process.
  */
 export function refreshModelEnvVars(): void {
   const candidates = [

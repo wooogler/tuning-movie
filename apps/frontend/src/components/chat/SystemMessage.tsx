@@ -1,6 +1,7 @@
 import type { SystemMessage as SystemMessageType } from '../../store/chatStore';
 import type { UISpec } from '../../spec';
 import { StageRenderer } from '../../renderer';
+import { renderMessageText } from './renderMessageText';
 
 function getToolActionLabel(toolName: string): string {
   switch (toolName) {
@@ -126,7 +127,7 @@ export function SystemMessage({
                 </div>
                 {toolDescriptionText ? (
                   <div className="text-info-text text-base font-medium mb-3 whitespace-pre-wrap break-words">
-                    {toolDescriptionText}
+                    {renderMessageText(toolDescriptionText)}
                   </div>
                 ) : null}
               </div>

@@ -47,7 +47,6 @@ function createSpec<T extends DataItem>(
 export interface MovieItem extends DataItem {
   id: string;
   title: string;
-  displayLabel: string;
   genre: string[];
   rating: string;
   duration: string;
@@ -57,7 +56,6 @@ export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
   const items: MovieItem[] = movies.map((m) => ({
     id: m.id,
     title: m.title,
-    displayLabel: `${m.title} | ${m.genre.join('/')} | Rating ${m.rating}`,
     genre: m.genre,
     rating: m.rating,
     duration: m.duration,
@@ -70,7 +68,7 @@ export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
     items,
     modification: {},
     display: {
-      valueField: 'displayLabel',
+      valueField: 'title',
       component: 'buttonGroup',
     },
   });
@@ -234,13 +232,7 @@ export interface SeatItem extends DataItem {
   status: 'available' | 'occupied';
 }
 
-export function generateSeatSpec(
-  seats: Seat[],
-  movieId: string,
-  theaterId: string,
-  date: string,
-  showtimeId: string
-): UISpec<SeatItem> {
+export function generateSeatSpec(seats: Seat[]): UISpec<SeatItem> {
   const items: SeatItem[] = seats
     .map((s) => ({
       id: s.id,
@@ -252,9 +244,6 @@ export function generateSeatSpec(
       status: s.status === 'available' ? 'available' : 'occupied',
     }));
 
-  const rows = [...new Set(items.map((s) => s.row))].sort();
-  const seatsPerRow = items.length > 0 ? Math.max(...items.map((s) => s.number)) : 0;
-
   return createSpec({
     stage: 'seat',
     title: 'Select Seats',
@@ -264,14 +253,6 @@ export function generateSeatSpec(
     display: {
       valueField: 'label',
       component: 'seatMap',
-    },
-    meta: {
-      movieId,
-      theaterId,
-      date,
-      showtimeId,
-      rows,
-      seatsPerRow,
     },
     initialState: {
       selectedList: [],

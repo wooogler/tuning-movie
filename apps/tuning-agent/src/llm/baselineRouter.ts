@@ -285,9 +285,12 @@ export async function routeBaselineActionWithOpenAI(
     console.log('[tuning-agent][baseline-router] request:', JSON.stringify(input));
   }
   emitLlmTrace('request', {
-    model: OPENAI_MODEL,
-    input,
-    temperature: typeof temperature === 'number' ? temperature : null,
+    method: 'POST',
+    url: OPENAI_API_URL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body,
   });
 
   let response = await fetch(OPENAI_API_URL, {
@@ -307,10 +310,12 @@ export async function routeBaselineActionWithOpenAI(
 
     if (shouldRetryWithoutTemperature) {
       emitLlmTrace('request', {
-        model: OPENAI_MODEL,
-        input,
-        temperature: null,
-        retryWithoutTemperature: true,
+        method: 'POST',
+        url: OPENAI_API_URL,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: baseBody,
       });
       response = await fetch(OPENAI_API_URL, {
         method: 'POST',

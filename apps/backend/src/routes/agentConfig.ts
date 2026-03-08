@@ -2,13 +2,12 @@ import { FastifyInstance } from 'fastify';
 import fs from 'fs';
 import path from 'path';
 
-type ModelId = 'openai' | 'gemini';
+type ModelId = 'openai';
 interface RuntimeAgentConfig {
   guiAdaptationEnabled?: boolean;
 }
 
 const OPENAI_ENABLED_KEY = 'AGENT_ENABLE_OPENAI';
-const GEMINI_ENABLED_KEY = 'AGENT_ENABLE_GEMINI';
 const GUI_ADAPTATION_ENABLED_KEY = 'AGENT_ENABLE_GUI_ADAPTATION';
 
 function getEnvFilePath(): string {
@@ -112,17 +111,11 @@ function setBooleanValuesInEnv(values: Array<{ key: string; enabled: boolean }>)
 }
 
 function readCurrentModel(): ModelId {
-  const openaiEnabled = readBooleanFromEnv(OPENAI_ENABLED_KEY, true);
-  const geminiEnabled = readBooleanFromEnv(GEMINI_ENABLED_KEY, false);
-
-  return geminiEnabled ? 'gemini' : openaiEnabled ? 'openai' : 'openai';
+  return readBooleanFromEnv(OPENAI_ENABLED_KEY, true) ? 'openai' : 'openai';
 }
 
 function setModelInEnv(model: ModelId): void {
-  setBooleanValuesInEnv([
-    { key: OPENAI_ENABLED_KEY, enabled: model === 'openai' },
-    { key: GEMINI_ENABLED_KEY, enabled: model === 'gemini' },
-  ]);
+  setBooleanValuesInEnv([{ key: OPENAI_ENABLED_KEY, enabled: model === 'openai' }]);
 }
 
 function readGuiAdaptationEnabled(): boolean {
@@ -145,8 +138,8 @@ export async function agentConfigRoutes(fastify: FastifyInstance) {
 
   fastify.put('/agent/config/model', async (request, reply) => {
     const { model } = (request.body ?? {}) as { model?: string };
-    if (model !== 'openai' && model !== 'gemini') {
-      return reply.code(400).send({ error: 'model must be "openai" or "gemini"' });
+    if (model !== 'openai') {
+      return reply.code(400).send({ error: 'model must be "openai"' });
     }
     setModelInEnv(model);
     return { model };

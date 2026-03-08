@@ -25,8 +25,8 @@ export function SeatStage({
   const selectedIds = selectedList.map((item) => item.id);
   const canProceed = selectedIds.length > 0;
 
-  // 좌석 배치 정보
-  const rows = (spec.meta?.rows as string[]) ?? [];
+  // Derive row ordering from the seat items instead of stage meta.
+  const rows = [...new Set(spec.items.map((seat) => seat.row))].sort();
 
   // Highlight 정보
   const highlightedIds = new Set(spec.modification.highlight?.itemIds ?? []);

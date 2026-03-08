@@ -1,4 +1,5 @@
 import type { AgentMessage as AgentMessageType } from '../../store/chatStore';
+import { renderMessageText } from './renderMessageText';
 
 interface AgentMessageProps {
   message: AgentMessageType;
@@ -38,7 +39,7 @@ export function AgentMessage({ message }: AgentMessageProps) {
           ) : null}
         </div>
         <div className="rounded-2xl rounded-tl-sm px-4 py-2 bg-info-bg border border-info-border text-info-text text-base font-medium whitespace-pre-wrap break-words">
-          {message.text}
+          {renderMessageText(message.text)}
         </div>
       </div>
     </div>

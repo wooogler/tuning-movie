@@ -15,18 +15,11 @@ export function MovieStage({
   onNext,
 }: StageProps<MovieItem>) {
   const canProceed = !!spec.state.selected;
-  const titleOnlyItems = spec.visibleItems.map((visible) => {
-    const movie = spec.items.find((item) => item.id === visible.id);
-    return {
-      ...visible,
-      value: movie?.title ?? visible.value,
-    };
-  });
 
   return (
     <div className="flex flex-col items-center gap-6">
       <ButtonGroup
-        items={titleOnlyItems}
+        items={spec.visibleItems}
         onSelect={onSelect}
         selectedId={spec.state.selected?.id}
         highlightedIds={spec.modification.highlight?.itemIds}

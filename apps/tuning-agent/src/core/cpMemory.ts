@@ -6,6 +6,7 @@ import type {
   DeadEnd,
   Preference,
 } from '../types';
+import { CONFLICT_STAGES as CONFLICT_STAGE_VALUES } from '../types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -54,6 +55,17 @@ function scopeWithStage(stage: ConflictStage): ConflictScope {
   return { stage };
 }
 
+function normalizePreferenceStages(stages: readonly ConflictStage[] | undefined): ConflictStage[] {
+  const normalized: ConflictStage[] = [];
+  const seen = new Set<ConflictStage>();
+  for (const stage of stages ?? []) {
+    if (!CONFLICT_STAGE_VALUES.includes(stage) || seen.has(stage)) continue;
+    seen.add(stage);
+    normalized.push(stage);
+  }
+  return normalized.length > 0 ? normalized : CONFLICT_STAGE_VALUES.slice();
+}
+
 function readScopeField(
   selection: unknown,
   keys: string[]
@@ -73,8 +85,8 @@ export function buildConflictScope(
   const scope = scopeWithStage(stage);
   if (!state) return scope;
 
-  const movie = readScopeField(state.movie, ['title', 'displayLabel', 'value', 'name', 'id']);
-  const theater = readScopeField(state.theater, ['name', 'displayLabel', 'value', 'title', 'id']);
+  const movie = readScopeField(state.movie, ['title', 'value', 'name', 'id']);
+  const theater = readScopeField(state.theater, ['name', 'value', 'title', 'id']);
   const date = readScopeField(state.date, ['date', 'displayText', 'value', 'id']);
   const showing = readScopeField(state.showing, ['time', 'displayText', 'value', 'id']);
 
@@ -93,7 +105,16 @@ export function normalizePreferenceList(preferences: Preference[]): Preference[]
     const strength = preference.strength === 'soft' ? 'soft' : 'hard';
     const id = preference.id.trim();
     if (!id) continue;
-    deduped.set(id, { id, description, strength });
+    const relevantStages = normalizePreferenceStages(preference.relevantStages);
+    const existing = deduped.get(id);
+    deduped.set(id, {
+      id,
+      description,
+      strength,
+      relevantStages: existing
+        ? normalizePreferenceStages([...existing.relevantStages, ...relevantStages])
+        : relevantStages,
+    });
   }
   return Array.from(deduped.values());
 }

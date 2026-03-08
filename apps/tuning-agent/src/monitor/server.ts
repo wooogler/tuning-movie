@@ -244,7 +244,10 @@ export class AgentMonitorServer {
   ): void {
     if (!this.enabled) return;
     this.updateState({
-      memoryPreferences: preferences.map((item) => ({ ...item })),
+      memoryPreferences: preferences.map((item) => ({
+        ...item,
+        relevantStages: item.relevantStages.slice(),
+      })),
       memoryActiveConflicts: activeConflicts.map((item) => ({
         ...item,
         preferenceIds: item.preferenceIds.slice(),
@@ -255,6 +258,16 @@ export class AgentMonitorServer {
         preferenceIds: item.preferenceIds.slice(),
         scope: { ...item.scope },
       })),
+    });
+  }
+
+  updateLlmSystemPrompt(component: 'planner' | 'extractor', prompt: string): void {
+    if (!this.enabled) return;
+    this.updateState({
+      llmSystemPrompts: {
+        ...this.state.llmSystemPrompts,
+        [component]: prompt,
+      },
     });
   }
 

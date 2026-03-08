@@ -6,6 +6,7 @@ import {
   normalizeActiveConflicts,
   normalizePreferenceList,
 } from '../core/cpMemory';
+import { CONFLICT_STAGES } from '../types';
 import type { ActiveConflict, ConflictStage, Preference } from '../types';
 
 interface PreferenceExtractionInput {
@@ -21,6 +22,7 @@ interface PreferenceExtractionOutput {
   preferences: Array<{
     description: string;
     strength: 'hard' | 'soft';
+    relevantStages: ConflictStage[];
   }>;
 }
 
@@ -91,14 +93,22 @@ const PREFERENCE_SYSTEM_PROMPT =
   '- Ignore trivial acknowledgements, assistant suggestions, and system state that the user did not ask for.\n' +
   '- Do not store procedural, exploratory, or temporary action requests as preferences.\n' +
   '- Do not convert branch-local instructions into durable preferences. Examples: "check 4pm", "try this one", "go back", "clear that filter", "show another option", "check seats".\n' +
+  '- Distinguish durable preferences from turn-local commitments. When the user is choosing among currently visible options to complete the current step, treat that as a local commitment unless they clearly express a reusable rule or enduring desire.\n' +
+  '- Do not store current-step selections as preferences when the user is simply picking one visible option or confirming a choice for this branch. This applies across stages (for example selecting a movie, theater, date, time, or seats from the current UI).\n' +
+  '- Short replies that accept one currently offered option are usually temporary selections, not durable preferences. Examples: "1:30 pm is good", "that one works", "let\'s do the second one", "book these seats".\n' +
+  '- Only store an option-specific preference when the user makes it reusable beyond the current step or branch, for example by stating an ongoing rule, a stable favorite, or a choice they want preserved even if they revisit options.\n' +
   '- Do not create a new preference when the user is only answering an assistant confirmation question about the next step to inspect.\n' +
   '- Treat option-specific trial confirmations as temporary unless the user clearly states an enduring desire or rule (for example "I want the 4:00 PM showtime" as a standing choice).\n' +
   '- When the latest user message is procedural or temporary, prefer keeping existingPreferences unchanged unless the user also states a durable preference.\n' +
   '- Use strength="hard" for requirements/constraints the user clearly insists on.\n' +
   '- Use strength="soft" for softer wishes, preferences, or nice-to-haves.\n' +
+  '- For each preference, set relevantStages to the booking stages where that preference should be checked for active conflicts.\n' +
+  '- Allowed relevantStages values: movie, theater, date, time, seat, confirm.\n' +
+  '- Use one or more relevantStages per preference and prefer the minimal set that can actually evaluate the preference.\n' +
+  '- Preserve relevantStages for an existing preference when the meaning remains unchanged unless there is a clear reason to update them.\n' +
   '- Keep each description as a short standalone sentence.\n' +
   '- Do not include ids in the output.\n' +
-  'Return JSON only matching this schema: { "preferences": Array<{ "description": string, "strength": "hard" | "soft" }> }';
+  'Return JSON only matching this schema: { "preferences": Array<{ "description": string, "strength": "hard" | "soft", "relevantStages": string[] }> }';
 
 const ACTIVE_CONFLICT_SYSTEM_PROMPT =
   'You derive the current active conflicts for an interactive booking agent.\n' +
@@ -190,16 +200,40 @@ function normalizePreferenceStrength(value: unknown): Preference['strength'] {
   return value === 'soft' ? 'soft' : 'hard';
 }
 
-function materializePreferences(raw: PreferenceExtractionOutput): Preference[] {
+function normalizeRelevantStages(
+  value: unknown,
+  fallback: readonly ConflictStage[] = CONFLICT_STAGES
+): ConflictStage[] {
+  const normalized: ConflictStage[] = [];
+  const seen = new Set<ConflictStage>();
+  const source = Array.isArray(value) ? value : fallback;
+  for (const item of source) {
+    if (typeof item !== 'string') continue;
+    const stage = toConflictStage(item);
+    if (!stage || seen.has(stage)) continue;
+    seen.add(stage);
+    normalized.push(stage);
+  }
+  return normalized.length > 0 ? normalized : CONFLICT_STAGES.slice();
+}
+
+function materializePreferences(
+  raw: PreferenceExtractionOutput,
+  existingPreferences: Preference[]
+): Preference[] {
+  const existingById = new Map(existingPreferences.map((item) => [item.id, item]));
   const preferences: Preference[] = [];
   for (const rawPreference of raw.preferences) {
     const description = normalizeDescription(rawPreference.description);
     if (!description) continue;
     const strength = normalizePreferenceStrength(rawPreference.strength);
+    const id = buildPreferenceId(description, strength);
+    const existing = existingById.get(id);
     preferences.push({
-      id: buildPreferenceId(description, strength),
+      id,
       description,
       strength,
+      relevantStages: normalizeRelevantStages(rawPreference.relevantStages, existing?.relevantStages),
     });
   }
   return normalizePreferenceList(preferences);
@@ -255,6 +289,7 @@ function toPreferenceExtractionOutput(value: Record<string, unknown>): Preferenc
     preferences.push({
       description,
       strength: normalizePreferenceStrength(entry.strength),
+      relevantStages: normalizeRelevantStages(entry.relevantStages),
     });
   }
 
@@ -286,9 +321,13 @@ function toActiveConflictDerivationOutput(
 }
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_OPENAI_TEMPERATURE = 0;
 const OPENAI_TEMPERATURE_OFF_SENTINELS = new Set(['default', 'none', 'omit', 'off']);
+
+function resolveOpenAIReasoning(kind: ExtractionKind): { effort: 'low' } | undefined {
+  if (kind !== 'active_conflicts') return undefined;
+  return { effort: 'low' };
+}
 
 function resolveOpenAITemperature(): number | undefined {
   const raw = process.env.AGENT_OPENAI_TEMPERATURE;
@@ -320,10 +359,6 @@ function getOpenAIModel(): string {
   return process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
 }
 
-function getGeminiModel(): string {
-  return process.env.AGENT_GEMINI_MODEL || 'gemini-2.5-flash';
-}
-
 function parseOpenAIOutputText(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null;
   const record = body as Record<string, unknown>;
@@ -348,29 +383,6 @@ function parseOpenAIOutputText(body: unknown): string | null {
   return null;
 }
 
-function extractGeminiText(body: unknown): string | null {
-  if (!body || typeof body !== 'object') return null;
-  const record = body as Record<string, unknown>;
-
-  const candidates = Array.isArray(record.candidates) ? record.candidates : [];
-  for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object') continue;
-    const candidateRecord = candidate as Record<string, unknown>;
-    const content = candidateRecord.content;
-    if (!content || typeof content !== 'object') continue;
-    const contentRecord = content as Record<string, unknown>;
-    const parts = Array.isArray(contentRecord.parts) ? contentRecord.parts : [];
-    for (const part of parts) {
-      if (!part || typeof part !== 'object') continue;
-      const partRecord = part as Record<string, unknown>;
-      if (typeof partRecord.text === 'string' && partRecord.text.trim()) {
-        return partRecord.text.trim();
-      }
-    }
-  }
-  return null;
-}
-
 async function callOpenAIJson(
   kind: ExtractionKind,
   systemPrompt: string,
@@ -383,6 +395,7 @@ async function callOpenAIJson(
 
   const model = getOpenAIModel();
   const temperature = resolveOpenAITemperature();
+  const reasoning = resolveOpenAIReasoning(kind);
   const baseBody = {
     model,
     input: [
@@ -401,17 +414,22 @@ async function callOpenAIJson(
       },
     },
   };
-  const body = typeof temperature === 'number' ? { ...baseBody, temperature } : baseBody;
+  const body = {
+    ...baseBody,
+    ...(typeof temperature === 'number' ? { temperature } : {}),
+    ...(reasoning ? { reasoning } : {}),
+  };
 
   if (DEBUG_LLM) {
     console.log(`[tuning-agent][extractor:${kind}:openai] request:`, JSON.stringify(input));
   }
   emitLlmTrace('request', {
-    kind,
-    provider: 'openai',
-    model,
-    input,
-    temperature: typeof temperature === 'number' ? temperature : null,
+    method: 'POST',
+    url: OPENAI_API_URL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body,
   });
 
   let response = await fetch(OPENAI_API_URL, {
@@ -431,12 +449,12 @@ async function callOpenAIJson(
 
     if (shouldRetryWithoutTemperature) {
       emitLlmTrace('request', {
-        kind,
-        provider: 'openai',
-        model,
-        input,
-        temperature: null,
-        retryWithoutTemperature: true,
+        method: 'POST',
+        url: OPENAI_API_URL,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: baseBody,
       });
       response = await fetch(OPENAI_API_URL, {
         method: 'POST',
@@ -465,59 +483,6 @@ async function callOpenAIJson(
   return parsed;
 }
 
-async function callGeminiJson(
-  kind: ExtractionKind,
-  systemPrompt: string,
-  input: unknown
-): Promise<Record<string, unknown> | null> {
-  if (process.env.AGENT_ENABLE_GEMINI === 'false') return null;
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-
-  const model = getGeminiModel();
-  const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
-  const body = {
-    systemInstruction: {
-      parts: [{ text: systemPrompt }],
-    },
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: JSON.stringify(input) }],
-      },
-    ],
-    generationConfig: {
-      responseMimeType: 'application/json',
-    },
-  };
-
-  if (DEBUG_LLM) {
-    console.log(`[tuning-agent][extractor:${kind}:gemini] request:`, JSON.stringify(input));
-  }
-  emitLlmTrace('request', { kind, provider: 'gemini', model, input });
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    emitLlmTrace('error', { kind, provider: 'gemini', status: response.status, errorText });
-    throw new Error(`Gemini extractor failed (${response.status}): ${errorText}`);
-  }
-
-  const payload = (await response.json()) as unknown;
-  const outputText = extractGeminiText(payload);
-  emitLlmTrace('response.raw', { kind, provider: 'gemini', outputText });
-  if (!outputText) return null;
-
-  const parsed = parseJsonObject(outputText);
-  emitLlmTrace('response.parsed', { kind, provider: 'gemini', parsed });
-  return parsed;
-}
-
 async function callStructuredExtractor(
   kind: ExtractionKind,
   systemPrompt: string,
@@ -525,19 +490,14 @@ async function callStructuredExtractor(
   schema: Record<string, unknown>
 ): Promise<Record<string, unknown> | null> {
   refreshModelEnvVars();
-
-  const geminiEnabled =
-    process.env.AGENT_ENABLE_GEMINI !== 'false' && Boolean(process.env.GEMINI_API_KEY);
   const openaiEnabled =
     process.env.AGENT_ENABLE_OPENAI !== 'false' && Boolean(process.env.OPENAI_API_KEY);
 
-  if (!geminiEnabled && !openaiEnabled) {
+  if (!openaiEnabled) {
     throw new Error('EXTRACTION_PROVIDER_UNAVAILABLE');
   }
 
-  return geminiEnabled
-    ? await callGeminiJson(kind, systemPrompt, input)
-    : await callOpenAIJson(kind, systemPrompt, input, schema);
+  return await callOpenAIJson(kind, systemPrompt, input, schema);
 }
 
 export interface PreferenceExtractionContext {
@@ -578,8 +538,12 @@ export async function extractStructuredPreferences(
           properties: {
             description: { type: 'string' },
             strength: { type: 'string', enum: ['hard', 'soft'] },
+            relevantStages: {
+              type: 'array',
+              items: { type: 'string', enum: CONFLICT_STAGES },
+            },
           },
-          required: ['description', 'strength'],
+          required: ['description', 'strength', 'relevantStages'],
           additionalProperties: false,
         },
       },
@@ -598,15 +562,21 @@ export async function extractStructuredPreferences(
     throw new Error('PREFERENCE_EXTRACTION_INVALID_OUTPUT');
   }
 
-  return materializePreferences(output);
+  return materializePreferences(output, ctx.existingPreferences);
 }
 
 export async function deriveActiveConflicts(
   ctx: ActiveConflictDerivationContext
 ): Promise<ActiveConflict[]> {
+  const stage = toConflictStage(ctx.currentStage);
+  if (!stage) return [];
+
+  const relevantPreferences = ctx.preferences.filter((item) => item.relevantStages.includes(stage));
+  if (relevantPreferences.length === 0) return [];
+
   const input: ActiveConflictDerivationInput = {
     currentStage: ctx.currentStage,
-    preferences: ctx.preferences,
+    preferences: relevantPreferences,
     state: ctx.state,
     uiSpec: ctx.uiSpec,
   };

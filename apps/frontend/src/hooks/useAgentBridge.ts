@@ -12,6 +12,7 @@ interface UseAgentBridgeOptions {
   sessionId?: string;
   studyToken?: string;
   plannerCpMemoryLimit?: number;
+  guiAdaptationEnabled?: boolean;
   onToolCall: (
     toolName: string,
     params: Record<string, unknown>,
@@ -76,8 +77,7 @@ function isUiSpec(value: unknown): value is UISpec {
 
 function sanitizeUiSpecForRelay(uiSpec: UISpec | null): Record<string, unknown> | null {
   if (!uiSpec) return null;
-  const { state: _state, ...rest } = uiSpec as UISpec & Record<string, unknown>;
-  return rest;
+  return { ...(uiSpec as UISpec & Record<string, unknown>) };
 }
 
 export function useAgentBridge({
@@ -87,6 +87,7 @@ export function useAgentBridge({
   sessionId,
   studyToken,
   plannerCpMemoryLimit = 10,
+  guiAdaptationEnabled = true,
   onToolCall,
   onAgentMessage,
   onSessionEnd,
@@ -111,6 +112,7 @@ export function useAgentBridge({
     messageHistory,
     toolSchema,
     plannerCpMemoryLimit,
+    guiAdaptationEnabled,
     onToolCall,
     onAgentMessage,
     onSessionEnd,
@@ -133,6 +135,7 @@ export function useAgentBridge({
       messageHistory,
       toolSchema,
       plannerCpMemoryLimit,
+      guiAdaptationEnabled,
       onToolCall,
       onAgentMessage,
       onSessionEnd,
@@ -142,6 +145,7 @@ export function useAgentBridge({
     messageHistory,
     toolSchema,
     plannerCpMemoryLimit,
+    guiAdaptationEnabled,
     onToolCall,
     onAgentMessage,
     onSessionEnd,
@@ -177,6 +181,7 @@ export function useAgentBridge({
       messageHistory: current.messageHistory,
       toolSchema: current.toolSchema,
       plannerCpMemoryLimit: normalizeCpMemoryLimit(current.plannerCpMemoryLimit),
+      guiAdaptationEnabled: current.guiAdaptationEnabled !== false,
     };
   }, [normalizeCpMemoryLimit]);
 
@@ -427,6 +432,7 @@ export function useAgentBridge({
         messageHistory: latestRef.current.messageHistory,
         toolSchema: latestRef.current.toolSchema,
         plannerCpMemoryLimit: normalizeCpMemoryLimit(latestRef.current.plannerCpMemoryLimit),
+        guiAdaptationEnabled: latestRef.current.guiAdaptationEnabled !== false,
       },
     });
   }, [
@@ -435,6 +441,7 @@ export function useAgentBridge({
     messageHistory,
     toolSchema,
     plannerCpMemoryLimit,
+    guiAdaptationEnabled,
     sendEnvelope,
     normalizeCpMemoryLimit,
   ]);
