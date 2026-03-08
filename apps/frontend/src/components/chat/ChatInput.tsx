@@ -1,4 +1,14 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+
+const MAX_TEXTAREA_HEIGHT_PX = 160;
+
+function resizeTextareaToContent(element: HTMLTextAreaElement) {
+  element.style.height = '0px';
+  const nextHeight = Math.min(element.scrollHeight, MAX_TEXTAREA_HEIGHT_PX);
+  element.style.height = `${nextHeight}px`;
+  element.style.overflowY =
+    element.scrollHeight > MAX_TEXTAREA_HEIGHT_PX ? 'auto' : 'hidden';
+}
 
 interface ChatInputProps {
   disabled?: boolean;
@@ -20,6 +30,7 @@ export function ChatInput({
   onSubmit,
 }: ChatInputProps) {
   const [text, setText] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const handleSubmit = () => {
     const trimmed = text.trim();
@@ -27,6 +38,29 @@ export function ChatInput({
     onSubmit?.(trimmed);
     setText('');
   };
+
+  useLayoutEffect(() => {
+    const element = textareaRef.current;
+    if (!element) return;
+    resizeTextareaToContent(element);
+  }, [chatWidthPx, text]);
+
+  useLayoutEffect(() => {
+    const element = textareaRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+
+    let previousWidth = element.clientWidth;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const nextWidth = entry.contentRect.width;
+      if (nextWidth === previousWidth) return;
+      previousWidth = nextWidth;
+      resizeTextareaToContent(element);
+    });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="border-t border-dark-border bg-dark p-4">
@@ -49,20 +83,21 @@ export function ChatInput({
             {statusDetail && <span className="text-fg-faint">{statusDetail}</span>}
           </div>
         )}
-        <div className="flex gap-3 items-center">
-          <input
-            type="text"
+        <div className="flex items-end gap-3">
+          <textarea
+            ref={textareaRef}
+            rows={1}
             disabled={disabled}
             placeholder={placeholder}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSubmit();
               }
             }}
-            className={`flex-1 bg-dark-light border border-dark-border rounded-full px-4 py-3 text-fg-strong placeholder-fg-faint focus:outline-none focus:border-primary ${
+            className={`flex-1 resize-none bg-dark-light border border-dark-border rounded-3xl px-4 py-3 text-fg-strong placeholder-fg-faint leading-6 focus:outline-none focus:border-primary ${
               disabled ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           />
