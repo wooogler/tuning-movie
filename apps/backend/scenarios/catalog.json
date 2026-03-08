@@ -19,6 +19,102 @@
       ],
       "templateDbFile": "scn_t1_college_weekend.db",
       "seedDataFile": "data/scn_t1_college_weekend.json"
+    },
+    {
+      "id": "scn_s1_anniversary_premium",
+      "title": "S1-T1: Parents' Anniversary Premium Seats",
+      "story": "Today is Wednesday, March 11, 2026. Your parents' anniversary is tomorrow, Thursday, March 12, and you want to surprise them with two movie tickets. You want AI to recommend a movie first, and if it suggests several options, you prefer the highest-rated recommendation unless it fails one of the stricter requirements.\n\nYou want the closest theater. The show should start after 2 PM and end before 6 PM. Because of back pain, your parents need premium reclining seats with extra legroom, and the two seats must be together.",
+      "narratorPreferenceTypes": [
+        "ai-recommendation-soft",
+        "high-rating-soft",
+        "closest-theater-soft",
+        "start-after-2pm-hard",
+        "end-before-6pm-hard",
+        "premium-seat-hard",
+        "two-adjacent-seats-hard"
+      ],
+      "templateDbFile": "scn_s1_anniversary_premium.db",
+      "seedDataFile": "data/scn_s1_anniversary_premium.json"
+    },
+    {
+      "id": "scn_s1_thursday_action",
+      "title": "S1-T2: Thursday Night Action With Spouse",
+      "story": "Today is Wednesday, March 11, 2026. You want to see a movie with your spouse tomorrow night, Thursday, March 12. It must be an action movie. If there is more than one action movie, you prefer the highest-rated one, but that preference is softer than the timing and seat constraints.\n\nBecause of work, the earliest you can arrive at the theater is 5:30 PM. The movie must end before 10:30 PM because of your spouse's sleeping routine. You need two adjacent seats, and you want to avoid the first three rows because of neck pain.",
+      "narratorPreferenceTypes": [
+        "action-hard",
+        "high-rating-soft",
+        "arrive-after-530pm-hard",
+        "end-before-1030pm-hard",
+        "two-adjacent-seats-hard",
+        "avoid-front-rows-hard"
+      ],
+      "templateDbFile": "scn_s1_thursday_action.db",
+      "seedDataFile": "data/scn_s1_thursday_action.json"
+    },
+    {
+      "id": "scn_s1_solo_weekend_3d",
+      "title": "S1-T3: Solo Weekend 3D Booking",
+      "story": "Today is Wednesday, March 11, 2026. You want to watch Cosmic Laughs alone this weekend, either Saturday, March 14, or Sunday, March 15. You are free as long as the showing finishes before 7 PM.\n\nYou prefer the closest theater, but any theater within 10 miles is acceptable. The screening must be in 3D. You do not want a side seat, especially for 3D, so the seat needs to be reasonably centered on the screen.",
+      "narratorPreferenceTypes": [
+        "cosmic-laughs-hard",
+        "before-7pm-hard",
+        "distance-under-10mi-hard",
+        "closest-theater-soft",
+        "3d-required-hard",
+        "center-seat-hard"
+      ],
+      "templateDbFile": "scn_s1_solo_weekend_3d.db",
+      "seedDataFile": "data/scn_s1_solo_weekend_3d.json"
+    },
+    {
+      "id": "scn_s2_child_playdate",
+      "title": "S2-T1: Child's Playdate Kid-Friendly Booking",
+      "story": "Today is Wednesday, March 11, 2026. Your child has a playdate this Saturday, March 14, and you are taking the two kids to a movie afterward. You want AI to recommend a kid-friendly movie appropriate for ages 7 to 9, and if there are several options, you prefer the highest-rated one.\n\nYou want the closest theater, the outing must stay on the weekend, the show should start after 1 PM and end before 5 PM, and the children need two adjacent seats that are not in the first two rows. You strongly prefer a movie under two hours, but that preference is softer than the timing and seat constraints.",
+      "narratorPreferenceTypes": [
+        "kid-friendly-soft",
+        "ai-recommendation-soft",
+        "high-rating-soft",
+        "closest-theater-soft",
+        "weekend-only-hard",
+        "start-after-1pm-hard",
+        "end-before-5pm-hard",
+        "two-adjacent-seats-hard",
+        "avoid-first-two-rows-hard",
+        "under-2-hours-soft"
+      ],
+      "templateDbFile": "scn_s2_child_playdate.db",
+      "seedDataFile": "data/scn_s2_child_playdate.json"
+    },
+    {
+      "id": "scn_s2_sibling_thriller",
+      "title": "S2-T2: Friday Night Thriller With Sibling",
+      "story": "Today is Wednesday, March 11, 2026. You want to watch a movie with your sibling on Friday night, March 13. It must be a thriller. If there is more than one thriller available, you prefer the highest-rated one, but the timing and seat constraints matter more.\n\nThe earliest you can arrive at the theater is 6:00 PM, the movie must end before 10:00 PM, and you need two adjacent seats that are not in the last two rows because of low vision.",
+      "narratorPreferenceTypes": [
+        "thriller-hard",
+        "high-rating-soft",
+        "arrive-after-6pm-hard",
+        "end-before-10pm-hard",
+        "two-adjacent-seats-hard",
+        "avoid-back-rows-hard"
+      ],
+      "templateDbFile": "scn_s2_sibling_thriller.db",
+      "seedDataFile": "data/scn_s2_sibling_thriller.json"
+    },
+    {
+      "id": "scn_s2_ocean_depths_imax",
+      "title": "S2-T3: Next Weekend Ocean Depths IMAX",
+      "story": "Today is Wednesday, March 11, 2026. You want to see Ocean Depths alone next weekend, either Saturday, March 21, or Sunday, March 22. You are unavailable after 8 PM on both days.\n\nYou prefer the closest theater, but any theater within 12 miles is acceptable. The screening must be in IMAX, and you want a center-section seat that is not in the first two rows.",
+      "narratorPreferenceTypes": [
+        "ocean-depths-hard",
+        "before-8pm-hard",
+        "distance-under-12mi-hard",
+        "closest-theater-soft",
+        "imax-required-hard",
+        "center-seat-hard",
+        "avoid-first-two-rows-hard"
+      ],
+      "templateDbFile": "scn_s2_ocean_depths_imax.db",
+      "seedDataFile": "data/scn_s2_ocean_depths_imax.json"
     }
   ]
 }

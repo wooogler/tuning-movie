@@ -63,6 +63,7 @@ export async function bookingRoutes(fastify: FastifyInstance) {
     const now = getFixedCurrentDateUtc().toISOString();
 
     try {
+      // Study confirmations should not mutate the scenario's seat inventory.
       db.transaction((tx) => {
         tx.insert(bookings)
           .values({
@@ -84,28 +85,9 @@ export async function bookingRoutes(fastify: FastifyInstance) {
               seatId,
             })
             .run();
-
-          const updateResult = tx
-            .update(seats)
-            .set({ status: 'occupied' })
-            .where(and(eq(seats.id, seatId), eq(seats.status, 'available')))
-            .run();
-
-          if (updateResult.changes !== 1) {
-            throw new Error(`seat_conflict:${seatId}`);
-          }
         }
-
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'booking_failed';
-      if (message.startsWith('seat_conflict:')) {
-        const conflictedSeatId = message.split(':')[1];
-        return reply.code(409).send({
-          error: 'A selected seat was just booked by someone else',
-          occupiedSeats: conflictedSeatId ? [conflictedSeatId] : [],
-        });
-      }
       fastify.log.error(error);
       return reply.code(500).send({ error: 'Failed to create booking' });
     }
@@ -153,17 +135,9 @@ export async function bookingRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'Booking already cancelled' });
     }
 
-    const bookedSeats = db
-      .select()
-      .from(bookingSeats)
-      .where(eq(bookingSeats.bookingId, id))
-      .all();
-
     db.transaction((tx) => {
+      // Cancellations only affect the booking record; seat availability stays as seeded.
       tx.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, id)).run();
-      for (const bs of bookedSeats) {
-        tx.update(seats).set({ status: 'available' }).where(eq(seats.id, bs.seatId)).run();
-      }
     });
 
     const updatedBooking = db.select().from(bookings).where(eq(bookings.id, id)).get();

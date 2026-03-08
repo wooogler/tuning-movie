@@ -2,7 +2,7 @@ export interface Movie {
   id: string;
   title: string;
   genre: string[];
-  duration: number;
+  duration: string;
   rating: string;
   ageRating: string;
   synopsis: string;

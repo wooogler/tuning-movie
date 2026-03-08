@@ -25,6 +25,7 @@
     "start:agent": "bash scripts/run-tuning-agent.sh start",
     "db:seed": "npm run db:seed --workspace=apps/backend",
     "db:seed:scenarios": "npm run db:seed:scenarios --workspace=apps/backend",
+    "db:verify:scenario": "npm run db:verify:scenario --workspace=apps/backend --",
     "db:verify:scenario:t1": "npm run db:verify:scenario:t1 --workspace=apps/backend"
   },
   "devDependencies": {

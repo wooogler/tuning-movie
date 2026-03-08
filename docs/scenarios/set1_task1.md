@@ -7,7 +7,7 @@
 
 ## Scenario (Participant Instructions)
 
-You would like to purchase two movie tickets for your parents for their anniversary.
+Today is Wednesday, March 11, 2026. You would like to purchase two movie tickets for your parents for their anniversary tomorrow, Thursday, March 12, 2026.
 
 1. You want AI to recommend a movie for your parents. If it recommends multiple movies, pick the one that has the highest rating. If the selected movie fails to satisfy the conditions below, pick the 2nd best rated one.
 2. Ask it to book tickets at the closest theater.
@@ -37,7 +37,7 @@ AI가 추천하는 3편:
 |-------|-------|--------|---------|-------|
 | Love Punchline | Comedy/Romance | ★4.5 | 1h 50m | 추천 #1 (최고 평점) |
 | Desk for Two | Comedy/Drama | ★4.2 | 1h 45m | 추천 #2 |
-| Autom Letters | Drama | ★3.9 | 2h 00m | 추천 #3, **이번 주 미개봉** |
+| Autumn Letters | Drama | ★3.9 | 2h 00m | 추천 #3, **이번 주 미개봉** |
 
 ---
 
@@ -62,7 +62,7 @@ AI가 추천하는 3편:
 
 P3+P4 충족 시간대: **2:15 PM**, **4:00 PM** (2개)
 
-### Autom Letters
+### Autumn Letters
 
 **이번 주 미개봉** — 예매 불가
 
@@ -80,7 +80,7 @@ P3+P4 충족 시간대: **2:15 PM**, **4:00 PM** (2개)
 ### === 1차 시도: Love Punchline (★4.5) ===
 
 #### [Movie] 1차 방문
-- AI 추천: Love Punchline (★4.5), Desk for Two (★4.2), Autom Letters (★3.9)
+- AI 추천: Love Punchline (★4.5), Desk for Two (★4.2), Autumn Letters (★3.9)
 - **선택: Love Punchline** (최고 평점)
 
 #### [Theater] 1차 방문
@@ -112,7 +112,7 @@ P3+P4 충족 시간대: **2:15 PM**, **4:00 PM** (2개)
 ### === 2차 시도: 차선 영화 ===
 
 #### [Movie] 2차 방문
-- 차순위: Autom Letters (★3.9) → **이번 주 미개봉** → 불가
+- 차순위: Autumn Letters (★3.9) → **이번 주 미개봉** → 불가
 - 그 다음: Desk for Two (★4.2)
 - **선택: Desk for Two**
 
@@ -152,12 +152,12 @@ P3+P4 충족 시간대: **2:15 PM**, **4:00 PM** (2개)
 ## Backtrack Path
 
 ```
-Movie (Love Punchline) → Theater (Empire) → Showtime
+Movie (Love Punchline) → Theater (Empire) → Date (Thu, Mar 12, 2026) → Showtime
   → 2:15 PM → Seats C1 (프리미엄석 없음)
     ↩ 4:00 PM → Seats C2 (프리미엄석 분리됨)
-      ↩ Movie (Autom Letters: 미개봉)
-        → Movie (Desk for Two) → Theater (Empire) → 2:30 PM → Seats ✓ → 예매 완료!
+      ↩ Movie (Autumn Letters: 미개봉)
+        → Movie (Desk for Two) → Theater (Empire) → Date (Thu, Mar 12, 2026) → 2:30 PM → Seats ✓ → 예매 완료!
 ```
 
 **Total backtracks**: 2
-**Total step visits**: Movie(2) + Theater(2) + Showtime(3) + Seats(3) = 10
+**Total step visits**: Movie(2) + Theater(2) + Date(2) + Showtime(3) + Seats(3) = 12

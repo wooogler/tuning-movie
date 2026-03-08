@@ -7,7 +7,7 @@
 
 ## Scenario (Participant Instructions)
 
-You would like to see a movie alone this weekend. Book a movie ticket that satisfies the following conditions:
+Today is Wednesday, March 11, 2026. You would like to see a movie alone this weekend, Saturday March 14 or Sunday March 15, 2026. Book a movie ticket that satisfies the following conditions:
 
 1. You want to watch a sci-fi movie called Cosmic Laughs alone.
 2. You will be available except for evenings (after 7 PM) on both Saturday and Sunday.
@@ -41,8 +41,8 @@ You would like to see a movie alone this weekend. Book a movie ticket that satis
 
 | Theater | Distance | Notes |
 |---------|----------|-------|
-| Theater 1 | 3 mi | 가장 가까움 |
-| Theater 2 | 8 mi | 10마일 이내 |
+| Skyline Multiplex | 3 mi | 가장 가까움 |
+| Cedar Point Cinema | 8 mi | 10마일 이내 |
 
 ---
 
@@ -50,7 +50,7 @@ You would like to see a movie alone this weekend. Book a movie ticket that satis
 
 토요일/일요일 동일 스케줄.
 
-### Cosmic Laughs @ Theater 1 (Runtime: 2h 30m)
+### Cosmic Laughs @ Skyline Multiplex (Runtime: 2h 30m)
 
 | Showtime | Format | Ends | P2 (<7PM 종료) | Center Seats |
 |----------|--------|------|----------------|--------------|
@@ -63,24 +63,24 @@ You would like to see a movie alone this weekend. Book a movie ticket that satis
 3D + 7 PM 이전 종료: **3:00 PM만 유일** (5:30 PM 3D는 8 PM 종료로 탈락)
 - 3:00 PM 3D: 가운데 좌석 없음 → P5 ✗
 
-### Cosmic Laughs @ Theater 2
+### Cosmic Laughs @ Cedar Point Cinema
 
 | Showtime | Format | Ends | P2 (<7PM) | Center Seats |
 |----------|--------|------|-----------|--------------|
 | 3:00 PM | **3D** | 5:30 PM | ✓ | **가능** ✓ |
-| (이하 Theater 1과 동일 스케줄) | | | | |
+| (이하 Skyline Multiplex와 동일 스케줄) | | | | |
 
 ---
 
 ## Expected User Flow
 
-### === 1차 시도: Theater 1 (가장 가까움) ===
+### === 1차 시도: Skyline Multiplex (가장 가까움) ===
 
 #### [Movie]
 - **선택: Cosmic Laughs** (지정 영화)
 
 #### [Theater] 1차 방문
-- **선택: Theater 1** (3 mi, 가장 가까움)
+- **선택: Skyline Multiplex** (3 mi, 가장 가까움)
 
 #### [Date]
 - 토/일 동일 스케줄 → **토요일 선택**
@@ -98,10 +98,10 @@ You would like to see a movie alone this weekend. Book a movie ticket that satis
 
 - **결정**: 다른 극장 시도
 
-### === 2차 시도: Theater 2 ===
+### === 2차 시도: Cedar Point Cinema ===
 
 #### [Theater] 2차 방문
-- **선택: Theater 2** (8 mi, 10마일 이내)
+- **선택: Cedar Point Cinema** (8 mi, 10마일 이내)
 
 #### [Showtime] 2차 방문
 - 3:00 PM (3D) → 5:30 PM ✓
@@ -117,9 +117,9 @@ You would like to see a movie alone this weekend. Book a movie ticket that satis
 
 | # | Conflict | Preferences | Type | Resolution |
 |---|---------|------------|------|-----------|
-| C1 | Theater 1, 3:00 PM 3D: 가운데석 없음 | P4+P5 ↔ 좌석 현황 | cross-step | Theater 2로 전환 |
+| C1 | Skyline Multiplex, 3:00 PM 3D: 가운데석 없음 | P4+P5 ↔ 좌석 현황 | cross-step | Cedar Point Cinema로 전환 |
 
-> Theater 1에서 탈락하는 다른 시간대:
+> Skyline Multiplex에서 탈락하는 다른 시간대:
 > - 4:00 PM Standard: P4 "3D 필수" ✗
 > - 5:30 PM 3D: P2 "7 PM 이전 종료" ✗
 
@@ -133,16 +133,16 @@ You would like to see a movie alone this weekend. Book a movie ticket that satis
 | 4:00 PM 스킵 | P4: 3D 아님 (hard) | Filter: 3D only |
 | 5:30 PM 이후 스킵 | P2: 7 PM 이후 종료 불가 | GUI Adaptation: 종료 시간 표시, 늦은 시간 gray out |
 | "3D + 7 PM 이전은 양보 못 해요" | P4+P2 결합 hard 선호 | Filter/highlight 적용 |
-| "다른 극장도 괜찮아요" | P3 완화 의사 | Theater 2 제안 |
+| "다른 극장도 괜찮아요" | P3 완화 의사 | Cedar Point Cinema 제안 |
 
 ---
 
 ## Backtrack Path
 
 ```
-Cosmic Laughs → Theater 1 → 토요일
+Cosmic Laughs → Skyline Multiplex → Sat, Mar 14, 2026
   → 3:00 PM (3D) → Seats C1 (가운데석 없음)
-    ↩ Theater 2 → 3:00 PM (3D) → Seats ✓ → 예매 완료!
+    ↩ Cedar Point Cinema → 3:00 PM (3D) → Seats ✓ → 예매 완료!
 ```
 
 **Total backtracks**: 1

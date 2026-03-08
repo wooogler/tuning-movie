@@ -47,6 +47,7 @@ const AGENT_TO_HOST_TYPES = new Set([
   'snapshot.get',
   'tool.call',
   'agent.message',
+  'agent.status',
   'session.end',
 ]);
 

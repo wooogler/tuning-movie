@@ -4,7 +4,7 @@ export const movies = sqliteTable('movies', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   genre: text('genre').notNull(), // JSON string array
-  duration: integer('duration').notNull(), // minutes
+  duration: text('duration').notNull(), // e.g. "1h 50m"
   rating: text('rating').notNull(),
   ageRating: text('age_rating').notNull().default('NR'),
   synopsis: text('synopsis').notNull().default(''),

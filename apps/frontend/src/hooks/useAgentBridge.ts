@@ -29,7 +29,11 @@ interface UseAgentBridgeResult {
   isJoined: boolean;
   joinedSessionId: string | null;
   connectedAgents: Array<{ id: string; name: string }>;
+  agentActivityPhase: 'idle' | 'planning' | 'executing';
+  agentStatusSupported: boolean;
 }
+
+type AgentActivityPhase = 'idle' | 'planning' | 'executing';
 
 function buildWsUrl(): string {
   const configured = import.meta.env.VITE_AGENT_WS_URL as string | undefined;
@@ -92,6 +96,8 @@ export function useAgentBridge({
   const [isJoined, setIsJoined] = useState(false);
   const [joinedSessionId, setJoinedSessionId] = useState<string | null>(null);
   const [connectedAgents, setConnectedAgents] = useState<Array<{ id: string; name: string }>>([]);
+  const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentActivityPhase>>({});
+  const [agentStatusSupported, setAgentStatusSupported] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -203,9 +209,33 @@ export function useAgentBridge({
           })
           .filter((entry): entry is { id: string; name: string } => entry !== null);
         setConnectedAgents(agents);
+        setAgentStatuses((prev) => {
+          if (agents.length === 0) return {};
+          const connectedNames = new Set(agents.map((agent) => agent.name));
+          const next = Object.fromEntries(
+            Object.entries(prev).filter(([name]) => connectedNames.has(name))
+          );
+          return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+        });
         if (typeof message.payload?.sessionId === 'string' && message.payload.sessionId.trim()) {
           setJoinedSessionId(message.payload.sessionId.trim());
         }
+        return;
+      }
+
+      case 'agent.status': {
+        const phaseRaw = message.payload?.phase;
+        if (phaseRaw !== 'idle' && phaseRaw !== 'planning' && phaseRaw !== 'executing') {
+          return;
+        }
+        const agentName =
+          typeof message.payload?.agentName === 'string' && message.payload.agentName.trim()
+            ? message.payload.agentName.trim()
+            : 'agent';
+        setAgentStatusSupported(true);
+        setAgentStatuses((prev) =>
+          prev[agentName] === phaseRaw ? prev : { ...prev, [agentName]: phaseRaw }
+        );
         return;
       }
 
@@ -313,6 +343,8 @@ export function useAgentBridge({
         ws.close(1000, 'host-connection-disabled');
       }
       wsRef.current = null;
+      setAgentStatuses({});
+      setAgentStatusSupported(false);
       return;
     }
 
@@ -354,6 +386,8 @@ export function useAgentBridge({
         setIsJoined(false);
         setJoinedSessionId(null);
         setConnectedAgents([]);
+        setAgentStatuses({});
+        setAgentStatusSupported(false);
         if (wsRef.current === ws) {
           wsRef.current = null;
         }
@@ -431,6 +465,24 @@ export function useAgentBridge({
     [sendEnvelope]
   );
 
+  const agentActivityPhase = useMemo<AgentActivityPhase>(() => {
+    const connectedNames = new Set(connectedAgents.map((agent) => agent.name));
+    const relevantPhases =
+      connectedNames.size > 0
+        ? Object.entries(agentStatuses)
+            .filter(([name]) => connectedNames.has(name))
+            .map(([, phase]) => phase)
+        : Object.values(agentStatuses);
+
+    if (relevantPhases.includes('executing')) {
+      return 'executing';
+    }
+    if (relevantPhases.includes('planning')) {
+      return 'planning';
+    }
+    return 'idle';
+  }, [agentStatuses, connectedAgents]);
+
   return {
     sendUserMessageToAgent,
     sendSessionResetToAgent,
@@ -438,5 +490,7 @@ export function useAgentBridge({
     isJoined,
     joinedSessionId,
     connectedAgents,
+    agentActivityPhase,
+    agentStatusSupported,
   };
 }

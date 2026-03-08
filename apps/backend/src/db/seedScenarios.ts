@@ -25,7 +25,7 @@ function createTables(sqlite: Database.Database): void {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       genre TEXT NOT NULL,
-      duration INTEGER NOT NULL,
+      duration TEXT NOT NULL,
       rating TEXT NOT NULL,
       age_rating TEXT NOT NULL DEFAULT 'NR',
       synopsis TEXT NOT NULL DEFAULT '',

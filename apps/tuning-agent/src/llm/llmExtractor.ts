@@ -13,6 +13,7 @@ interface PreferenceExtractionInput {
   currentStage: string;
   state: Record<string, unknown> | null;
   uiSpec: unknown;
+  recentHistory: unknown[];
   existingPreferences: Preference[];
 }
 
@@ -80,13 +81,19 @@ export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
 
 const PREFERENCE_SYSTEM_PROMPT =
   'You maintain the structured user preference memory for an interactive booking agent.\n' +
-  'Inputs include userMessage, currentStage, state, uiSpec, and existingPreferences.\n' +
+  'Inputs include userMessage, currentStage, state, uiSpec, recentHistory, and existingPreferences.\n' +
   'Return the full updated preference list for the current turn.\n' +
   'Rules:\n' +
   '- Preferences must come from user intent, not from system availability.\n' +
+  '- Use recentHistory to distinguish durable user preferences from in-the-moment procedural replies.\n' +
   '- Preserve existing preference wording when the meaning remains unchanged so the system can keep stable ids.\n' +
   '- Remove obsolete preferences by omitting them from the returned list.\n' +
   '- Ignore trivial acknowledgements, assistant suggestions, and system state that the user did not ask for.\n' +
+  '- Do not store procedural, exploratory, or temporary action requests as preferences.\n' +
+  '- Do not convert branch-local instructions into durable preferences. Examples: "check 4pm", "try this one", "go back", "clear that filter", "show another option", "check seats".\n' +
+  '- Do not create a new preference when the user is only answering an assistant confirmation question about the next step to inspect.\n' +
+  '- Treat option-specific trial confirmations as temporary unless the user clearly states an enduring desire or rule (for example "I want the 4:00 PM showtime" as a standing choice).\n' +
+  '- When the latest user message is procedural or temporary, prefer keeping existingPreferences unchanged unless the user also states a durable preference.\n' +
   '- Use strength="hard" for requirements/constraints the user clearly insists on.\n' +
   '- Use strength="soft" for softer wishes, preferences, or nice-to-haves.\n' +
   '- Keep each description as a short standalone sentence.\n' +
@@ -538,6 +545,7 @@ export interface PreferenceExtractionContext {
   currentStage: string;
   state: Record<string, unknown> | null;
   uiSpec: unknown;
+  recentHistory: unknown[];
   existingPreferences: Preference[];
 }
 
@@ -556,6 +564,7 @@ export async function extractStructuredPreferences(
     currentStage: ctx.currentStage,
     state: ctx.state,
     uiSpec: ctx.uiSpec,
+    recentHistory: ctx.recentHistory,
     existingPreferences: ctx.existingPreferences,
   };
 

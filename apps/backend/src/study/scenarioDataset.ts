@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { resolveScenarioCatalogPath } from './scenarioCatalog';
 import type { ScenarioDefinition } from './types';
+import { normalizeDurationText } from '../utils/duration';
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^\d{2}:\d{2}$/;
@@ -14,7 +15,7 @@ export interface ScenarioDatasetMovie {
   id: string;
   title: string;
   genre: string[];
-  duration: number;
+  duration: string;
   rating: string;
   ageRating: string;
   synopsis: string;
@@ -76,6 +77,24 @@ export interface ScenarioAdjacencyRule {
   maxAdjacentAvailable?: number;
 }
 
+export interface ScenarioTimeRuleShowing {
+  time: string;
+  format: ShowingFormat;
+}
+
+export interface ScenarioTimeRule {
+  movieId: string;
+  theaterId: string;
+  date: string;
+  expectedShowings: ScenarioTimeRuleShowing[];
+}
+
+export interface ScenarioSeatAvailabilityRule {
+  showingId: string;
+  row: string;
+  expectedAvailableNumbers: number[];
+}
+
 export interface ScenarioTheaterDistanceCheck {
   theaterId: string;
   distanceMiles: number;
@@ -86,7 +105,9 @@ export interface ScenarioDatasetAssertions {
   expectedTheaterIds: string[];
   theaterDistanceChecks?: ScenarioTheaterDistanceCheck[];
   dateRules: ScenarioDateRule[];
+  timeRules?: ScenarioTimeRule[];
   adjacencyRules: ScenarioAdjacencyRule[];
+  seatAvailabilityRules?: ScenarioSeatAvailabilityRule[];
 }
 
 export interface ScenarioDataset {
@@ -166,13 +187,13 @@ function parseMovie(raw: unknown, index: number, scenarioId: string): ScenarioDa
   const id = readString(record.id);
   const title = readString(record.title);
   const genre = readStringArray(record.genre);
-  const duration = readPositiveInteger(record.duration);
+  const duration = normalizeDurationText(record.duration);
   const rating = readString(record.rating);
   const ageRating = readString(record.ageRating) ?? 'NR';
   const synopsis = readString(record.synopsis) ?? '';
   const releaseDate = readString(record.releaseDate);
 
-  if (!id || !title || !genre || duration === null || !rating || !releaseDate) {
+  if (!id || !title || !genre || !duration || !rating || !releaseDate) {
     throw new Error(`[${scenarioId}] movies[${index}] has invalid fields`);
   }
   if (!validateDate(releaseDate)) {
@@ -433,6 +454,63 @@ function parseAssertions(raw: unknown, scenarioId: string): ScenarioDatasetAsser
     });
   };
 
+  const parseTimeRules = (value: unknown): ScenarioTimeRule[] | undefined => {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) {
+      throw new Error(`[${scenarioId}] assertions.timeRules must be an array`);
+    }
+
+    return value.map((entry, index) => {
+      const item = toObject(entry);
+      if (!item) {
+        throw new Error(`[${scenarioId}] assertions.timeRules[${index}] must be an object`);
+      }
+      const movieId = readString(item.movieId);
+      const theaterId = readString(item.theaterId);
+      const date = readString(item.date);
+      if (!movieId || !theaterId || !date) {
+        throw new Error(`[${scenarioId}] assertions.timeRules[${index}] has invalid fields`);
+      }
+      if (!validateDate(date)) {
+        throw new Error(`[${scenarioId}] assertions.timeRules[${index}].date has invalid date`);
+      }
+      if (!Array.isArray(item.expectedShowings)) {
+        throw new Error(
+          `[${scenarioId}] assertions.timeRules[${index}].expectedShowings must be an array`
+        );
+      }
+
+      const expectedShowings = item.expectedShowings.map((rawShowing, showingIndex) => {
+        const showing = toObject(rawShowing);
+        if (!showing) {
+          throw new Error(
+            `[${scenarioId}] assertions.timeRules[${index}].expectedShowings[${showingIndex}] must be an object`
+          );
+        }
+        const time = readString(showing.time);
+        const format = readShowingFormat(showing.format);
+        if (!time || !format) {
+          throw new Error(
+            `[${scenarioId}] assertions.timeRules[${index}].expectedShowings[${showingIndex}] has invalid fields`
+          );
+        }
+        if (!validateTime(time)) {
+          throw new Error(
+            `[${scenarioId}] assertions.timeRules[${index}].expectedShowings[${showingIndex}].time must be HH:MM`
+          );
+        }
+        return { time, format };
+      });
+
+      return {
+        movieId,
+        theaterId,
+        date,
+        expectedShowings,
+      };
+    });
+  };
+
   const parseAdjacencyRules = (value: unknown): ScenarioAdjacencyRule[] => {
     if (!Array.isArray(value)) {
       throw new Error(`[${scenarioId}] assertions.adjacencyRules must be an array`);
@@ -476,6 +554,55 @@ function parseAssertions(raw: unknown, scenarioId: string): ScenarioDatasetAsser
     });
   };
 
+  const parseSeatAvailabilityRules = (
+    value: unknown
+  ): ScenarioSeatAvailabilityRule[] | undefined => {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) {
+      throw new Error(`[${scenarioId}] assertions.seatAvailabilityRules must be an array`);
+    }
+
+    return value.map((entry, index) => {
+      const item = toObject(entry);
+      if (!item) {
+        throw new Error(
+          `[${scenarioId}] assertions.seatAvailabilityRules[${index}] must be an object`
+        );
+      }
+      const showingId = readString(item.showingId);
+      const row = readString(item.row);
+      if (!showingId || !row) {
+        throw new Error(
+          `[${scenarioId}] assertions.seatAvailabilityRules[${index}] has invalid fields`
+        );
+      }
+      if (!Array.isArray(item.expectedAvailableNumbers)) {
+        throw new Error(
+          `[${scenarioId}] assertions.seatAvailabilityRules[${index}].expectedAvailableNumbers must be an array`
+        );
+      }
+
+      const parsed = item.expectedAvailableNumbers.map((value) => readPositiveInteger(value));
+      if (parsed.some((value) => value === null)) {
+        throw new Error(
+          `[${scenarioId}] assertions.seatAvailabilityRules[${index}].expectedAvailableNumbers must contain integers`
+        );
+      }
+      const expectedAvailableNumbers = parsed as number[];
+      assertUniqueIds(
+        expectedAvailableNumbers.map((value) => String(value)),
+        `assertions.seatAvailabilityRules[${index}].expectedAvailableNumbers`,
+        scenarioId
+      );
+
+      return {
+        showingId,
+        row,
+        expectedAvailableNumbers,
+      };
+    });
+  };
+
   const parseDistanceChecks = (value: unknown): ScenarioTheaterDistanceCheck[] | undefined => {
     if (value === undefined) return undefined;
     if (!Array.isArray(value)) {
@@ -496,12 +623,16 @@ function parseAssertions(raw: unknown, scenarioId: string): ScenarioDatasetAsser
   };
 
   const theaterDistanceChecks = parseDistanceChecks(record.theaterDistanceChecks);
+  const timeRules = parseTimeRules(record.timeRules);
+  const seatAvailabilityRules = parseSeatAvailabilityRules(record.seatAvailabilityRules);
 
   return {
     expectedMovieIds,
     expectedTheaterIds,
     dateRules: parseDateRules(record.dateRules),
+    ...(timeRules ? { timeRules } : {}),
     adjacencyRules: parseAdjacencyRules(record.adjacencyRules),
+    ...(seatAvailabilityRules ? { seatAvailabilityRules } : {}),
     ...(theaterDistanceChecks ? { theaterDistanceChecks } : {}),
   };
 }
@@ -560,6 +691,12 @@ function validateReferences(dataset: ScenarioDataset, scenarioId: string): void 
     }
   }
 
+  for (const rule of dataset.assertions.timeRules ?? []) {
+    if (!movieSet.has(rule.movieId) || !theaterSet.has(rule.theaterId)) {
+      throw new Error(`[${scenarioId}] assertions.timeRules references unknown movie/theater`);
+    }
+  }
+
   for (const rule of dataset.assertions.adjacencyRules) {
     if (!showingSet.has(rule.showingId)) {
       throw new Error(`[${scenarioId}] assertions.adjacencyRules references unknown showingId ${rule.showingId}`);
@@ -572,6 +709,26 @@ function validateReferences(dataset: ScenarioDataset, scenarioId: string): void 
   for (const check of dataset.assertions.theaterDistanceChecks ?? []) {
     if (!theaterSet.has(check.theaterId)) {
       throw new Error(`[${scenarioId}] assertions.theaterDistanceChecks references unknown theaterId ${check.theaterId}`);
+    }
+  }
+
+  for (const rule of dataset.assertions.seatAvailabilityRules ?? []) {
+    if (!showingSet.has(rule.showingId)) {
+      throw new Error(
+        `[${scenarioId}] assertions.seatAvailabilityRules references unknown showingId ${rule.showingId}`
+      );
+    }
+    if (!rowSet.has(rule.row)) {
+      throw new Error(
+        `[${scenarioId}] assertions.seatAvailabilityRules references unknown row ${rule.row}`
+      );
+    }
+    for (const number of rule.expectedAvailableNumbers) {
+      if (number < 1 || number > dataset.seatTemplate.seatsPerRow) {
+        throw new Error(
+          `[${scenarioId}] assertions.seatAvailabilityRules has out-of-range seat number ${number}`
+        );
+      }
     }
   }
 }

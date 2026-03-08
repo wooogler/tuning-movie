@@ -37,6 +37,7 @@ import { useToolHandler, useAgentBridge } from '../hooks';
 import { agentTools, type ToolDefinition } from '../agent/tools';
 import { getStudyModeConfig, type StudyModeId } from './studyOptions';
 import type { Movie, Theater, Showing, Booking } from '../types';
+import { formatTime12Hour } from '../utils/displayFormats';
 import { getFixedCurrentDate } from '../utils/studyDate';
 import type { StudySessionState } from '../study/sessionStorage';
 
@@ -288,11 +289,13 @@ export function ChatPage({
   const initialized = useRef(false);
   const appliedStudyModePresetRef = useRef<StudyModeId | null>(null);
   const previousStageRef = useRef<Stage>(currentStage);
+  const interactionScopeRef = useRef<HTMLDivElement | null>(null);
   const chatResizeSessionRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const scenarioPanelResizeSessionRef = useRef<{ startX: number; startWidth: number } | null>(
     null
   );
   const pendingAgentToggleResetReasonRef = useRef<string | null>(null);
+  const agentStatusSupportedRef = useRef(false);
   const studyModeConfig = useMemo(
     () => (studyModePreset ? getStudyModeConfig(studyModePreset) : null),
     [studyModePreset]
@@ -769,12 +772,12 @@ export function ChatPage({
         const selectedShowing = showings.find((showing) => showing.id === selectedId);
         if (!selectedShowing) return;
 
-        selectionLabel = selectedShowing.time;
+        selectionLabel = formatTime12Hour(selectedShowing.time);
         nextBooking = {
           ...currentBooking,
           showing: {
             id: selectedShowing.id,
-            time: selectedShowing.time,
+            time: formatTime12Hour(selectedShowing.time),
           },
           selectedSeats: [],
         };
@@ -976,7 +979,9 @@ export function ChatPage({
     params: Record<string, unknown>,
     context?: ToolApplyContext
   ) => {
-    setAwaitingAgentResponse(false);
+    if (!agentStatusSupportedRef.current) {
+      setAwaitingAgentResponse(false);
+    }
     const result = onToolApply(toolName, params, context);
     if (
       isBaselineMode &&
@@ -1002,6 +1007,8 @@ export function ChatPage({
     isJoined: isAgentBridgeJoined,
     joinedSessionId: agentSessionId,
     connectedAgents,
+    agentActivityPhase,
+    agentStatusSupported,
   } = useAgentBridge({
     uiSpec: activeSpec,
     messageHistory: messages,
@@ -1014,6 +1021,10 @@ export function ChatPage({
     onAgentMessage: handleAgentMessage,
     onSessionEnd: handleSessionReset,
   });
+
+  useEffect(() => {
+    agentStatusSupportedRef.current = agentStatusSupported;
+  }, [agentStatusSupported]);
 
   const handleManualReset = useCallback(() => {
     if (loading) return;
@@ -1100,17 +1111,40 @@ export function ChatPage({
   const nextStage = getNextStage(currentStage);
   const hasConnectedAgent = connectedAgents.length > 0;
   const connectedAgentNames = connectedAgents.map((agent) => agent.name).join(', ');
-  const isAgentTyping =
-    awaitingAgentResponse &&
+  const hasLiveAgentSession =
     agentBridgeEnabled &&
     isAgentBridgeConnected &&
     isAgentBridgeJoined &&
     hasConnectedAgent;
+  const effectiveAgentActivityPhase =
+    agentActivityPhase !== 'idle'
+      ? agentActivityPhase
+      : awaitingAgentResponse && hasLiveAgentSession
+      ? 'planning'
+      : 'idle';
+  const isAgentTyping = hasLiveAgentSession && effectiveAgentActivityPhase !== 'idle';
+  const interactionLocked = loading || isAgentTyping;
+  const agentLoadingLabel =
+    effectiveAgentActivityPhase === 'executing'
+      ? 'Agent is applying the next action...'
+      : 'Agent is planning on this step...';
+  const agentLoadingDetail = 'User input and GUI interactions are temporarily locked.';
+  const interactionLockLabel = isAgentTyping
+    ? agentLoadingLabel
+    : 'Loading the current step...';
+  const interactionLockDetail = isAgentTyping
+    ? agentLoadingDetail
+    : 'Please wait until the UI finishes updating.';
 
   useEffect(() => {
-    if (isAgentTyping) return;
-    setAwaitingAgentResponse(false);
-  }, [isAgentTyping]);
+    if (!hasLiveAgentSession) {
+      setAwaitingAgentResponse(false);
+      return;
+    }
+    if (agentStatusSupported && agentActivityPhase !== 'idle') {
+      setAwaitingAgentResponse(false);
+    }
+  }, [agentActivityPhase, agentStatusSupported, hasLiveAgentSession]);
 
   useEffect(() => {
     const pendingReason = pendingAgentToggleResetReasonRef.current;
@@ -1129,8 +1163,32 @@ export function ChatPage({
     sendSessionResetToAgent,
   ]);
 
-  const inputDisabled = !agentBridgeEnabled || !isAgentBridgeConnected || !isAgentBridgeJoined || !hasConnectedAgent;
-  const inputStatusLabel = !agentBridgeEnabled
+  useEffect(() => {
+    const scope = interactionScopeRef.current as (HTMLDivElement & { inert?: boolean }) | null;
+    if (!scope) return;
+    scope.inert = interactionLocked;
+    return () => {
+      scope.inert = false;
+    };
+  }, [interactionLocked]);
+
+  useEffect(() => {
+    if (!interactionLocked || typeof document === 'undefined') return;
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) {
+      activeElement.blur();
+    }
+  }, [interactionLocked]);
+
+  const inputDisabled =
+    interactionLocked ||
+    !agentBridgeEnabled ||
+    !isAgentBridgeConnected ||
+    !isAgentBridgeJoined ||
+    !hasConnectedAgent;
+  const inputStatusLabel = interactionLocked
+    ? interactionLockLabel
+    : !agentBridgeEnabled
     ? 'Agent connection is off'
     : !isAgentBridgeConnected
     ? 'Relay disconnected'
@@ -1143,13 +1201,17 @@ export function ChatPage({
     : isBaselineMode
     ? 'Baseline router connected'
     : 'External agent connected';
-  const inputStatusTone: 'default' | 'warning' | 'success' = !agentBridgeEnabled ||
-    !isAgentBridgeConnected ||
-    !isAgentBridgeJoined ||
-    !hasConnectedAgent
+  const inputStatusTone: 'default' | 'warning' | 'success' = interactionLocked
+    ? 'default'
+    : !agentBridgeEnabled ||
+      !isAgentBridgeConnected ||
+      !isAgentBridgeJoined ||
+      !hasConnectedAgent
     ? 'warning'
     : 'success';
-  const inputStatusDetail = !agentBridgeEnabled
+  const inputStatusDetail = interactionLocked
+    ? interactionLockDetail
+    : !agentBridgeEnabled
     ? 'Toggle Agent ON to reconnect.'
     : isAgentBridgeJoined
     ? `session: ${agentSessionId ?? 'unknown'}${
@@ -1213,7 +1275,8 @@ export function ChatPage({
   const showScenarioBriefing = scenarioStory.length > 0 || scenarioPreferenceTypes.length > 0;
 
   return (
-    <div className="flex h-screen bg-dark">
+    <div className="relative h-screen bg-dark">
+      <div ref={interactionScopeRef} className="flex h-full">
       {showScenarioBriefing && (
         <aside
           className="relative hidden shrink-0 border-r border-dark-border bg-dark-light lg:block"
@@ -1387,6 +1450,8 @@ export function ChatPage({
             messages={messages}
             activeSpec={activeSpec}
             isAgentTyping={isAgentTyping}
+            agentLoadingLabel={agentLoadingLabel}
+            agentLoadingDetail={agentLoadingDetail}
             onSelect={handleSelect}
             onToggle={handleToggle}
             onNext={handleNext}
@@ -1536,7 +1601,9 @@ export function ChatPage({
             statusDetail={inputStatusDetail}
             statusTone={inputStatusTone}
             placeholder={
-              !isAgentBridgeConnected
+              interactionLocked
+                ? interactionLockLabel
+                : !isAgentBridgeConnected
                 ? 'Waiting for agent relay connection...'
                 : !isAgentBridgeJoined
                 ? 'Joining agent session...'
@@ -1549,6 +1616,15 @@ export function ChatPage({
           />
         )}
       </div>
+      </div>
+      {interactionLocked && (
+        <div className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center bg-dark/35 px-4 py-6">
+          <div className="rounded-2xl border border-info-border bg-dark-light/95 px-4 py-3 text-center shadow-xl backdrop-blur-sm">
+            <div className="text-sm font-medium text-info-text">{interactionLockLabel}</div>
+            <div className="mt-1 text-xs text-info-label">{interactionLockDetail}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

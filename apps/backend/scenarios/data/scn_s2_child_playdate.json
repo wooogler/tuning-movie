@@ -1,0 +1,296 @@
+{
+  "movies": [
+    {
+      "id": "m1",
+      "title": "Jungle Pals",
+      "genre": ["Animation", "Adventure", "Family"],
+      "duration": 135,
+      "rating": "4.4",
+      "ageRating": "PG",
+      "synopsis": "A troop of rainforest animals turn a lost-map rescue into a full afternoon musical.",
+      "releaseDate": "2025-05-23"
+    },
+    {
+      "id": "m2",
+      "title": "Robo Buddies",
+      "genre": ["Animation", "Sci-Fi", "Family"],
+      "duration": 110,
+      "rating": "4.1",
+      "ageRating": "PG",
+      "synopsis": "Two repair-shop robots sneak out for one day of freedom and accidentally save the whole block.",
+      "releaseDate": "2026-03-20"
+    },
+    {
+      "id": "m3",
+      "title": "Magic Treehouse",
+      "genre": ["Fantasy", "Family"],
+      "duration": 100,
+      "rating": "3.9",
+      "ageRating": "PG",
+      "synopsis": "A pair of siblings discover that every page in a library treehouse opens a real doorway.",
+      "releaseDate": "2024-10-18"
+    }
+  ],
+  "theaters": [
+    {
+      "id": "t1",
+      "name": "Storybook Cinema",
+      "location": "Maplewood Plaza",
+      "screenCount": 4,
+      "distanceMiles": 2,
+      "amenities": ["Reserved Seating", "Family Lounge"]
+    }
+  ],
+  "showings": [
+    {
+      "id": "s_m1_t1_20260314_1230",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "12:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260314_1330",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "13:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260314_1530",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "15:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260314_1630",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "16:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260320_1230",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 2,
+      "date": "2026-03-20",
+      "time": "12:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260320_1330",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 2,
+      "date": "2026-03-20",
+      "time": "13:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260320_1530",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 2,
+      "date": "2026-03-20",
+      "time": "15:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260320_1630",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 2,
+      "date": "2026-03-20",
+      "time": "16:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t1_20260314_1230",
+      "movieId": "m3",
+      "theaterId": "t1",
+      "screenNumber": 3,
+      "date": "2026-03-14",
+      "time": "12:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t1_20260314_1330",
+      "movieId": "m3",
+      "theaterId": "t1",
+      "screenNumber": 3,
+      "date": "2026-03-14",
+      "time": "13:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t1_20260314_1530",
+      "movieId": "m3",
+      "theaterId": "t1",
+      "screenNumber": 3,
+      "date": "2026-03-14",
+      "time": "15:30",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t1_20260314_1630",
+      "movieId": "m3",
+      "theaterId": "t1",
+      "screenNumber": 3,
+      "date": "2026-03-14",
+      "time": "16:30",
+      "format": "Standard",
+      "totalSeats": 48
+    }
+  ],
+  "seatTemplate": {
+    "rows": ["A", "B", "C", "D", "E", "F"],
+    "seatsPerRow": 8,
+    "defaultType": "standard",
+    "defaultPrice": 13,
+    "defaultStatus": "available"
+  },
+  "seatOverrides": [
+    {
+      "showingId": "s_m1_t1_20260314_1330",
+      "row": "C",
+      "occupiedNumbers": [2, 4, 6, 8]
+    },
+    {
+      "showingId": "s_m1_t1_20260314_1330",
+      "row": "D",
+      "occupiedNumbers": [2, 4, 6, 8]
+    },
+    {
+      "showingId": "s_m1_t1_20260314_1330",
+      "row": "E",
+      "occupiedNumbers": [2, 4, 6, 8]
+    },
+    {
+      "showingId": "s_m1_t1_20260314_1330",
+      "row": "F",
+      "occupiedNumbers": [2, 4, 6, 8]
+    },
+    {
+      "showingId": "s_m3_t1_20260314_1330",
+      "row": "C",
+      "occupiedNumbers": [1, 2, 5, 6, 7, 8]
+    }
+  ],
+  "assertions": {
+    "expectedMovieIds": ["m1", "m2", "m3"],
+    "expectedTheaterIds": ["t1"],
+    "theaterDistanceChecks": [
+      {
+        "theaterId": "t1",
+        "distanceMiles": 2
+      }
+    ],
+    "dateRules": [
+      {
+        "movieId": "m1",
+        "theaterId": "t1",
+        "expectedDates": ["2026-03-14"]
+      },
+      {
+        "movieId": "m2",
+        "theaterId": "t1",
+        "expectedDates": ["2026-03-20"]
+      },
+      {
+        "movieId": "m3",
+        "theaterId": "t1",
+        "expectedDates": ["2026-03-14"]
+      }
+    ],
+    "timeRules": [
+      {
+        "movieId": "m1",
+        "theaterId": "t1",
+        "date": "2026-03-14",
+        "expectedShowings": [
+          { "time": "12:30", "format": "Standard" },
+          { "time": "13:30", "format": "Standard" },
+          { "time": "15:30", "format": "Standard" },
+          { "time": "16:30", "format": "Standard" }
+        ]
+      },
+      {
+        "movieId": "m2",
+        "theaterId": "t1",
+        "date": "2026-03-20",
+        "expectedShowings": [
+          { "time": "12:30", "format": "Standard" },
+          { "time": "13:30", "format": "Standard" },
+          { "time": "15:30", "format": "Standard" },
+          { "time": "16:30", "format": "Standard" }
+        ]
+      },
+      {
+        "movieId": "m3",
+        "theaterId": "t1",
+        "date": "2026-03-14",
+        "expectedShowings": [
+          { "time": "12:30", "format": "Standard" },
+          { "time": "13:30", "format": "Standard" },
+          { "time": "15:30", "format": "Standard" },
+          { "time": "16:30", "format": "Standard" }
+        ]
+      }
+    ],
+    "adjacencyRules": [
+      {
+        "showingId": "s_m1_t1_20260314_1330",
+        "row": "A",
+        "minAdjacentAvailable": 2
+      },
+      {
+        "showingId": "s_m1_t1_20260314_1330",
+        "row": "C",
+        "maxAdjacentAvailable": 1
+      },
+      {
+        "showingId": "s_m3_t1_20260314_1330",
+        "row": "C",
+        "minAdjacentAvailable": 2
+      }
+    ],
+    "seatAvailabilityRules": [
+      {
+        "showingId": "s_m1_t1_20260314_1330",
+        "row": "A",
+        "expectedAvailableNumbers": [1, 2, 3, 4, 5, 6, 7, 8]
+      },
+      {
+        "showingId": "s_m1_t1_20260314_1330",
+        "row": "C",
+        "expectedAvailableNumbers": [1, 3, 5, 7]
+      },
+      {
+        "showingId": "s_m3_t1_20260314_1330",
+        "row": "C",
+        "expectedAvailableNumbers": [3, 4]
+      }
+    ]
+  }
+}

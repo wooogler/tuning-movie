@@ -1,19 +1,19 @@
 # Set 2 – Task 1: Child's Playdate (Kid-Friendly Movie)
 
 > **Equivalent to**: Set 1 – Task 1 (Parents' Anniversary)
-> **Pattern**: AI 추천 → 최고 평점 선택 → 런타임/좌석 실패 → 영화 backtrack → 성공
+> **Pattern**: AI 추천 → 최고 평점 선택 → 좌석 실패 → 미개봉 대안 실패 → 더 짧은 영화로 전환
 
 ---
 
 ## Scenario (Participant Instructions)
 
-You are planning a movie outing for your child and their friend as part of a weekend playdate.
+Today is Wednesday, March 11, 2026. Your child has a playdate this Saturday, March 14, 2026, and you are taking the two kids to a movie afterward.
 
-1. Ask the AI to recommend a kid-friendly movie appropriate for ages 7–9. If it recommends multiple movies, pick the one that has the highest rating. If the selected movie fails to satisfy the conditions below, pick the 2nd best rated one.
+1. Ask the AI to recommend a kid-friendly movie appropriate for ages 7-9. If it recommends multiple movies, pick the one with the highest rating first.
 2. Book tickets at the closest theater.
-3. Choose a showtime that starts after 1 PM and ends before 5 PM.
-4. The children must sit next to each other, and seats must not be in the first two rows.
-5. You strongly prefer a movie that is under 2 hours long, but this is secondary to the timing and seating constraints.
+3. Keep the outing on the weekend, and choose a showtime that starts after 1 PM and ends before 5 PM.
+4. The children must sit next to each other, and the seats must not be in the first two rows.
+5. You strongly prefer a movie under 2 hours long, but that is secondary to the timing and seating constraints.
 
 ---
 
@@ -21,14 +21,15 @@ You are planning a movie outing for your child and their friend as part of a wee
 
 | # | Preference | Hard/Soft |
 |---|-----------|-----------|
-| P1 | 아동용 영화 (7–9세), AI 추천 | soft |
+| P1 | AI 추천 + 아동용 영화 (7-9세) | soft |
 | P2 | 최고 평점 우선 | soft |
 | P3 | 가장 가까운 극장 | soft |
-| P4 | 시작 시간 ≥ 1 PM | **hard** |
-| P5 | 종료 시간 < 5 PM | **hard** |
-| P6 | 나란히 2석 | **hard** |
-| P7 | 앞 2열 제외 | **hard** |
-| P8 | 2시간 미만 선호 | soft (시간/좌석 제약보다 후순위) |
+| P4 | 이번 주말(토/일) | **hard** |
+| P5 | 시작 시간 ≥ 1 PM | **hard** |
+| P6 | 종료 시간 < 5 PM | **hard** |
+| P7 | 나란히 2석 | **hard** |
+| P8 | 앞 2열 제외 | **hard** |
+| P9 | 2시간 미만 선호 | soft |
 
 ---
 
@@ -39,48 +40,42 @@ AI 추천 3편:
 | Movie | Rating | Runtime | Notes |
 |-------|--------|---------|-------|
 | Jungle Pals | ★4.4 | 2h 15m | 최고 평점, 길다 |
-| Robo Buddies | ★4.1 | 1h 50m | **미개봉** |
-| Magic Treehouse | ★3.9 | 1h 40m | 가장 짧음, P8 충족 |
+| Robo Buddies | ★4.1 | 1h 50m | **2026-03-20 개봉** |
+| Magic Treehouse | ★3.9 | 1h 40m | 가장 짧음, P9 충족 |
 
 ---
 
 ## Theater Data
 
-| Theater | Notes |
-|---------|-------|
-| Closest Theater | 모든 영화 동일 스케줄 |
+| Theater | Distance | Notes |
+|---------|----------|-------|
+| Storybook Cinema | 2 mi | 가장 가까운 극장 |
 
 ---
 
-## Screening Schedule (모든 영화 공통 시간대)
+## Screening Schedule
 
-| Showtime | P4 (≥1PM) | Notes |
-|----------|-----------|-------|
-| 12:30 PM | ✗ | 1 PM 이전 |
-| 1:30 PM | ✓ | 유효 후보 |
-| 3:30 PM | ✓ | 유효 후보 |
-| 4:30 PM | ✓ | 런타임에 따라 5 PM 이전 종료 어려움 |
+### Jungle Pals @ Storybook Cinema on Saturday, March 14
 
-P4+P5 충족 가능 시간대: **1:30 PM**, **3:30 PM** (런타임에 따라)
-- 4:30 PM: 30분짜리 영화라도 5:00 PM → "before 5 PM" 경계
-
-### Jungle Pals (Runtime: 2h 15m)
-
-| Showtime | Ends | P5 (<5PM) | Seats |
-|----------|------|-----------|-------|
-| 1:30 PM | 3:45 PM | ✓ | **앞 2열만 남음** |
-| 3:30 PM | 5:45 PM | ✗ | — |
+| Showtime | Ends | P5 (≥1PM) | P6 (<5PM) | Seats |
+|----------|------|-----------|-----------|-------|
+| 12:30 PM | 2:45 PM | ✗ | ✓ | — |
+| 1:30 PM | 3:45 PM | ✓ | ✓ | **앞 2열만 실질적으로 가능** |
+| 3:30 PM | 5:45 PM | ✓ | ✗ | — |
+| 4:30 PM | 6:45 PM | ✓ | ✗ | — |
 
 ### Robo Buddies
 
-**미개봉** — 예매 불가
+**이번 주말에는 미개봉**. Storybook Cinema 기준 첫 상영일은 **Friday, March 20, 2026**.
 
-### Magic Treehouse (Runtime: 1h 40m)
+### Magic Treehouse @ Storybook Cinema on Saturday, March 14
 
-| Showtime | Ends | P5 (<5PM) | Seats |
-|----------|------|-----------|-------|
-| 1:30 PM | 3:10 PM | ✓ | **나란히 가운데석 가능** ✓ |
-| 3:30 PM | 5:10 PM | ✗ | — |
+| Showtime | Ends | P5 | P6 | Seats |
+|----------|------|----|----|-------|
+| 12:30 PM | 2:10 PM | ✗ | ✓ | — |
+| 1:30 PM | 3:10 PM | ✓ | ✓ | **가운데 인접 2석 가능** ✓ |
+| 3:30 PM | 5:10 PM | ✓ | ✗ | — |
+| 4:30 PM | 6:10 PM | ✓ | ✗ | — |
 
 ---
 
@@ -90,45 +85,62 @@ P4+P5 충족 가능 시간대: **1:30 PM**, **3:30 PM** (런타임에 따라)
 
 #### [Movie] 1차 방문
 - AI 추천: Jungle Pals (★4.4), Robo Buddies (★4.1), Magic Treehouse (★3.9)
-- **선택: Jungle Pals** (최고 평점)
+- **선택: Jungle Pals**
+
+#### [Theater] 1차 방문
+- **선택: Storybook Cinema**
+
+#### [Date] 1차 방문
+- playdate 일정상 **Saturday, March 14** 선택
 
 #### [Showtime] 1차 방문
-- 1:30 PM → 3:45 PM ✓ (P4+P5)
-- 3:30 PM → 5:45 PM ✗ (P5)
+- 1:30 PM → 3:45 PM ✓
 - **선택: 1:30 PM**
 
 #### [Seats] 1차 방문
-- 앞 2열만 남음 → P7 ✗
+- 앞 2열을 제외하면 인접 2석이 없음
 
-> **Conflict C1** (cross-step): P5+P7 → 유일한 유효 시간대(1:30 PM)에 앞줄만 남음
+> **Conflict C1** (cross-step): P7+P8 ↔ 1:30 PM 좌석 현황
 
-- 3:30 PM은 5:45 PM 종료 → P5 ✗ → 역시 불가
-- Jungle Pals에서 유효한 시간대+좌석 조합 없음
+- Jungle Pals는 유효한 시간대+좌석 조합이 없음
 - **결정**: 영화 선택으로 backtrack
 
 ### === 2차 시도: Robo Buddies ===
 
 #### [Movie] 2차 방문
-- Robo Buddies (★4.1) → **미개봉** → 불가
+- **선택: Robo Buddies**
 
-> **Constraint**: 미개봉
+#### [Theater] 2차 방문
+- **선택: Storybook Cinema**
 
-- **결정**: 다음 옵션
+#### [Date] 2차 방문
+- 첫 상영 가능일이 **Friday, March 20**뿐
+- 이번 주말 playdate 일정(P4)과 충돌
+
+> **Conflict C2** (cross-step): P4 "이번 주말" ↔ Robo Buddies 개봉일이 2026-03-20
+
+- **결정**: 다음 영화로 이동
 
 ### === 3차 시도: Magic Treehouse (★3.9, 1h 40m) ===
 
 #### [Movie] 3차 방문
 - **선택: Magic Treehouse**
 
+#### [Theater] 3차 방문
+- **선택: Storybook Cinema**
+
+#### [Date] 3차 방문
+- **선택: Saturday, March 14**
+
 #### [Showtime] 2차 방문
 - 1:30 PM → 3:10 PM ✓
 - **선택: 1:30 PM**
 
 #### [Seats] 2차 방문
-- 나란히 가운데석 가능 ✓ (P6+P7)
+- 앞 2열이 아닌 구역에서 인접 2석 가능 ✓
 - **예매 완료!**
 
-**정답**: Magic Treehouse, 1:30 PM
+**정답**: Storybook Cinema, Saturday March 14, 1:30 PM, Magic Treehouse
 
 ---
 
@@ -136,27 +148,18 @@ P4+P5 충족 가능 시간대: **1:30 PM**, **3:30 PM** (런타임에 따라)
 
 | # | Conflict | Preferences | Type | Resolution |
 |---|---------|------------|------|-----------|
-| C1 | Jungle Pals 1:30 PM: 앞줄만 | P7 ↔ 좌석 현황 | cross-step | 영화 backtrack |
-
----
-
-## How TUNING Helps
-
-- 사용자가 AI에게 추천을 요청
-- 사용자가 런타임을 물어볼 수 있음 (P5 시간 윈도우 관련)
-- 사용자가 앞 2열 거부 이유를 설명할 수 있음 (P7)
-- 사용자가 "5 PM 이전 종료" hard 제약을 명확히 할 수 있음 (P5)
-- 시스템이 시간 윈도우와 좌석 선호를 기억하여 다음 영화 추천 시 반영
+| C1 | Jungle Pals 1:30 PM: 앞 2열만 실질적 선택지 | P7+P8 ↔ 좌석 현황 | cross-step | 영화 backtrack |
+| C2 | Robo Buddies는 2026-03-20 개봉 | P4 ↔ 개봉일 | cross-step | Magic Treehouse 선택 |
 
 ---
 
 ## Backtrack Path
 
-```
-Jungle Pals → 1:30 PM → Seats C1 (앞줄만)
-  ↩ Movie (Robo Buddies: 미개봉)
-    → Movie (Magic Treehouse) → 1:30 PM → Seats ✓ → 예매 완료!
+```text
+Jungle Pals → Storybook Cinema → Sat, Mar 14 → 1:30 PM → Seats C1
+  ↩ Robo Buddies → Storybook Cinema → Fri, Mar 20 only → C2
+    ↩ Magic Treehouse → Storybook Cinema → Sat, Mar 14 → 1:30 PM → Seats ✓
 ```
 
-**Total backtracks**: 1 (영화 레벨)
-**Total step visits**: Movie(3) + Showtime(2) + Seats(2) = 7
+**Total backtracks**: 2
+**Total step visits**: Movie(3) + Theater(3) + Date(3) + Showtime(2) + Seats(2) = 13

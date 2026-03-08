@@ -13,6 +13,7 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:seed:scenarios": "tsx src/db/seedScenarios.ts",
     "db:studio": "drizzle-kit studio",
+    "db:verify:scenario": "tsx src/db/verifyScenario.ts",
     "db:verify:scenario:t1": "tsx src/db/verifyScenarioT1.ts"
   },
   "keywords": [

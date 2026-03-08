@@ -1,0 +1,522 @@
+{
+  "movies": [
+    {
+      "id": "m1",
+      "title": "Cosmic Laughs",
+      "genre": ["Sci-Fi", "Comedy"],
+      "duration": 150,
+      "rating": "4.3",
+      "ageRating": "PG",
+      "synopsis": "A deep-space cruise turns into a comedy when every life-support alert is caused by a stand-up robot.",
+      "releaseDate": "2025-12-12"
+    }
+  ],
+  "theaters": [
+    {
+      "id": "t1",
+      "name": "Skyline Multiplex",
+      "location": "Skyline Center",
+      "screenCount": 9,
+      "distanceMiles": 3,
+      "amenities": ["Reserved Seating", "3D Screens"]
+    },
+    {
+      "id": "t2",
+      "name": "Cedar Point Cinema",
+      "location": "Cedar Point Shops",
+      "screenCount": 6,
+      "distanceMiles": 8,
+      "amenities": ["Reserved Seating", "3D Screens"]
+    }
+  ],
+  "showings": [
+    {
+      "id": "s_m1_t1_20260314_1500",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "15:00",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260314_1600",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "16:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260314_1730",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "17:30",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260314_1900",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "19:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260314_1930",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "19:30",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260315_1500",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-15",
+      "time": "15:00",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260315_1600",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-15",
+      "time": "16:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260315_1730",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-15",
+      "time": "17:30",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260315_1900",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-15",
+      "time": "19:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260315_1930",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 1,
+      "date": "2026-03-15",
+      "time": "19:30",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260314_1500",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-14",
+      "time": "15:00",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260314_1600",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-14",
+      "time": "16:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260314_1730",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-14",
+      "time": "17:30",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260314_1900",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-14",
+      "time": "19:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260314_1930",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-14",
+      "time": "19:30",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260315_1500",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-15",
+      "time": "15:00",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260315_1600",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-15",
+      "time": "16:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260315_1730",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-15",
+      "time": "17:30",
+      "format": "3D",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260315_1900",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-15",
+      "time": "19:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260315_1930",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 2,
+      "date": "2026-03-15",
+      "time": "19:30",
+      "format": "3D",
+      "totalSeats": 48
+    }
+  ],
+  "seatTemplate": {
+    "rows": ["A", "B", "C", "D", "E", "F"],
+    "seatsPerRow": 8,
+    "defaultType": "standard",
+    "defaultPrice": 16,
+    "defaultStatus": "available"
+  },
+  "seatOverrides": [
+    {
+      "showingId": "s_m1_t1_20260314_1500",
+      "row": "A",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260314_1500",
+      "row": "B",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260314_1500",
+      "row": "C",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260314_1500",
+      "row": "D",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260314_1500",
+      "row": "E",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260314_1500",
+      "row": "F",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260315_1500",
+      "row": "A",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260315_1500",
+      "row": "B",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260315_1500",
+      "row": "C",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260315_1500",
+      "row": "D",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260315_1500",
+      "row": "E",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t1_20260315_1500",
+      "row": "F",
+      "occupiedNumbers": [3, 4, 5, 6]
+    },
+    {
+      "showingId": "s_m1_t2_20260314_1500",
+      "row": "A",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260314_1500",
+      "row": "B",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260314_1500",
+      "row": "C",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260314_1500",
+      "row": "D",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260314_1500",
+      "row": "E",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260314_1500",
+      "row": "F",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260315_1500",
+      "row": "A",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260315_1500",
+      "row": "B",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260315_1500",
+      "row": "C",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260315_1500",
+      "row": "D",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260315_1500",
+      "row": "E",
+      "occupiedNumbers": [1, 2, 7, 8]
+    },
+    {
+      "showingId": "s_m1_t2_20260315_1500",
+      "row": "F",
+      "occupiedNumbers": [1, 2, 7, 8]
+    }
+  ],
+  "assertions": {
+    "expectedMovieIds": ["m1"],
+    "expectedTheaterIds": ["t1", "t2"],
+    "theaterDistanceChecks": [
+      {
+        "theaterId": "t1",
+        "distanceMiles": 3
+      },
+      {
+        "theaterId": "t2",
+        "distanceMiles": 8
+      }
+    ],
+    "dateRules": [
+      {
+        "movieId": "m1",
+        "theaterId": "t1",
+        "expectedDates": ["2026-03-14", "2026-03-15"]
+      },
+      {
+        "movieId": "m1",
+        "theaterId": "t2",
+        "expectedDates": ["2026-03-14", "2026-03-15"]
+      }
+    ],
+    "timeRules": [
+      {
+        "movieId": "m1",
+        "theaterId": "t1",
+        "date": "2026-03-14",
+        "expectedShowings": [
+          {
+            "time": "15:00",
+            "format": "3D"
+          },
+          {
+            "time": "16:00",
+            "format": "Standard"
+          },
+          {
+            "time": "17:30",
+            "format": "3D"
+          },
+          {
+            "time": "19:00",
+            "format": "Standard"
+          },
+          {
+            "time": "19:30",
+            "format": "3D"
+          }
+        ]
+      },
+      {
+        "movieId": "m1",
+        "theaterId": "t1",
+        "date": "2026-03-15",
+        "expectedShowings": [
+          {
+            "time": "15:00",
+            "format": "3D"
+          },
+          {
+            "time": "16:00",
+            "format": "Standard"
+          },
+          {
+            "time": "17:30",
+            "format": "3D"
+          },
+          {
+            "time": "19:00",
+            "format": "Standard"
+          },
+          {
+            "time": "19:30",
+            "format": "3D"
+          }
+        ]
+      },
+      {
+        "movieId": "m1",
+        "theaterId": "t2",
+        "date": "2026-03-14",
+        "expectedShowings": [
+          {
+            "time": "15:00",
+            "format": "3D"
+          },
+          {
+            "time": "16:00",
+            "format": "Standard"
+          },
+          {
+            "time": "17:30",
+            "format": "3D"
+          },
+          {
+            "time": "19:00",
+            "format": "Standard"
+          },
+          {
+            "time": "19:30",
+            "format": "3D"
+          }
+        ]
+      },
+      {
+        "movieId": "m1",
+        "theaterId": "t2",
+        "date": "2026-03-15",
+        "expectedShowings": [
+          {
+            "time": "15:00",
+            "format": "3D"
+          },
+          {
+            "time": "16:00",
+            "format": "Standard"
+          },
+          {
+            "time": "17:30",
+            "format": "3D"
+          },
+          {
+            "time": "19:00",
+            "format": "Standard"
+          },
+          {
+            "time": "19:30",
+            "format": "3D"
+          }
+        ]
+      }
+    ],
+    "adjacencyRules": [],
+    "seatAvailabilityRules": [
+      {
+        "showingId": "s_m1_t1_20260314_1500",
+        "row": "C",
+        "expectedAvailableNumbers": [1, 2, 7, 8]
+      },
+      {
+        "showingId": "s_m1_t1_20260315_1500",
+        "row": "C",
+        "expectedAvailableNumbers": [1, 2, 7, 8]
+      },
+      {
+        "showingId": "s_m1_t2_20260314_1500",
+        "row": "C",
+        "expectedAvailableNumbers": [3, 4, 5, 6]
+      },
+      {
+        "showingId": "s_m1_t2_20260315_1500",
+        "row": "C",
+        "expectedAvailableNumbers": [3, 4, 5, 6]
+      }
+    ]
+  }
+}

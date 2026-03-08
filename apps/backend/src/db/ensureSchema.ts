@@ -1,26 +1,108 @@
 import type Database from 'better-sqlite3';
+import { normalizeDurationText } from '../utils/duration';
 
 interface TableInfoRow {
   name: string;
+  type: string;
+}
+
+function getTableInfoRows(sqlite: Database.Database, tableName: string): TableInfoRow[] {
+  return sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as TableInfoRow[];
 }
 
 function getColumnNames(sqlite: Database.Database, tableName: string): Set<string> {
-  return new Set(
-    (
-      sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as TableInfoRow[]
-    ).map((column) => column.name)
-  );
+  return new Set(getTableInfoRows(sqlite, tableName).map((column) => column.name));
+}
+
+function normalizedColumnType(value: string | undefined): string {
+  return (value ?? '').trim().toUpperCase();
+}
+
+function rebuildMoviesTable(sqlite: Database.Database): void {
+  sqlite.exec('PRAGMA foreign_keys = OFF');
+  try {
+    const transaction = sqlite.transaction(() => {
+      sqlite.exec(`
+        CREATE TABLE movies_next (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          genre TEXT NOT NULL,
+          duration TEXT NOT NULL,
+          rating TEXT NOT NULL,
+          age_rating TEXT NOT NULL DEFAULT 'NR',
+          synopsis TEXT NOT NULL DEFAULT '',
+          release_date TEXT NOT NULL
+        );
+
+        INSERT INTO movies_next (
+          id,
+          title,
+          genre,
+          duration,
+          rating,
+          age_rating,
+          synopsis,
+          release_date
+        )
+        SELECT
+          id,
+          title,
+          genre,
+          duration,
+          rating,
+          COALESCE(age_rating, 'NR'),
+          COALESCE(synopsis, ''),
+          release_date
+        FROM movies;
+
+        DROP TABLE movies;
+        ALTER TABLE movies_next RENAME TO movies;
+      `);
+    });
+    transaction();
+  } finally {
+    sqlite.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
+function normalizeMovieDurations(sqlite: Database.Database): void {
+  const rows = sqlite.prepare('SELECT id, duration FROM movies').all() as Array<{
+    id: string;
+    duration: unknown;
+  }>;
+  if (rows.length === 0) return;
+
+  const updateDuration = sqlite.prepare('UPDATE movies SET duration = ? WHERE id = ?');
+  const transaction = sqlite.transaction(() => {
+    for (const row of rows) {
+      const normalized = normalizeDurationText(row.duration);
+      if (!normalized || normalized === row.duration) continue;
+      updateDuration.run(normalized, row.id);
+    }
+  });
+  transaction();
 }
 
 export function ensureDbSchema(sqlite: Database.Database): void {
-  const movieColumnNames = getColumnNames(sqlite, 'movies');
+  const movieTableInfo = getTableInfoRows(sqlite, 'movies');
+  let movieColumnNames = new Set(movieTableInfo.map((column) => column.name));
   if (movieColumnNames.size > 0) {
     if (!movieColumnNames.has('age_rating')) {
       sqlite.exec("ALTER TABLE movies ADD COLUMN age_rating TEXT NOT NULL DEFAULT 'NR'");
+      movieColumnNames.add('age_rating');
     }
     if (!movieColumnNames.has('synopsis')) {
       sqlite.exec("ALTER TABLE movies ADD COLUMN synopsis TEXT NOT NULL DEFAULT ''");
+      movieColumnNames.add('synopsis');
     }
+
+    const durationColumn = movieTableInfo.find((column) => column.name === 'duration');
+    if (durationColumn && normalizedColumnType(durationColumn.type) !== 'TEXT') {
+      rebuildMoviesTable(sqlite);
+      movieColumnNames = getColumnNames(sqlite, 'movies');
+    }
+
+    normalizeMovieDurations(sqlite);
   }
 
   const theaterColumnNames = getColumnNames(sqlite, 'theaters');

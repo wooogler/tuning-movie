@@ -8,6 +8,7 @@
 import type { UISpec, DataItem, StateModel } from './types';
 import type { Movie, Theater, Showing, Seat } from '../types';
 import { computeVisibleItems } from './modifiers';
+import { formatTime12Hour } from '../utils/displayFormats';
 
 // =============================================================================
 // Helper: Create Spec
@@ -49,7 +50,7 @@ export interface MovieItem extends DataItem {
   displayLabel: string;
   genre: string[];
   rating: string;
-  duration: number;
+  duration: string;
 }
 
 export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
@@ -199,7 +200,7 @@ export function generateTimeSpec(
 ): UISpec<TimeItem> {
   const items: TimeItem[] = showings.map((s) => ({
     id: s.id,
-    time: s.time,
+    time: formatTime12Hour(s.time),
     format: s.format,
     availableSeats: s.availableSeats,
     totalSeats: s.totalSeats,

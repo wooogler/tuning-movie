@@ -107,6 +107,8 @@ let fatalErrorMessage: string | null = null;
 let perceptionVersion = 0;
 let lastUiFingerprint: string | null = null;
 let isFirstSnapshotSeen = false;
+type AgentStatusPhase = 'idle' | 'planning' | 'executing';
+let currentAgentStatusPhase: AgentStatusPhase = 'idle';
 
 interface PerceptionWaiter {
   afterVersion: number;
@@ -122,10 +124,48 @@ const DEFAULT_CP_MEMORY_LIMIT = Math.max(
   Number.parseInt(process.env.AGENT_DEFAULT_CP_MEMORY_LIMIT || '10', 10) || 10
 );
 const EXTRACTION_STAGE_ORDER = WORKFLOW_STAGE_ORDER;
+const EXTRACTION_HISTORY_WINDOW = 10;
+const EXTRACTION_VISIBLE_ITEMS_LIMIT = 6;
 
 function getMonitorApiPort(): number {
   if (!monitor.isEnabled()) return monitorPort;
   return monitor.getListeningPort() ?? monitorPort;
+}
+
+function sendAgentStatus(
+  phase: AgentStatusPhase,
+  options: {
+    stage?: string | null;
+    trigger?: string;
+  } = {}
+): void {
+  const stage =
+    typeof options.stage === 'string' && options.stage.trim() ? options.stage.trim() : undefined;
+  const trigger =
+    typeof options.trigger === 'string' && options.trigger.trim()
+      ? options.trigger.trim()
+      : undefined;
+
+  if (
+    currentAgentStatusPhase === phase &&
+    stage === undefined &&
+    trigger === undefined
+  ) {
+    return;
+  }
+
+  currentAgentStatusPhase = phase;
+
+  try {
+    relay.send('agent.status', {
+      agentName,
+      phase,
+      ...(stage ? { stage } : {}),
+      ...(trigger ? { trigger } : {}),
+    });
+  } catch {
+    // Host disconnections should not fail the planner loop.
+  }
 }
 
 function syncMonitorMemoryState(): void {
@@ -147,6 +187,106 @@ function readNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function compactExtractionVisibleItems(
+  value: unknown
+): Array<{ id: string; value: string; isDisabled?: true }> {
+  if (!Array.isArray(value)) return [];
+
+  const compacted: Array<{ id: string; value: string; isDisabled?: true }> = [];
+  for (const rawItem of value) {
+    const item = asRecord(rawItem);
+    if (!item) continue;
+    const id = readNonEmptyString(item.id);
+    const itemValue = readNonEmptyString(item.value);
+    if (!id || !itemValue) continue;
+    if (item.isDisabled === true) {
+      compacted.push({ id, value: itemValue, isDisabled: true });
+    } else {
+      compacted.push({ id, value: itemValue });
+    }
+    if (compacted.length >= EXTRACTION_VISIBLE_ITEMS_LIMIT) break;
+  }
+
+  return compacted;
+}
+
+function compactExtractionSystemSpec(value: unknown): Record<string, unknown> | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const summary: Record<string, unknown> = {};
+  const stage = readNonEmptyString(record.stage);
+  if (stage) summary.stage = stage;
+
+  const state = asRecord(record.state);
+  const selected = state ? asRecord(state.selected) : null;
+  const selectedId = selected ? readNonEmptyString(selected.id) : null;
+  const selectedValue = selected ? readNonEmptyString(selected.value) : null;
+  if (selectedId && selectedValue) {
+    summary.selected = { id: selectedId, value: selectedValue };
+  }
+
+  const selectedList =
+    state && Array.isArray(state.selectedList) ? state.selectedList : [];
+  if (selectedList.length > 0) {
+    summary.selectedListCount = selectedList.length;
+  }
+
+  const visibleItems = compactExtractionVisibleItems(record.visibleItems);
+  if (visibleItems.length > 0) {
+    summary.visibleItems = visibleItems;
+  }
+  if (Array.isArray(record.visibleItems) && record.visibleItems.length > visibleItems.length) {
+    summary.visibleItemCount = record.visibleItems.length;
+  }
+
+  const modification = asRecord(record.modification);
+  if (modification && Object.keys(modification).length > 0) {
+    summary.modification = modification;
+  }
+
+  return Object.keys(summary).length > 0 ? summary : null;
+}
+
+function compactExtractionHistoryEntry(value: unknown): Record<string, unknown> | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const type = readNonEmptyString(record.type);
+  if (type !== 'system' && type !== 'user' && type !== 'agent') return null;
+
+  const compacted: Record<string, unknown> = { type };
+  const stage = readNonEmptyString(record.stage);
+  if (stage) compacted.stage = stage;
+
+  if (type === 'user') {
+    const action = readNonEmptyString(record.action);
+    const label = readNonEmptyString(record.label);
+    if (action) compacted.action = action;
+    if (label) compacted.label = label;
+    return action || label ? compacted : null;
+  }
+
+  if (type === 'agent') {
+    const text = readNonEmptyString(record.text);
+    if (!text) return null;
+    compacted.text = text;
+    return compacted;
+  }
+
+  const spec = compactExtractionSystemSpec(record.spec);
+  if (!spec) return stage ? compacted : null;
+  compacted.spec = spec;
+  return compacted;
+}
+
+function buildExtractionRecentHistory(context: PerceivedContext): unknown[] {
+  return context.messageHistoryTail
+    .slice(-EXTRACTION_HISTORY_WINDOW)
+    .map((entry) => compactExtractionHistoryEntry(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== null);
 }
 
 function buildExtractionUiFlow(context: PerceivedContext): Record<string, unknown> {
@@ -302,7 +442,7 @@ function sanitizeExtractionUiSpec(uiSpec: unknown): unknown {
 
 function buildExtractionViewContext(
   context: PerceivedContext
-): Pick<PreferenceExtractionContext, 'currentStage' | 'state' | 'uiSpec'> {
+): Pick<PreferenceExtractionContext, 'currentStage' | 'state' | 'uiSpec' | 'recentHistory'> {
   const currentStage = toWorkflowStage(context.stage ?? null);
   const state = currentStage
     ? buildWorkflowSelectionState({
@@ -316,6 +456,7 @@ function buildExtractionViewContext(
     currentStage: context.stage ?? '',
     uiSpec: sanitizeExtractionUiSpec(context.uiSpec),
     state,
+    recentHistory: buildExtractionRecentHistory(context),
   };
 }
 
@@ -656,6 +797,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
   planningInFlight = true;
   monitor.updateContext(context);
   monitor.updateState({ pendingUserMessages: deferredReplanRequested ? 1 : 0 });
+  sendAgentStatus('planning', { stage: context.stage, trigger });
 
   try {
     const planningContext = memory.getContext() ?? context;
@@ -711,6 +853,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
 
     actionInFlight = true;
     monitor.updateState({ actionInFlight: true, phase: 'executing-action' });
+    sendAgentStatus('executing', { stage: planningContext.stage, trigger });
     lastActionFingerprint = actionFingerprint;
     lastActionAt = now;
 
@@ -824,6 +967,10 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     planningInFlight = false;
     monitor.updateState({ actionInFlight: false, phase: 'ready' });
     if (fatalErrorMessage) {
+      sendAgentStatus('idle', {
+        stage: (memory.getContext() ?? context)?.stage ?? null,
+        trigger,
+      });
       deferredReplanRequested = false;
       deferredReplanTrigger = null;
       monitor.updateState({ pendingUserMessages: 0, phase: 'error' });
@@ -837,7 +984,12 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       queueMicrotask(() => {
         void maybePlanAndExecute(`deferred:${deferredTrigger}`);
       });
+      return;
     }
+    sendAgentStatus('idle', {
+      stage: (memory.getContext() ?? context)?.stage ?? null,
+      trigger,
+    });
   }
 }
 
@@ -851,6 +1003,8 @@ function resetRuntimeState(): void {
   syncMonitorMemoryState();
   actionInFlight = false;
   planningInFlight = false;
+  currentAgentStatusPhase = 'idle';
+  sendAgentStatus('idle', { trigger: 'session-reset' });
   deferredReplanRequested = false;
   deferredReplanTrigger = null;
   userTurnAwaitingStateUpdate = false;

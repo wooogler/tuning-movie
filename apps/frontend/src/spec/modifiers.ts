@@ -14,6 +14,7 @@ import type {
   HighlightState,
   AugmentState,
 } from './types';
+import { parseDurationToMinutes, parseTimeToMinutes } from '../utils/displayFormats';
 
 function normalizeFilters(filters: FilterState | FilterState[] | undefined): FilterState[] {
   if (!filters) return [];
@@ -29,6 +30,20 @@ function getItemFieldValue<T extends DataItem>(
     return item[valueField];
   }
   return item[field];
+}
+
+function getComparableValue(field: string, rawValue: unknown, valueField: string): unknown {
+  const effectiveField = field === 'value' ? valueField : field;
+
+  if (effectiveField === 'duration') {
+    return parseDurationToMinutes(rawValue) ?? rawValue;
+  }
+
+  if (effectiveField === 'time') {
+    return parseTimeToMinutes(rawValue) ?? rawValue;
+  }
+
+  return rawValue;
 }
 
 function areFilterValuesEqual(left: unknown, right: unknown): boolean {
@@ -334,6 +349,8 @@ function applyFilterLogic<T extends DataItem>(
 
   return items.filter((item) => {
     const itemValue = getItemFieldValue(item, field, valueField);
+    const comparableItemValue = getComparableValue(field, itemValue, valueField);
+    const comparableFilterValue = getComparableValue(field, value, valueField);
 
     switch (operator) {
       case 'eq':
@@ -346,13 +363,25 @@ function applyFilterLogic<T extends DataItem>(
         }
         return String(itemValue).includes(String(value));
       case 'gt':
-        return (itemValue as number) > (value as number);
+        if (typeof comparableItemValue === 'number' && typeof comparableFilterValue === 'number') {
+          return comparableItemValue > comparableFilterValue;
+        }
+        return String(comparableItemValue).localeCompare(String(comparableFilterValue)) > 0;
       case 'lt':
-        return (itemValue as number) < (value as number);
+        if (typeof comparableItemValue === 'number' && typeof comparableFilterValue === 'number') {
+          return comparableItemValue < comparableFilterValue;
+        }
+        return String(comparableItemValue).localeCompare(String(comparableFilterValue)) < 0;
       case 'gte':
-        return (itemValue as number) >= (value as number);
+        if (typeof comparableItemValue === 'number' && typeof comparableFilterValue === 'number') {
+          return comparableItemValue >= comparableFilterValue;
+        }
+        return String(comparableItemValue).localeCompare(String(comparableFilterValue)) >= 0;
       case 'lte':
-        return (itemValue as number) <= (value as number);
+        if (typeof comparableItemValue === 'number' && typeof comparableFilterValue === 'number') {
+          return comparableItemValue <= comparableFilterValue;
+        }
+        return String(comparableItemValue).localeCompare(String(comparableFilterValue)) <= 0;
       case 'in':
         return Array.isArray(value) && value.includes(itemValue);
       default:
@@ -371,14 +400,16 @@ function applySortLogic<T extends DataItem>(
   return [...items].sort((a, b) => {
     const aVal = getItemFieldValue(a, field, valueField);
     const bVal = getItemFieldValue(b, field, valueField);
+    const comparableAVal = getComparableValue(field, aVal, valueField);
+    const comparableBVal = getComparableValue(field, bVal, valueField);
 
     let comparison: number;
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      comparison = aVal.localeCompare(bVal);
-    } else if (typeof aVal === 'number' && typeof bVal === 'number') {
-      comparison = aVal - bVal;
+    if (typeof comparableAVal === 'number' && typeof comparableBVal === 'number') {
+      comparison = comparableAVal - comparableBVal;
+    } else if (typeof comparableAVal === 'string' && typeof comparableBVal === 'string') {
+      comparison = comparableAVal.localeCompare(comparableBVal);
     } else {
-      comparison = String(aVal).localeCompare(String(bVal));
+      comparison = String(comparableAVal).localeCompare(String(comparableBVal));
     }
 
     return order === 'asc' ? comparison : -comparison;
