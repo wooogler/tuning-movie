@@ -142,9 +142,38 @@ function compactSystemSpec(
   return Object.keys(summary).length > 0 ? summary : null;
 }
 
+function compactAnnotation(
+  value: unknown,
+  includeReason: boolean
+): Record<string, unknown> | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const kind = readTrimmedString(record.kind);
+  const toolName = readTrimmedString(record.toolName);
+  const source = readTrimmedString(record.source);
+  const reason = includeReason ? readTrimmedString(record.reason) : null;
+
+  const summary: Record<string, unknown> = {};
+  if (kind) summary.kind = kind;
+  if (toolName) summary.toolName = toolName;
+  if (source) summary.source = source;
+  if (reason) summary.reason = reason;
+
+  return Object.keys(summary).length > 0 ? summary : null;
+}
+
+function compactAgentText(value: unknown): string | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  if (toHistoryType(record.type) !== 'agent') return null;
+  return readTrimmedString(record.text);
+}
+
 function compactHistoryEntry(
   entry: unknown,
-  includeSystemItems: boolean
+  includeSystemItems: boolean,
+  linkedAgentText?: string | null
 ): { type: HistoryMessageType; value: Record<string, unknown> } | null {
   const record = asRecord(entry);
   if (!record) return null;
@@ -173,8 +202,9 @@ function compactHistoryEntry(
   }
 
   const compactedSpec = compactSystemSpec(record.spec, includeSystemItems);
-  const annotation = asRecord(record.annotation);
+  const annotation = compactAnnotation(record.annotation, !linkedAgentText);
   if (compactedSpec) compacted.spec = compactedSpec;
+  if (linkedAgentText) compacted.linkedAgentText = linkedAgentText;
   if (annotation) compacted.annotation = annotation;
   if (!compactedSpec && !annotation && !stage) return null;
   return { type, value: compacted };
@@ -333,10 +363,32 @@ function buildPlannerHistory(
 
   const compacted: CompactedHistoryEntry[] = [];
   for (let i = 0; i < rawHistory.length; i += 1) {
-    const normalized = compactHistoryEntry(rawHistory[i], i === latestSystemRawIndex);
+    const rawEntry = rawHistory[i];
+    const current = asRecord(rawEntry);
+    if (!current) continue;
+
+    const currentType = toHistoryType(current.type);
+    const currentStage = readTrimmedString(current.stage);
+    let linkedAgentText: string | null = null;
+    const compactedIndex = i;
+
+    if (currentType === 'system') {
+      const next = asRecord(rawHistory[i + 1]);
+      const nextType = next ? toHistoryType(next.type) : null;
+      const nextStage = next ? readTrimmedString(next.stage) : null;
+      const hasAnnotation = Boolean(compactAnnotation(current.annotation, true));
+      if (hasAnnotation && nextType === 'agent' && currentStage && nextStage === currentStage) {
+        linkedAgentText = compactAgentText(next);
+        if (linkedAgentText) {
+          i += 1;
+        }
+      }
+    }
+
+    const normalized = compactHistoryEntry(rawEntry, compactedIndex === latestSystemRawIndex, linkedAgentText);
     if (!normalized) continue;
     compacted.push({
-      index: i,
+      index: compactedIndex,
       type: normalized.type,
       value: normalized.value,
     });

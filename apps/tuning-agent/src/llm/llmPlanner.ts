@@ -184,6 +184,7 @@ const OPENAI_TOOL_CALLING_RULES =
 const GUI_ADAPTATION_ENABLED_RULES =
   'GUI adaptation rules when modification tools are enabled:\n' +
   '- Match the tool to the need: use augment to surface a short fact tied to the user\'s stated criterion, filter to narrow by an explicit criterion, sort to order by an explicit comparison goal, and highlight to mark a small relevant subset.\n' +
+  '- For filter or sort, prefer the structured item field that directly represents the user\'s criterion or comparison goal. Use "value" only when operating on the visible label text itself.\n' +
   '- If the user\'s stated criterion is not yet visible in the UI, prefer surfacing or applying that criterion through one non-committal GUI modification before asking for a tie-break.\n' +
   '- Use only criteria grounded in what the user asked for. Do not introduce a new comparison dimension or hidden optimization goal.\n' +
   '- Do not mention hidden item metadata directly in assistantMessage; if a criterion-specific fact is not already visible, surface it through the UI first.\n' +

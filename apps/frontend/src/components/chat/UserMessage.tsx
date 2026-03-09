@@ -2,16 +2,21 @@ import type { UserMessage as UserMessageType } from '../../store/chatStore';
 
 interface UserMessageProps {
   message: UserMessageType;
+  highlighted?: boolean;
 }
 
-export function UserMessage({ message }: UserMessageProps) {
+export function UserMessage({ message, highlighted = false }: UserMessageProps) {
   const isBack = message.action === 'back';
   const isInput = message.action === 'input';
 
   return (
     <div className="flex gap-3 py-4 justify-end">
       {/* Message Content */}
-      <div className="max-w-[80%]">
+      <div
+        className={`max-w-[80%] rounded-3xl px-3 py-2 transition-colors duration-700 ${
+          highlighted ? 'border border-primary/45 bg-primary/5' : 'border border-transparent'
+        }`}
+      >
         <div className="text-sm text-fg-muted mb-1 text-right">You</div>
         <div
           className={`rounded-2xl px-4 py-2 ${

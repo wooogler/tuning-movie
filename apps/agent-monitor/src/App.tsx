@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
 type MonitorEvent = {
   index: number;
@@ -80,6 +80,10 @@ type EventPayload = {
 };
 
 type LlmComponent = 'planner' | 'extractor' | 'unknown';
+type LlmFilter = 'all' | 'planner' | 'extractor';
+type LlmInteractionStatus = 'pending' | 'completed' | 'error';
+type MonitorConnectionState = 'connecting' | 'live' | 'error' | 'imported';
+type ImportedTraceType = 'tuning-agent-monitor.llm-trace' | 'tuning-agent-monitor.llm-interaction';
 type ExtractorBadge =
   | 'preferences'
   | 'active_conflicts'
@@ -94,6 +98,26 @@ type LlmInteraction = {
   raw: unknown;
   parsed: unknown;
   error: unknown;
+  sourceEvents: MonitorEvent[];
+};
+
+type MonitorDataSource =
+  | { mode: 'live' }
+  | {
+      mode: 'imported';
+      fileName: string;
+      importedAt: string;
+      exportType: ImportedTraceType;
+      exportedAt: string | null;
+    };
+
+type ParsedImportedMonitorFile = {
+  source: Extract<MonitorDataSource, { mode: 'imported' }>;
+  monitorState: MonitorState | null;
+  events: MonitorEvent[];
+  llmFilter: LlmFilter;
+  showSystemPrompts: boolean;
+  selectedInteractionId: number | null;
 };
 
 const API_BASE = import.meta.env.VITE_MONITOR_API_BASE || '/monitor-api';
@@ -119,11 +143,162 @@ function shortTime(value: string): string {
   return new Date(value).toLocaleTimeString();
 }
 
+function createExportTimestamp(): string {
+  return new Date().toISOString();
+}
+
+function formatExportTimestamp(value: string): string {
+  return value.replaceAll(':', '-').replaceAll('.', '-');
+}
+
+function sanitizeFileToken(value: string | null | undefined, fallback: string): string {
+  if (!value) return fallback;
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || fallback;
+}
+
+function buildTraceExportFilename(
+  state: MonitorState | null,
+  filter: LlmFilter,
+  exportedAt: string
+): string {
+  const sessionId = sanitizeFileToken(state?.sessionId, 'session');
+  return `llm-trace-${sessionId}-${filter}-${formatExportTimestamp(exportedAt)}.json`;
+}
+
+function buildInteractionExportFilename(
+  state: MonitorState | null,
+  item: LlmInteraction,
+  exportedAt: string
+): string {
+  const sessionId = sanitizeFileToken(state?.sessionId, 'session');
+  return `llm-trace-${sessionId}-${item.component}-${item.id}-${formatExportTimestamp(exportedAt)}.json`;
+}
+
+function downloadJsonFile(filename: string, value: unknown): void {
+  const blob = new Blob([`${fmt(value)}\n`], {
+    type: 'application/json;charset=utf-8',
+  });
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(href), 0);
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
   return null;
+}
+
+function isMonitorEvent(value: unknown): value is MonitorEvent {
+  const record = asRecord(value);
+  return (
+    record !== null &&
+    typeof record.index === 'number' &&
+    typeof record.timestamp === 'string' &&
+    typeof record.type === 'string' &&
+    'payload' in record
+  );
+}
+
+function getMonitorEventArray(value: unknown): MonitorEvent[] {
+  return Array.isArray(value) ? value.filter(isMonitorEvent) : [];
+}
+
+function uniqueSortedMonitorEvents(events: MonitorEvent[]): MonitorEvent[] {
+  const seen = new Set<string>();
+  const deduped: MonitorEvent[] = [];
+
+  for (const event of events) {
+    const key = `${event.index}|${event.timestamp}|${event.type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(event);
+  }
+
+  return deduped.sort((a, b) => {
+    if (a.index !== b.index) return a.index - b.index;
+    if (a.timestamp !== b.timestamp) return a.timestamp.localeCompare(b.timestamp);
+    return a.type.localeCompare(b.type);
+  });
+}
+
+function getImportedTraceType(value: unknown): ImportedTraceType | null {
+  return value === 'tuning-agent-monitor.llm-trace' || value === 'tuning-agent-monitor.llm-interaction'
+    ? value
+    : null;
+}
+
+function getImportedLlmFilter(value: unknown): LlmFilter {
+  return value === 'planner' || value === 'extractor' || value === 'all' ? value : 'all';
+}
+
+function collectImportedInteractionEvents(value: unknown): MonitorEvent[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const record = asRecord(item);
+    return getMonitorEventArray(record?.events);
+  });
+}
+
+function getImportedFileMonitorState(value: unknown): MonitorState | null {
+  const record = asRecord(value);
+  return record ? (record as MonitorState) : null;
+}
+
+function parseImportedMonitorFile(rawText: string, fileName: string): ParsedImportedMonitorFile {
+  const parsed = JSON.parse(rawText) as unknown;
+  const record = asRecord(parsed);
+  if (!record) {
+    throw new Error('Expected a JSON object.');
+  }
+
+  const exportType = getImportedTraceType(record.type);
+  if (!exportType) {
+    throw new Error('Unsupported monitor export type.');
+  }
+
+  const exportedAt = typeof record.exportedAt === 'string' ? record.exportedAt : null;
+  const ui = asRecord(record.ui);
+  const interactionRecord = asRecord(record.interaction);
+
+  let events = getMonitorEventArray(record.events);
+  if (events.length === 0 && exportType === 'tuning-agent-monitor.llm-trace') {
+    events = collectImportedInteractionEvents(record.interactions);
+  }
+  if (events.length === 0 && exportType === 'tuning-agent-monitor.llm-interaction') {
+    events = getMonitorEventArray(interactionRecord?.events);
+  }
+
+  const selectedInteractionIdFromUi =
+    typeof ui?.selectedInteractionId === 'number' ? ui.selectedInteractionId : null;
+  const selectedInteractionIdFromInteraction =
+    typeof interactionRecord?.id === 'number' ? interactionRecord.id : null;
+
+  return {
+    source: {
+      mode: 'imported',
+      fileName,
+      importedAt: createExportTimestamp(),
+      exportType,
+      exportedAt,
+    },
+    monitorState: getImportedFileMonitorState(record.monitorStateSnapshot),
+    events: uniqueSortedMonitorEvents(events),
+    llmFilter: getImportedLlmFilter(ui?.activeFilter),
+    showSystemPrompts: ui?.showSystemPrompts === true,
+    selectedInteractionId: selectedInteractionIdFromUi ?? selectedInteractionIdFromInteraction,
+  };
 }
 
 function parseJsonRecord(value: string): Record<string, unknown> | null {
@@ -219,6 +394,7 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
           // Retries can emit another request before any terminal event arrives.
           // Keep a single card for the logical interaction instead of leaving a stale pending entry behind.
           current.request = event.payload;
+          current.sourceEvents.push(event);
           continue;
         }
         interactions.push(current);
@@ -231,6 +407,7 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
         raw: null,
         parsed: null,
         error: null,
+        sourceEvents: [event],
       };
       continue;
     }
@@ -244,8 +421,11 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
         raw: null,
         parsed: null,
         error: null,
+        sourceEvents: [event],
       };
       currentByComponent[component] = current;
+    } else {
+      current.sourceEvents.push(event);
     }
 
     if (llmEventType === 'response.raw') {
@@ -268,7 +448,7 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
   return interactions;
 }
 
-function getInteractionStatus(item: LlmInteraction): 'pending' | 'completed' | 'error' {
+function getInteractionStatus(item: LlmInteraction): LlmInteractionStatus {
   if (item.error) return 'error';
   if (item.parsed) return 'completed';
   return 'pending';
@@ -318,18 +498,67 @@ function getExtractorTrigger(request: unknown): string | null {
   return typeof input?.trigger === 'string' && input.trigger.trim() ? input.trigger : null;
 }
 
+function getMonitorExportMetadata(
+  state: MonitorState | null,
+  connection: MonitorConnectionState
+) {
+  return {
+    agentName: state?.agentName ?? null,
+    sessionId: state?.sessionId ?? null,
+    relayUrl: state?.relayUrl ?? null,
+    startedAt: state?.startedAt ?? null,
+    routingMode: state?.routingMode ?? null,
+    phase: state?.phase ?? null,
+    contextStage: state?.contextStage ?? null,
+    lastUserMessage: state?.lastUserMessage ?? null,
+    lastTrigger: state?.lastTrigger ?? null,
+    connection,
+  };
+}
+
+function serializeLlmInteraction(
+  item: LlmInteraction,
+  routingMode?: 'planner' | 'baseline'
+) {
+  const extractorBadge = item.component === 'extractor' ? getExtractorBadge(item.request) : null;
+  const extractorTrigger = item.component === 'extractor' ? getExtractorTrigger(item.request) : null;
+  return {
+    id: item.id,
+    timestamp: item.timestamp,
+    component: item.component,
+    componentLabel: getComponentLabel(item.component, routingMode),
+    status: getInteractionStatus(item),
+    extractorBadge,
+    extractorTrigger,
+    request: item.request,
+    requestDisplay: getTraceRequestDisplayValue(item.request),
+    rawResponse: item.raw,
+    parsedResponse: item.parsed,
+    error: item.error,
+    events: item.sourceEvents,
+  };
+}
+
 export default function App() {
   const [tab, setTab] = useState<'agent' | 'llm'>('llm');
-  const [llmFilter, setLlmFilter] = useState<'all' | 'planner' | 'extractor'>('all');
+  const [llmFilter, setLlmFilter] = useState<LlmFilter>('all');
   const [showSystemPrompts, setShowSystemPrompts] = useState(false);
   const [monitorState, setMonitorState] = useState<MonitorState | null>(null);
   const [events, setEvents] = useState<MonitorEvent[]>([]);
-  const [connection, setConnection] = useState<'connecting' | 'live' | 'error'>('connecting');
+  const [connection, setConnection] = useState<MonitorConnectionState>('connecting');
   const [errorText, setErrorText] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
   const [selectedLlmId, setSelectedLlmId] = useState<number | null>(null);
+  const [dataSource, setDataSource] = useState<MonitorDataSource>({ mode: 'live' });
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    if (dataSource.mode !== 'live') {
+      setConnection('imported');
+      setErrorText(null);
+      return;
+    }
+
     let closed = false;
     let es: EventSource | null = null;
     let reconnectTimer: number | null = null;
@@ -422,7 +651,7 @@ export default function App() {
         es = null;
       }
     };
-  }, []);
+  }, [dataSource.mode]);
 
   const llmInteractions = useMemo(() => buildLlmInteractions(events), [events]);
   const llmCounts = useMemo(
@@ -438,13 +667,13 @@ export default function App() {
       ),
     [llmInteractions]
   );
-  const filteredLlmInteractions = useMemo(
-    () =>
-      llmInteractions
-        .filter((item) => llmFilter === 'all' || item.component === llmFilter)
-        .slice()
-        .reverse(),
+  const visibleLlmInteractions = useMemo(
+    () => llmInteractions.filter((item) => llmFilter === 'all' || item.component === llmFilter),
     [llmInteractions, llmFilter]
+  );
+  const filteredLlmInteractions = useMemo(
+    () => visibleLlmInteractions.slice().reverse(),
+    [visibleLlmInteractions]
   );
   const selectedLlmInteraction = useMemo(
     () => (selectedLlmId === null ? null : llmInteractions.find((item) => item.id === selectedLlmId) ?? null),
@@ -494,6 +723,7 @@ export default function App() {
   }, [tab]);
 
   async function clearMonitorEvents() {
+    if (dataSource.mode !== 'live') return;
     if (isClearing) return;
     const confirmed = window.confirm('Clear all monitor events and LLM trace?');
     if (!confirmed) return;
@@ -513,6 +743,98 @@ export default function App() {
     }
   }
 
+  async function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const imported = parseImportedMonitorFile(text, file.name);
+      setDataSource(imported.source);
+      setMonitorState(imported.monitorState);
+      setEvents(imported.events);
+      setLlmFilter(imported.llmFilter);
+      setShowSystemPrompts(imported.showSystemPrompts);
+      setSelectedLlmId(imported.selectedInteractionId);
+      setErrorText(null);
+      setTab('llm');
+    } catch (error) {
+      setErrorText(`import failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  function returnToLiveMode() {
+    setSelectedLlmId(null);
+    setDataSource({ mode: 'live' });
+  }
+
+  function buildTraceExport() {
+    const exportedAt = createExportTimestamp();
+    const exportedEvents = uniqueSortedMonitorEvents(
+      visibleLlmInteractions.flatMap((item) => item.sourceEvents)
+    );
+    const statusCounts = visibleLlmInteractions.reduce(
+      (acc, item) => {
+        const status = getInteractionStatus(item);
+        acc[status] += 1;
+        return acc;
+      },
+      { pending: 0, completed: 0, error: 0 } as Record<LlmInteractionStatus, number>
+    );
+
+    return {
+      filename: buildTraceExportFilename(monitorState, llmFilter, exportedAt),
+      value: {
+        type: 'tuning-agent-monitor.llm-trace',
+        exportedAt,
+        ui: {
+          activeFilter: llmFilter,
+          showSystemPrompts,
+          selectedInteractionId: selectedLlmInteraction?.id ?? null,
+        },
+        monitor: getMonitorExportMetadata(monitorState, connection),
+        monitorStateSnapshot: monitorState,
+        llmSystemPrompts: monitorState?.llmSystemPrompts ?? null,
+        summary: {
+          interactionCount: visibleLlmInteractions.length,
+          eventCount: exportedEvents.length,
+          statusCounts,
+        },
+        events: exportedEvents,
+        interactions: visibleLlmInteractions.map((item) =>
+          serializeLlmInteraction(item, monitorState?.routingMode)
+        ),
+      },
+    };
+  }
+
+  function buildSelectedTraceExport() {
+    if (!selectedLlmInteraction) {
+      throw new Error('No LLM interaction selected.');
+    }
+
+    const exportedAt = createExportTimestamp();
+    const exportedEvents = uniqueSortedMonitorEvents(selectedLlmInteraction.sourceEvents);
+    return {
+      filename: buildInteractionExportFilename(monitorState, selectedLlmInteraction, exportedAt),
+      value: {
+        type: 'tuning-agent-monitor.llm-interaction',
+        exportedAt,
+        ui: {
+          activeFilter: llmFilter,
+          showSystemPrompts,
+          selectedInteractionId: selectedLlmInteraction.id,
+        },
+        monitor: getMonitorExportMetadata(monitorState, connection),
+        monitorStateSnapshot: monitorState,
+        llmSystemPrompts: monitorState?.llmSystemPrompts ?? null,
+        events: exportedEvents,
+        interaction: serializeLlmInteraction(selectedLlmInteraction, monitorState?.routingMode),
+      },
+    };
+  }
+
   return (
     <>
       <div className="mx-auto max-w-[1500px] px-4 pb-10 pt-6">
@@ -525,6 +847,8 @@ export default function App() {
               className={`rounded-full px-2 py-1 ${
                 connection === 'live'
                   ? 'bg-ok-500/15 text-ok-500'
+                  : connection === 'imported'
+                    ? 'bg-cyan-500/15 text-cyan-300'
                   : connection === 'connecting'
                     ? 'bg-warn-500/15 text-warn-500'
                     : 'bg-danger-500/15 text-danger-500'
@@ -535,7 +859,13 @@ export default function App() {
           </div>
         </div>
         <div className="text-xs text-mist-300">
-          {errorText ? errorText : 'Live data from /state and /events.'}
+          {errorText
+            ? errorText
+            : dataSource.mode === 'imported'
+              ? `Viewing imported trace from ${dataSource.fileName}${
+                  dataSource.exportedAt ? ` (exported ${new Date(dataSource.exportedAt).toLocaleString()})` : ''
+                }.`
+              : 'Live data from /state and /events.'}
         </div>
       </header>
 
@@ -564,18 +894,43 @@ export default function App() {
             Agent
           </button>
         </div>
-        <button
-          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
-            isClearing
-              ? 'cursor-not-allowed border-ink-700 bg-ink-900/50 text-mist-400'
-              : 'border-danger-500/60 bg-danger-500/10 text-danger-500 hover:bg-danger-500/20'
-          }`}
-          disabled={isClearing}
-          onClick={() => void clearMonitorEvents()}
-          type="button"
-        >
-          {isClearing ? 'Clearing...' : 'Clear'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="rounded-lg border border-ink-600 bg-ink-900/60 px-3 py-1.5 text-xs font-semibold text-mist-100 hover:border-mist-500"
+            onClick={() => importInputRef.current?.click()}
+            type="button"
+          >
+            Import Trace
+          </button>
+          {dataSource.mode === 'imported' ? (
+            <button
+              className="rounded-lg border border-cyan-500/50 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20"
+              onClick={returnToLiveMode}
+              type="button"
+            >
+              Return to Live
+            </button>
+          ) : null}
+          <button
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+              isClearing || dataSource.mode !== 'live'
+                ? 'cursor-not-allowed border-ink-700 bg-ink-900/50 text-mist-400'
+                : 'border-danger-500/60 bg-danger-500/10 text-danger-500 hover:bg-danger-500/20'
+            }`}
+            disabled={isClearing || dataSource.mode !== 'live'}
+            onClick={() => void clearMonitorEvents()}
+            type="button"
+          >
+            {dataSource.mode !== 'live' ? 'Clear Disabled' : isClearing ? 'Clearing...' : 'Clear'}
+          </button>
+          <input
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => void handleImportFileChange(event)}
+            ref={importInputRef}
+            type="file"
+          />
+        </div>
       </div>
 
       {tab === 'agent' ? (
@@ -661,6 +1016,12 @@ export default function App() {
               full-height detail.
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
+              <ExportJsonButton
+                buildExport={buildTraceExport}
+                className="bg-ink-900/60 text-mist-100 hover:border-mist-500"
+                disabled={visibleLlmInteractions.length === 0}
+                label="Export Trace"
+              />
               <button
                 className={`rounded-lg border px-2.5 py-1 ${
                   showSystemPrompts
@@ -854,13 +1215,21 @@ export default function App() {
                   {getInteractionStatus(selectedLlmInteraction)}
                 </span>
               </div>
-              <button
-                className="rounded-lg border border-ink-600 bg-ink-900/70 px-3 py-1.5 text-mist-100 hover:border-mist-500"
-                onClick={() => setSelectedLlmId(null)}
-                type="button"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                <ExportJsonButton
+                  buildExport={buildSelectedTraceExport}
+                  className="bg-ink-900/70 text-mist-100 hover:border-mist-500"
+                  label="Export Selected"
+                  sizeClassName="px-3 py-1.5"
+                />
+                <button
+                  className="rounded-lg border border-ink-600 bg-ink-900/70 px-3 py-1.5 text-mist-100 hover:border-mist-500"
+                  onClick={() => setSelectedLlmId(null)}
+                  type="button"
+                >
+                  Close
+                </button>
+              </div>
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-5">
               <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
@@ -947,6 +1316,66 @@ function PromptBlock({
         {text}
       </pre>
     </section>
+  );
+}
+
+function ExportJsonButton({
+  buildExport,
+  className,
+  disabled = false,
+  label,
+  sizeClassName = 'px-2.5 py-1',
+}: {
+  buildExport: () => { filename: string; value: unknown };
+  className?: string;
+  disabled?: boolean;
+  label: string;
+  sizeClassName?: string;
+}) {
+  const [exportState, setExportState] = useState<'idle' | 'exported' | 'error'>('idle');
+
+  useEffect(() => {
+    if (exportState === 'idle') return;
+    const timer = window.setTimeout(() => setExportState('idle'), 1200);
+    return () => window.clearTimeout(timer);
+  }, [exportState]);
+
+  function getButtonClassName(): string {
+    if (exportState === 'exported') {
+      return 'border-ok-500/60 bg-ok-500/15 text-ok-500';
+    }
+    if (exportState === 'error') {
+      return 'border-danger-500/60 bg-danger-500/15 text-danger-500';
+    }
+    if (disabled) {
+      return 'cursor-not-allowed border-ink-700 bg-ink-900/50 text-mist-400';
+    }
+    return `border-ink-600 ${className ?? 'bg-ink-900/60 text-mist-200 hover:border-mist-500'}`;
+  }
+
+  async function handleExport() {
+    if (disabled) return;
+    try {
+      const { filename, value } = buildExport();
+      downloadJsonFile(filename, value);
+      setExportState('exported');
+    } catch {
+      setExportState('error');
+    }
+  }
+
+  return (
+    <button
+      className={`rounded-lg border ${sizeClassName} ${getButtonClassName()}`}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        void handleExport();
+      }}
+      type="button"
+    >
+      {exportState === 'exported' ? 'Exported' : exportState === 'error' ? 'Failed' : label}
+    </button>
   );
 }
 

@@ -59,7 +59,10 @@ export function MessageList({
 
   return (
     <div className="flex-1 overflow-y-auto px-4">
-      <div className="relative mx-auto py-4" style={{ width: `min(100%, ${chatWidthPx}px)` }}>
+      <div
+        className="relative mx-auto flex min-h-full flex-col justify-end py-4"
+        style={{ width: `min(100%, ${chatWidthPx}px)` }}
+      >
         {onResizeStart && (
           <button
             type="button"

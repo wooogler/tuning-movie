@@ -67,7 +67,8 @@ type TimelineRow =
     };
 
 const SNAPSHOT_SYNC_BOTTOM_THRESHOLD_PX = 48;
-const SNAPSHOT_SYNC_ANCHOR_RATIO = 0.62;
+const SNAPSHOT_SYNC_ANCHOR_BOTTOM_OFFSET_PX = 96;
+const TIMELINE_SYNC_FLASH_MS = 950;
 const GUI_STAGE_TRANSITION_MS = 420;
 
 type GuiTransitionDirection = 'forward' | 'backward';
@@ -76,6 +77,17 @@ interface GuiTransitionState {
   outgoing: GuiSnapshot;
   direction: GuiTransitionDirection;
   incomingId: string;
+}
+
+function getSyncAnchorOffsetFromTop(containerHeight: number): number {
+  return containerHeight - Math.min(
+    SNAPSHOT_SYNC_ANCHOR_BOTTOM_OFFSET_PX,
+    Math.max(32, containerHeight * 0.2)
+  );
+}
+
+function getTimelineRowAnchorOffset(rowHeight: number): number {
+  return rowHeight - Math.min(rowHeight / 3, 24);
 }
 
 function getToolActionLabel(toolName: string): string {
@@ -183,6 +195,7 @@ export function FullTuningSplitView({
   const activeSnapshotRef = useRef<GuiSnapshot | null>(null);
   const activeSnapshotIndexRef = useRef<number>(-1);
   const transitionTimeoutRef = useRef<number | null>(null);
+  const syncHighlightTimeoutRef = useRef<number | null>(null);
 
   const { snapshots, timelineRows, latestSnapshotIndex, firstRowIdBySnapshotIndex } = useMemo(() => {
     const nextSnapshots: GuiSnapshot[] = [];
@@ -245,7 +258,7 @@ export function FullTuningSplitView({
           id: `marker-${message.id}`,
           type: 'marker',
           snapshotIndex,
-            label: buildMarkerLabel(nextSnapshots[snapshotIndex]),
+          label: buildMarkerLabel(nextSnapshots[snapshotIndex]),
           stage: message.stage,
         });
         continue;
@@ -289,6 +302,13 @@ export function FullTuningSplitView({
   }, [messages, activeSpec]);
 
   const [activeSnapshotIndex, setActiveSnapshotIndex] = useState(latestSnapshotIndex);
+  const [activeSyncRowId, setActiveSyncRowId] = useState<string | null>(
+    timelineRows[timelineRows.length - 1]?.id ?? null
+  );
+  const [flashSyncRowId, setFlashSyncRowId] = useState<string | null>(
+    timelineRows[timelineRows.length - 1]?.id ?? null
+  );
+  const [timelineTopInsetPx, setTimelineTopInsetPx] = useState(0);
 
   useEffect(() => {
     setActiveSnapshotIndex((current) => {
@@ -298,25 +318,76 @@ export function FullTuningSplitView({
     });
   }, [latestSnapshotIndex]);
 
+  useEffect(() => {
+    setActiveSyncRowId((current) => {
+      if (timelineRows.length === 0) return null;
+      if (current && timelineRows.some((row) => row.id === current)) return current;
+      return timelineRows[timelineRows.length - 1]?.id ?? null;
+    });
+  }, [timelineRows]);
+
+  useEffect(() => {
+    if (!activeSyncRowId) {
+      setFlashSyncRowId(null);
+      return;
+    }
+
+    setFlashSyncRowId(activeSyncRowId);
+    if (syncHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(syncHighlightTimeoutRef.current);
+    }
+
+    syncHighlightTimeoutRef.current = window.setTimeout(() => {
+      setFlashSyncRowId((current) => (current === activeSyncRowId ? null : current));
+      syncHighlightTimeoutRef.current = null;
+    }, TIMELINE_SYNC_FLASH_MS);
+
+    return () => {
+      if (syncHighlightTimeoutRef.current !== null) {
+        window.clearTimeout(syncHighlightTimeoutRef.current);
+        syncHighlightTimeoutRef.current = null;
+      }
+    };
+  }, [activeSyncRowId]);
+
+  useEffect(() => {
+    const container = timelineContainerRef.current;
+    if (!container) return;
+
+    const updateTopInset = () => {
+      setTimelineTopInsetPx(Math.max(0, getSyncAnchorOffsetFromTop(container.clientHeight) - 24));
+    };
+
+    updateTopInset();
+
+    const observer = new ResizeObserver(() => {
+      updateTopInset();
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   const syncActiveSnapshotToScroll = useCallback(() => {
     const container = timelineContainerRef.current;
     if (!container || timelineRows.length === 0) return;
+    const lastRow = timelineRows[timelineRows.length - 1];
 
     const remainingScroll =
       container.scrollHeight - (container.scrollTop + container.clientHeight);
-    if (remainingScroll <= SNAPSHOT_SYNC_BOTTOM_THRESHOLD_PX && latestSnapshotIndex >= 0) {
+    if (remainingScroll <= SNAPSHOT_SYNC_BOTTOM_THRESHOLD_PX && latestSnapshotIndex >= 0 && lastRow) {
       setActiveSnapshotIndex((current) =>
         current === latestSnapshotIndex ? current : latestSnapshotIndex
       );
+      setActiveSyncRowId((current) => (current === lastRow.id ? current : lastRow.id));
       return;
     }
 
     const containerRect = container.getBoundingClientRect();
-    const anchorOffset = Math.max(
-      24,
-      Math.min(container.clientHeight * SNAPSHOT_SYNC_ANCHOR_RATIO, container.clientHeight - 24)
-    );
-    const syncAnchorY = containerRect.top + anchorOffset;
+    const syncAnchorY = containerRect.top + getSyncAnchorOffsetFromTop(container.clientHeight);
+    let closestRowId = timelineRows[0].id;
     let closestSnapshotIndex = timelineRows[0].snapshotIndex;
     let closestDistance = Number.POSITIVE_INFINITY;
 
@@ -324,10 +395,11 @@ export function FullTuningSplitView({
       const node = rowRefs.current.get(row.id);
       if (!node) continue;
       const rowRect = node.getBoundingClientRect();
-      const rowAnchorY = rowRect.top + Math.min(rowRect.height / 2, 28);
+      const rowAnchorY = rowRect.top + getTimelineRowAnchorOffset(rowRect.height);
       const distance = Math.abs(rowAnchorY - syncAnchorY);
       if (distance < closestDistance) {
         closestDistance = distance;
+        closestRowId = row.id;
         closestSnapshotIndex = row.snapshotIndex;
       }
     }
@@ -335,6 +407,7 @@ export function FullTuningSplitView({
     setActiveSnapshotIndex((current) =>
       current === closestSnapshotIndex ? current : closestSnapshotIndex
     );
+    setActiveSyncRowId((current) => (current === closestRowId ? current : closestRowId));
   }, [latestSnapshotIndex, timelineRows]);
 
   useEffect(() => {
@@ -358,8 +431,14 @@ export function FullTuningSplitView({
       if (!container || !targetNode) return;
 
       setActiveSnapshotIndex(snapshotIndex);
+      setActiveSyncRowId(targetRowId ?? null);
       container.scrollTo({
-        top: Math.max(0, targetNode.offsetTop - 12),
+        top: Math.max(
+          0,
+          targetNode.offsetTop +
+            getTimelineRowAnchorOffset(targetNode.offsetHeight) -
+            getSyncAnchorOffsetFromTop(container.clientHeight)
+        ),
         behavior: 'smooth',
       });
     },
@@ -433,25 +512,25 @@ export function FullTuningSplitView({
 
   return (
     <div className="flex-1 overflow-hidden px-4 py-4">
-      <div className="mx-auto grid h-full w-full max-w-6xl min-h-0 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4">
-        <section className="relative min-h-0 rounded-[28px] border border-info-border bg-dark-light p-3 shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
-          <div className="absolute right-4 top-4 z-10 rounded-full border border-info-border bg-info-bg px-3 py-1 text-xs font-medium text-info-text shadow-[0_10px_24px_rgba(0,0,0,0.18)]">
+      <div className="mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:grid-rows-1">
+        <section className="relative min-h-0 overflow-hidden rounded-2xl border border-dark-border bg-dark p-4">
+          <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full border border-dark-border bg-dark-light px-3 py-1 text-xs font-medium text-fg">
             {latestSnapshotIndex >= 0 ? `${activeSnapshotIndex + 1} / ${latestSnapshotIndex + 1}` : '0 / 0'}
           </div>
 
-          <div className="flex h-full items-stretch gap-3">
+          <div className="flex h-full items-center gap-4 pt-10">
             <SnapshotNavButton
               direction="prev"
               disabled={!canGoToPreviousSnapshot}
               onClick={() => scrollToSnapshot(activeSnapshotIndex - 1)}
             />
 
-            <div className="flex h-full min-h-[320px] flex-1 items-center justify-center overflow-hidden rounded-[24px] border border-info-border/60 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.16),_transparent_58%),linear-gradient(180deg,_rgba(255,255,255,0.04),_rgba(255,255,255,0))] px-3 py-4 sm:min-h-[360px]">
+            <div className="flex h-full min-h-[320px] flex-1 items-center justify-center overflow-hidden px-4 py-4 sm:min-h-[360px]">
               {activeSnapshot ? (
-                <div className="relative h-full w-full max-w-2xl">
+                <div className="relative flex h-full w-full max-w-2xl items-center justify-center">
                   {transitionState?.outgoing ? (
                     <div
-                      className={`absolute inset-0 gui-stage-panel ${
+                      className={`absolute inset-0 flex items-center justify-center gui-stage-panel ${
                         transitionState.direction === 'forward'
                           ? 'gui-stage-slide-out-left'
                           : 'gui-stage-slide-out-right'
@@ -465,7 +544,7 @@ export function FullTuningSplitView({
                   ) : null}
 
                   <div
-                    className={`relative gui-stage-panel ${
+                    className={`relative flex h-full w-full items-center justify-center gui-stage-panel ${
                       transitionState
                         ? transitionState.direction === 'forward'
                           ? 'gui-stage-slide-in-right'
@@ -498,13 +577,16 @@ export function FullTuningSplitView({
           </div>
         </section>
 
-        <section className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-[28px] border border-dark-border bg-dark-light/70 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
+        <section className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-2xl border border-dark-border bg-dark">
           <div
             ref={timelineContainerRef}
             onScroll={syncActiveSnapshotToScroll}
             className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
           >
-            <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col">
+            <div
+              className="mx-auto flex min-h-full w-full max-w-5xl flex-col justify-end pb-4"
+              style={{ paddingTop: `${timelineTopInsetPx}px` }}
+            >
               {timelineRows.map((row) => (
                 <div
                   key={row.id}
@@ -516,9 +598,15 @@ export function FullTuningSplitView({
                     }
                   }}
                 >
-                  {row.type === 'agent' ? <AgentMessage message={row.message} /> : null}
-                  {row.type === 'user' ? <UserMessage message={row.message} /> : null}
-                  {row.type === 'marker' ? <TimelineMarkerRow row={row} /> : null}
+                  {row.type === 'agent' ? (
+                    <AgentMessage message={row.message} highlighted={row.id === flashSyncRowId} />
+                  ) : null}
+                  {row.type === 'user' ? (
+                    <UserMessage message={row.message} highlighted={row.id === flashSyncRowId} />
+                  ) : null}
+                  {row.type === 'marker' ? (
+                    <TimelineMarkerRow row={row} highlighted={row.id === flashSyncRowId} />
+                  ) : null}
                 </div>
               ))}
 
@@ -568,9 +656,9 @@ function GuiSnapshotCard({
   onConfirm?: () => void;
 }) {
   return (
-    <div className="rounded-[28px] border border-info-border bg-info-bg p-4 shadow-[0_10px_40px_rgba(59,130,246,0.12)]">
+    <div className="w-full rounded-2xl border border-dark-border bg-dark p-4">
       <div className="mb-4 flex items-start gap-3">
-        <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-info-border bg-primary text-primary-fg shadow-[0_0_0_4px_rgba(59,130,246,0.12)]">
+        <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-info-border bg-primary text-primary-fg">
           <svg
             className="h-5 w-5"
             fill="none"
@@ -609,7 +697,7 @@ function GuiSnapshotCard({
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-dark-border bg-dark p-4 shadow-[0_14px_44px_rgba(0,0,0,0.28)]">
+      <div className="rounded-2xl border border-dark-border bg-dark-light p-4">
         <div
           className={`transition-opacity duration-200 ${
             interactive ? '' : 'pointer-events-none opacity-65'
@@ -648,7 +736,7 @@ function SnapshotNavButton({
       title={isPrevious ? 'Show previous GUI snapshot' : 'Show next GUI snapshot'}
       disabled={disabled}
       onClick={onClick}
-      className="flex w-11 shrink-0 items-center justify-center rounded-[20px] border border-info-border bg-dark text-info-label transition-colors hover:border-info-label hover:text-info-text disabled:cursor-not-allowed disabled:opacity-35"
+      className="flex h-20 w-12 shrink-0 items-center justify-center rounded-2xl border border-dark-border bg-dark-light text-fg-muted transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-35 sm:h-24"
     >
       <svg
         className="h-5 w-5"
@@ -667,12 +755,29 @@ function SnapshotNavButton({
   );
 }
 
-function TimelineMarkerRow({ row }: { row: Extract<TimelineRow, { type: 'marker' }> }) {
+function TimelineMarkerRow({
+  row,
+  highlighted = false,
+}: {
+  row: Extract<TimelineRow, { type: 'marker' }>;
+  highlighted?: boolean;
+}) {
   return (
-    <div className="py-3" aria-label={`${row.label} (${row.stage})`}>
+    <div
+      className={`rounded-2xl border px-3 py-3 transition-colors duration-700 ${
+        highlighted ? 'border-primary/45 bg-primary/5' : 'border-transparent bg-transparent'
+      }`}
+      aria-label={`${row.label} (${row.stage})`}
+    >
       <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-fg-faint">
         <span className="h-px flex-1 bg-dark-border" />
-        <span className="rounded-full border border-dark-border bg-dark px-3 py-1 font-semibold text-fg-muted">
+        <span
+          className={`rounded-full px-3 py-1 font-semibold ${
+            highlighted
+              ? 'border border-primary/45 bg-primary/10 text-primary'
+              : 'border border-dark-border bg-dark text-fg-muted'
+          }`}
+        >
           {row.label}
         </span>
         <span className="h-px flex-1 bg-dark-border" />

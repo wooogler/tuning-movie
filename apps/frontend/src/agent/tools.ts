@@ -28,12 +28,12 @@ export const modificationTools: ToolDefinition[] = [
   {
     name: 'filter',
     description:
-      'Add a filter condition for visible items; repeated filter calls accumulate with AND semantics. Use only criteria the user explicitly asked for and can already see in the UI, or information already surfaced through the UI.',
+      'Add a filter condition; repeated filter calls accumulate with AND semantics. For structured criteria, prefer the item attribute that directly represents the user\'s request. Use "value" only when filtering the visible label text itself.',
     parameters: {
       field: {
         type: 'string',
         description:
-          'Field to filter by. Prefer user-visible fields such as "value" or other information already surfaced in the UI; do not rely on hidden-only metadata without surfacing it first, and do not add a new filtering objective the user did not ask for.',
+          'Field to filter by. Prefer the structured item attribute that directly encodes the user\'s criterion, such as "genre", "time", or "format". Use "value" only when the criterion is literally expressed in the visible label text. Do not add a new filtering objective the user did not ask for.',
       },
       operator: {
         type: 'string',
@@ -49,12 +49,12 @@ export const modificationTools: ToolDefinition[] = [
   {
     name: 'sort',
     description:
-      'Sort items by a specific field only when that ordering basis is already visible or has already been surfaced to the user through the UI, and the user explicitly asked for that comparison objective.',
+      'Sort items by a specific field only when the user explicitly asked for that comparison objective and the ordering basis is already visible or has already been surfaced through the UI. Prefer the structured comparison attribute over "value" unless sorting the visible label text itself.',
     parameters: {
       field: {
         type: 'string',
         description:
-          'Field to sort by. Prefer user-visible or already-surfaced comparison fields; avoid hidden-only metadata until it has been exposed to the user. Do not use this to impose an inferred tie-breaker such as rating unless the user asked for it.',
+          'Field to sort by. Prefer the structured attribute that directly represents the requested comparison, such as "time", "distanceMiles", or "rating" after it has been surfaced. Use "value" only when sorting by the visible label text itself. Do not use this to impose an inferred tie-breaker.',
       },
       order: {
         type: 'string',

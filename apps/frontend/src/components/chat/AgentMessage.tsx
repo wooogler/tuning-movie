@@ -3,9 +3,10 @@ import { renderMessageText } from './renderMessageText';
 
 interface AgentMessageProps {
   message: AgentMessageType;
+  highlighted?: boolean;
 }
 
-export function AgentMessage({ message }: AgentMessageProps) {
+export function AgentMessage({ message, highlighted = false }: AgentMessageProps) {
   const actionTag = message.actionTag;
 
   return (
@@ -26,7 +27,11 @@ export function AgentMessage({ message }: AgentMessageProps) {
         </svg>
       </div>
 
-      <div className="max-w-[80%] min-w-0">
+      <div
+        className={`max-w-[80%] min-w-0 rounded-3xl px-3 py-2 transition-colors duration-700 ${
+          highlighted ? 'border border-primary/45 bg-primary/5' : 'border border-transparent'
+        }`}
+      >
         <div className="text-sm text-info-label mb-1 flex items-center gap-2">
           <span>Agent</span>
           {actionTag ? (
