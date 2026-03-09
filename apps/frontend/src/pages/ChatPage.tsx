@@ -33,7 +33,7 @@ import {
 import { MessageList, FullTuningSplitView, ChatInput } from '../components/chat';
 import { ScenarioBriefing } from '../components/scenario/ScenarioBriefing';
 import { StageRenderer } from '../renderer';
-import { useToolHandler, useAgentBridge } from '../hooks';
+import { useToolHandler, useAgentBridge, useStudyInteractionLogger } from '../hooks';
 import { agentTools, type ToolDefinition } from '../agent/tools';
 import { getStudyModeConfig, type StudyModeId } from './studyOptions';
 import type { Movie, Theater, Showing, Booking } from '../types';
@@ -291,6 +291,13 @@ export function ChatPage({
   const sessionLocked = Boolean(studySession);
   const isBaselineMode = studyModePreset === 'baseline';
   const isFullTuningSplit = studyModePreset === 'full-tuning';
+  const { logEvent: logStudyEvent, logEventNow: logStudyEventNow } = useStudyInteractionLogger({
+    studySession,
+    messages,
+    activeSpec,
+    booking,
+    error,
+  });
 
   const getMaxChatWidth = useCallback(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_WIDTH_PX;
@@ -627,21 +634,31 @@ export function ChatPage({
   const handleSelect = useCallback(
     (id: string) => {
       if (!activeSpec) return;
+      logStudyEvent('chat.selection.changed', {
+        stage: activeSpec.stage,
+        interaction: 'select',
+        itemId: id,
+      });
       const newSpec = selectItem(activeSpec, id);
       updateActiveSpec(newSpec);
       setUiSpec(newSpec);
     },
-    [activeSpec, updateActiveSpec, setUiSpec]
+    [activeSpec, logStudyEvent, updateActiveSpec, setUiSpec]
   );
 
   const handleToggle = useCallback(
     (id: string) => {
       if (!activeSpec) return;
+      logStudyEvent('chat.selection.changed', {
+        stage: activeSpec.stage,
+        interaction: 'toggle',
+        itemId: id,
+      });
       const newSpec = toggleItem(activeSpec, id);
       updateActiveSpec(newSpec);
       setUiSpec(newSpec);
     },
-    [activeSpec, updateActiveSpec, setUiSpec]
+    [activeSpec, logStudyEvent, updateActiveSpec, setUiSpec]
   );
 
   const handleConfirm = useCallback(async (context?: ToolApplyContext) => {
@@ -1001,14 +1018,21 @@ export function ChatPage({
       'Reset this task and clear the current chat and booking progress?'
     );
     if (!confirmed) return;
+    logStudyEvent('study.control.reset_requested', {
+      source: 'participant',
+    });
     sendSessionResetToAgent('host-manual-reset');
     handleSessionReset();
-  }, [handleSessionReset, loading, sendSessionResetToAgent]);
+  }, [handleSessionReset, loading, logStudyEvent, sendSessionResetToAgent]);
 
   const handleFinishStudy = useCallback(async () => {
     if (loading) return;
     const confirmed = window.confirm('Finish this task and go to the end screen?');
     if (!confirmed) return;
+
+    await logStudyEventNow('study.control.finish_requested', {
+      source: 'participant',
+    });
 
     resetChat();
     setBooking(null);
@@ -1026,6 +1050,7 @@ export function ChatPage({
     navigate('/end', { replace: true });
   }, [
     loading,
+    logStudyEventNow,
     navigate,
     resetChat,
     sendSessionResetToAgent,
@@ -1033,9 +1058,12 @@ export function ChatPage({
   ]);
 
   const handleBookAnother = useCallback(() => {
+    logStudyEvent('study.control.book_another', {
+      source: 'participant',
+    });
     sendSessionResetToAgent('host-book-another');
     handleBookAnotherLocal();
-  }, [sendSessionResetToAgent, handleBookAnotherLocal]);
+  }, [sendSessionResetToAgent, handleBookAnotherLocal, logStudyEvent]);
 
   const handleAgentBridgeToggle = useCallback(() => {
     const nextEnabled = !agentBridgeEnabled;
@@ -1065,11 +1093,15 @@ export function ChatPage({
   const handleChatInputSubmit = useCallback(
     (text: string) => {
       if (!agentBridgeEnabled) return;
+      logStudyEvent('chat.user_input.submitted', {
+        stage: currentStage,
+        text,
+      });
       addUserMessage(currentStage, 'input', text);
       setAwaitingAgentResponse(true);
       sendUserMessageToAgent(text, currentStage);
     },
-    [addUserMessage, agentBridgeEnabled, currentStage, sendUserMessageToAgent]
+    [addUserMessage, agentBridgeEnabled, currentStage, logStudyEvent, sendUserMessageToAgent]
   );
 
   const currentStep = STAGE_ORDER.indexOf(currentStage) + 1;

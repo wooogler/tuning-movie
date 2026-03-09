@@ -13,6 +13,8 @@ interface StudyStartPageProps {
   onModeChange: (mode: StudyModeId) => void;
   selectedScenarioId: string | null;
   onScenarioChange: (scenarioId: string) => void;
+  loggingParticipantId: string;
+  onLoggingParticipantIdChange: (participantId: string) => void;
 }
 
 export function StudyStartPage({
@@ -22,6 +24,8 @@ export function StudyStartPage({
   onModeChange,
   selectedScenarioId,
   onScenarioChange,
+  loggingParticipantId,
+  onLoggingParticipantIdChange,
 }: StudyStartPageProps) {
   const navigate = useNavigate();
   const [loadingScenarios, setLoadingScenarios] = useState(true);
@@ -159,6 +163,28 @@ export function StudyStartPage({
             )}
           </section>
         </div>
+
+        <section className="mt-5 space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">
+            PID Logging
+          </h2>
+          <div className="rounded-xl border border-dark-border bg-dark p-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-fg-strong">Participant PID</span>
+              <input
+                type="text"
+                value={loggingParticipantId}
+                onChange={(event) => onLoggingParticipantIdChange(event.target.value)}
+                placeholder="Optional"
+                className="w-full rounded-lg border border-dark-border bg-dark-light px-3 py-2 text-sm text-fg-strong outline-none transition-colors placeholder:text-fg-faint focus:border-primary"
+              />
+            </label>
+            <p className="mt-2 text-sm text-fg-muted">
+              Leave this blank to disable file logging. When provided, chat-page interactions are
+              appended live to a `PID + timestamp` JSONL file.
+            </p>
+          </div>
+        </section>
 
         {error && (
           <div className="mt-4 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">

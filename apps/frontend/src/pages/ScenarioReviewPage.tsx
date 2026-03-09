@@ -12,6 +12,7 @@ interface ScenarioReviewPageProps {
   onThemeToggle: () => void;
   studyMode: StudyModeId;
   selectedScenarioId: string;
+  loggingParticipantId: string;
   onSessionCreated: (session: StudySessionState) => void;
 }
 
@@ -20,6 +21,7 @@ export function ScenarioReviewPage({
   onThemeToggle,
   studyMode,
   selectedScenarioId,
+  loggingParticipantId,
   onSessionCreated,
 }: ScenarioReviewPageProps) {
   const navigate = useNavigate();
@@ -64,6 +66,7 @@ export function ScenarioReviewPage({
       const session = await api.createStudySession({
         scenarioId: selectedScenario.id,
         studyMode,
+        loggingParticipantId: loggingParticipantId.trim() || undefined,
       });
       onSessionCreated(session);
       navigate('/booking');
@@ -112,6 +115,17 @@ export function ScenarioReviewPage({
             Selected scenario was not found.
           </div>
         )}
+
+        <div className="mt-4 rounded-xl border border-dark-border bg-dark px-4 py-3 text-sm">
+          <span className="font-medium text-fg-strong">PID logging:</span>{' '}
+          {loggingParticipantId.trim() ? (
+            <span className="text-fg-muted">
+              enabled for <span className="text-fg-strong">{loggingParticipantId.trim()}</span>
+            </span>
+          ) : (
+            <span className="text-fg-muted">disabled</span>
+          )}
+        </div>
 
         {error && (
           <div className="mt-4 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">

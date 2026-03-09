@@ -21,6 +21,8 @@ export interface StudySessionState {
   sessionId: string;
   relaySessionId: string;
   participantId: string;
+  loggingParticipantId: string | null;
+  interactionLogFile: string | null;
   studyToken: string;
   expiresAt: string;
   studyMode: StudyModeId;
@@ -56,7 +58,15 @@ export function getStoredStudySession(): StudySessionState | null {
     }
     const studyMode = normalizeStudyMode(parsed.studyMode);
     return {
-      ...(parsed as StudySessionState),
+      ...(parsed as Omit<StudySessionState, 'studyMode' | 'studyModeConfig' | 'loggingParticipantId' | 'interactionLogFile'>),
+      loggingParticipantId:
+        typeof parsed.loggingParticipantId === 'string' && parsed.loggingParticipantId.trim()
+          ? parsed.loggingParticipantId.trim()
+          : null,
+      interactionLogFile:
+        typeof parsed.interactionLogFile === 'string' && parsed.interactionLogFile.trim()
+          ? parsed.interactionLogFile.trim()
+          : null,
       studyMode,
       studyModeConfig: getStudyModeConfig(studyMode),
     };

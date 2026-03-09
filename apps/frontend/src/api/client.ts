@@ -43,22 +43,30 @@ async function getErrorMessage(response: Response): Promise<string> {
 
 interface FetchApiOptions extends RequestInit {
   includeStudyToken?: boolean;
+  studyToken?: string;
 }
 
 async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise<T> {
   const session = getStoredStudySession();
+  const {
+    includeStudyToken = true,
+    studyToken: explicitStudyToken,
+    headers: optionHeaders,
+    ...requestInit
+  } = options ?? {};
+  const studyToken = explicitStudyToken ?? session?.studyToken;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options?.headers as Record<string, string> | undefined),
+    ...(optionHeaders as Record<string, string> | undefined),
   };
-  if (options?.includeStudyToken !== false && session?.studyToken) {
-    headers['x-study-session-token'] = session.studyToken;
+  if (includeStudyToken && studyToken) {
+    headers['x-study-session-token'] = studyToken;
   }
 
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
+      ...requestInit,
       headers,
     });
   } catch (error) {
@@ -76,6 +84,12 @@ async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise
   return response.json();
 }
 
+export interface StudyLogEventInput {
+  type: string;
+  payload: unknown;
+  clientTimestamp?: string;
+}
+
 export const api = {
   // Study scenarios/sessions
   getStudyScenarios: () =>
@@ -88,6 +102,7 @@ export const api = {
     scenarioId: string;
     studyMode: StudyModeId;
     participantId?: string;
+    loggingParticipantId?: string;
   }) =>
     fetchApi<StudySessionState>('/study/sessions', {
       method: 'POST',
@@ -100,6 +115,16 @@ export const api = {
       '/study/sessions/finish',
       {
         method: 'POST',
+      }
+    ),
+  logStudyEvents: (events: StudyLogEventInput[], studyToken?: string) =>
+    fetchApi<{ enabled: boolean; logged: number; interactionLogFile: string | null }>(
+      '/study/logs/events',
+      {
+        method: 'POST',
+        studyToken,
+        keepalive: true,
+        body: JSON.stringify({ events }),
       }
     ),
 

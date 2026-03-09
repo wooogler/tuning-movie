@@ -39,6 +39,9 @@ function App() {
   const [selectedScenarioTitle, setSelectedScenarioTitle] = useState<string | null>(() =>
     getStoredStudySession()?.scenario.title ?? null
   );
+  const [loggingParticipantId, setLoggingParticipantId] = useState<string>(() =>
+    getStoredStudySession()?.loggingParticipantId ?? ''
+  );
   const [studySession, setStudySession] = useState<StudySessionState | null>(() =>
     getStoredStudySession()
   );
@@ -57,6 +60,7 @@ function App() {
     setStudyMode(DEFAULT_STUDY_MODE);
     setSelectedScenarioId(null);
     setSelectedScenarioTitle(null);
+    setLoggingParticipantId('');
     setStudySession(null);
   };
 
@@ -66,6 +70,7 @@ function App() {
     setStudyMode(session.studyMode);
     setSelectedScenarioId(session.scenario.id);
     setSelectedScenarioTitle(session.scenario.title);
+    setLoggingParticipantId(session.loggingParticipantId ?? '');
   };
 
   useEffect(() => {
@@ -113,13 +118,15 @@ function App() {
                   <StudyStartPage
                     theme={theme}
                     onThemeToggle={handleThemeToggle}
-                    selectedMode={studyMode}
-                    onModeChange={setStudyMode}
-                    selectedScenarioId={selectedScenarioId}
-                    onScenarioChange={setSelectedScenarioId}
-                  />
-                }
-              />
+                  selectedMode={studyMode}
+                  onModeChange={setStudyMode}
+                  selectedScenarioId={selectedScenarioId}
+                  onScenarioChange={setSelectedScenarioId}
+                  loggingParticipantId={loggingParticipantId}
+                  onLoggingParticipantIdChange={setLoggingParticipantId}
+                />
+              }
+            />
               <Route
                 path="/task-review"
                 element={selectedScenarioId ? (
@@ -128,6 +135,7 @@ function App() {
                     onThemeToggle={handleThemeToggle}
                     studyMode={studyMode}
                     selectedScenarioId={selectedScenarioId}
+                    loggingParticipantId={loggingParticipantId}
                     onSessionCreated={handleStudySessionCreated}
                   />
                 ) : (

@@ -33,6 +33,8 @@ export interface StudySessionRecord {
   sessionId: string;
   relaySessionId: string;
   participantId: string;
+  loggingParticipantId?: string;
+  interactionLogFile?: string;
   scenarioId: string;
   studyMode: StudyModeId;
   dbPath: string;

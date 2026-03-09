@@ -19,6 +19,11 @@ import {
   DEFAULT_STUDY_MODE,
 } from './modes';
 import { startAgentForSession, stopAgentForSession } from './agentSupervisor';
+import {
+  appendInteractionLog,
+  appendInteractionLogSafe,
+  createInteractionLogFilePath,
+} from './interactionLogService';
 import type {
   ScenarioDefinition,
   StudyModeId,
@@ -31,6 +36,7 @@ interface CreateSessionInput {
   scenarioId: string;
   studyMode?: string;
   participantId?: string;
+  loggingParticipantId?: string;
 }
 
 interface PersistedSessionFile {
@@ -217,10 +223,18 @@ function deactivateSession(
   record: StudySessionRecord,
   status: 'finished' | 'expired'
 ): void {
+  const finishedAt = now().toISOString();
+  appendInteractionLogSafe(record, {
+    type: `study.session.${status}`,
+    payload: {
+      status,
+      finishedAt,
+    },
+  });
   sessions.set(record.sessionId, {
     ...record,
     status,
-    finishedAt: now().toISOString(),
+    finishedAt,
   });
   stopAgentForSession(record.sessionId);
   destroySessionDb(record.sessionId);
@@ -298,6 +312,13 @@ function markExpiredSessions(): boolean {
       status: 'expired',
       finishedAt: now().toISOString(),
     };
+    appendInteractionLogSafe(record, {
+      type: 'study.session.expired',
+      payload: {
+        status: 'expired',
+        finishedAt: expired.finishedAt,
+      },
+    });
     sessions.set(sessionId, expired);
     stopAgentForSession(sessionId);
     destroySessionDb(sessionId);
@@ -370,40 +391,73 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
     typeof input.participantId === 'string' && input.participantId.trim()
       ? input.participantId.trim()
       : `P-${sessionId.slice(-6)}`;
+  const loggingParticipantId =
+    typeof input.loggingParticipantId === 'string' && input.loggingParticipantId.trim()
+      ? input.loggingParticipantId.trim()
+      : undefined;
+  const interactionLogFile = loggingParticipantId
+    ? createInteractionLogFilePath(loggingParticipantId, createdAt)
+    : undefined;
 
   const dbHandle = createSessionDbFromTemplate(sessionId, templateDbPath);
-  const record: StudySessionRecord = {
-    sessionId,
-    relaySessionId,
-    participantId,
-    scenarioId: scenario.id,
-    studyMode,
-    dbPath: dbHandle.dbPath,
-    status: 'active',
-    createdAt,
-    expiresAt,
-  };
-  sessions.set(sessionId, record);
-
-  if (studyModeConfig.agentEnabled) {
-    startAgentForSession({
+  try {
+    const record: StudySessionRecord = {
       sessionId,
       relaySessionId,
-      scenarioId: scenario.id,
       participantId,
+      ...(loggingParticipantId ? { loggingParticipantId } : {}),
+      ...(interactionLogFile ? { interactionLogFile } : {}),
+      scenarioId: scenario.id,
       studyMode,
-      modeConfig: studyModeConfig,
-    });
-  }
+      dbPath: dbHandle.dbPath,
+      status: 'active',
+      createdAt,
+      expiresAt,
+    };
 
-  persistSessions();
-  const studyToken = createToken(record);
-  return {
-    record,
-    scenario,
-    studyModeConfig,
-    studyToken,
-  };
+    if (interactionLogFile) {
+      appendInteractionLog(record, {
+        type: 'study.session.started',
+        payload: {
+          createdAt,
+          expiresAt,
+          scenario: {
+            id: scenario.id,
+            title: scenario.title,
+          },
+          participantId,
+          loggingParticipantId,
+        },
+      });
+    }
+
+    sessions.set(sessionId, record);
+
+    if (studyModeConfig.agentEnabled) {
+      startAgentForSession({
+        sessionId,
+        relaySessionId,
+        scenarioId: scenario.id,
+        participantId,
+        studyMode,
+        modeConfig: studyModeConfig,
+      });
+    }
+
+    persistSessions();
+    const studyToken = createToken(record);
+    return {
+      record,
+      scenario,
+      studyModeConfig,
+      studyToken,
+    };
+  } catch (error) {
+    sessions.delete(sessionId);
+    stopAgentForSession(sessionId);
+    destroySessionDb(sessionId);
+    throw error;
+  }
 }
 
 export function getSessionContextByToken(token: string): StudySessionContext | null {
@@ -436,10 +490,19 @@ export function finishSessionByToken(token: string): StudySessionRecord | null {
   const context = getSessionContextByToken(token);
   if (!context) return null;
 
+  const finishedAt = now().toISOString();
+  appendInteractionLogSafe(context.record, {
+    type: 'study.session.finished',
+    payload: {
+      status: 'finished',
+      finishedAt,
+    },
+  });
+
   const finished: StudySessionRecord = {
     ...context.record,
     status: 'finished',
-    finishedAt: now().toISOString(),
+    finishedAt,
   };
   sessions.set(context.record.sessionId, finished);
   stopAgentForSession(context.record.sessionId);
