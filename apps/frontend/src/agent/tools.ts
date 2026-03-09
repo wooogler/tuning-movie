@@ -49,7 +49,7 @@ export const modificationTools: ToolDefinition[] = [
   {
     name: 'sort',
     description:
-      'Sort items by a specific field only when the user explicitly asked for that comparison objective and the ordering basis is already visible or has already been surfaced through the UI. Prefer the structured comparison attribute over "value" unless sorting the visible label text itself.',
+      'Sort items by a specific field only when the user explicitly asked for that comparison objective in the current stage and the ordering basis is already visible or has already been surfaced through the UI. Prefer the structured comparison attribute over "value" unless sorting the visible label text itself. Do not use this just because a field seems helpful or available.',
     parameters: {
       field: {
         type: 'string',
@@ -77,7 +77,7 @@ export const modificationTools: ToolDefinition[] = [
   {
     name: 'augment',
     description:
-      'Change the display value of specific items to surface short information tied to the user\'s stated criterion without committing to a selection. Do not use this to add a new comparison dimension.',
+      'Change the display value of specific items to surface short information tied to the user\'s stated criterion without committing to a selection. Do not use this to add a new comparison dimension or to proactively expose a new decision axis when the user has not asked for one in the current stage.',
     parameters: {
       items: {
         type: 'array',
@@ -110,7 +110,7 @@ export const interactionTools: ToolDefinition[] = [
   {
     name: 'select',
     description:
-      'Select an item in the current stage only when the user has clearly chosen that specific option, or when exactly one visible enabled option remains under the user\'s explicit criteria',
+      'Select an item in the current stage only when the user has clearly chosen that specific option, or when exactly one visible enabled option remains under the user\'s explicit criteria. A top-ranked option under a preference is not enough while multiple visible options remain.',
     parameters: {
       itemId: {
         type: 'string',

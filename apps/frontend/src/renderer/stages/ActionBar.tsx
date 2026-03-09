@@ -10,6 +10,7 @@ interface ActionBarProps {
   onStartOver?: () => void;
   backLabel?: string;
   nextLabel?: string;
+  startOverLabel?: string;
   backDisabled?: boolean;
   nextDisabled?: boolean;
   showBack?: boolean;
@@ -21,6 +22,7 @@ export function ActionBar({
   onStartOver,
   backLabel = 'Back',
   nextLabel = 'Continue',
+  startOverLabel = 'Start over',
   backDisabled = false,
   nextDisabled = false,
   showBack = true,
@@ -64,7 +66,7 @@ export function ActionBar({
           onClick={onStartOver}
           className="bg-transparent p-0 text-sm text-fg-muted underline underline-offset-4 transition-colors hover:text-fg-strong"
         >
-          Start over
+          {startOverLabel}
         </button>
       )}
     </div>

@@ -156,13 +156,14 @@ const CORE_SYSTEM_PROMPT =
   '- Use workflow.state to understand selections already made across earlier stages.\n' +
   '- Primary goal: help the user complete booking safely while preserving the user\'s agency over the choice.\n' +
   '- Prefer concrete progress when intent is clear, but do not turn an unresolved comparison into an autonomous choice.\n' +
+  '- An explicit comparison preference may justify sorting or surfacing information, but it does not by itself authorize selecting the current top-ranked option while multiple visible options remain.\n' +
   '- When multiple options remain or the next step would be assumption-heavy, prefer one non-committal GUI modification if it can make the user\'s stated criterion easier to see or apply without assuming a choice; otherwise use respond for a concise clarification.\n' +
   '- Use navigation or commitment actions only after clear user-originated confirmation, or when exactly one visible enabled option remains under the user\'s explicit criteria.\n' +
   '- Do not infer unstated optimization goals or tie-breakers such as highest-rated, cheapest, nearest, earliest, latest, shortest, or best default.\n' +
   '- Choose exactly one next step for this turn.';
 
 const CP_MEMORY_PROMPT_RULES =
-  '- Use workflow.memory.preferences as structured user intent.\n' +
+  '- Use workflow.memory.preferences as structured user intent, and treat preferences as active guidance only when their relevantStages include workflow.currentStage unless the user explicitly restated them for the current step.\n' +
   '- Use workflow.memory.activeConflicts as the current blockers for the active branch.\n' +
   '- Use workflow.memory.deadEnds as advisory history about branches that previously failed after backtracking.\n' +
   '- Prefer workflow.memory.activeConflicts over workflow.memory.deadEnds when they disagree.\n' +
@@ -185,6 +186,7 @@ const GUI_ADAPTATION_ENABLED_RULES =
   'GUI adaptation rules when modification tools are enabled:\n' +
   '- Match the tool to the need: use augment to surface a short fact tied to the user\'s stated criterion, filter to narrow by an explicit criterion, sort to order by an explicit comparison goal, and highlight to mark a small relevant subset.\n' +
   '- For filter or sort, prefer the structured item field that directly represents the user\'s criterion or comparison goal. Use "value" only when operating on the visible label text itself.\n' +
+  '- If the user has not stated a criterion or comparison goal for the current stage, do not proactively sort, filter, or augment just because a field seems helpful or available.\n' +
   '- If the user\'s stated criterion is not yet visible in the UI, prefer surfacing or applying that criterion through one non-committal GUI modification before asking for a tie-break.\n' +
   '- Use only criteria grounded in what the user asked for. Do not introduce a new comparison dimension or hidden optimization goal.\n' +
   '- Do not mention hidden item metadata directly in assistantMessage; if a criterion-specific fact is not already visible, surface it through the UI first.\n' +

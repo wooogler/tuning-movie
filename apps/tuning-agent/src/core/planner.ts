@@ -420,6 +420,13 @@ function sliceRecent<T>(list: T[], maxItems: number): T[] {
   return list.slice(-limit);
 }
 
+function filterPlannerPreferencesByStage(preferences: Preference[], stage: Stage): Preference[] {
+  return preferences.filter((preference) => {
+    const relevantStages = Array.isArray(preference.relevantStages) ? preference.relevantStages : [];
+    return relevantStages.length === 0 || relevantStages.includes(stage);
+  });
+}
+
 function buildPlannerMemory(
   preferences: Preference[],
   activeConflicts: ActiveConflict[],
@@ -559,7 +566,7 @@ export async function planNextAction(
     const plannerTools = getPlannerToolSchema(context.toolSchema);
     const plannerCpMemoryLimit = Math.max(0, Math.floor(context.plannerCpMemoryLimit ?? 0));
     const plannerMemory = buildPlannerMemory(
-      memory.getPreferences(),
+      filterPlannerPreferencesByStage(memory.getPreferences(), stage),
       memory.getActiveConflicts(),
       memory.getDeadEnds(),
       plannerCpMemoryLimit

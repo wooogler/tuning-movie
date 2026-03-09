@@ -851,21 +851,6 @@ export function ChatPage({
     });
   }, [activeSpec, currentStage, addUserMessage, annotateLastAgentMessage, loadStageData]);
 
-  const handleBookAnotherLocal = useCallback(() => {
-    resetChat();
-    setBooking(null);
-    setError(null);
-    setAwaitingAgentResponse(false);
-    initialized.current = true;
-    if (movies.length > 0) {
-      const spec = withBookingContext(generateMovieSpec(movies), {});
-      addSystemMessage('movie', spec);
-      setUiSpec(spec);
-      return;
-    }
-    loadStageData('movie', { booking: {} });
-  }, [resetChat, movies, addSystemMessage, setUiSpec, loadStageData]);
-
   const handleSetSpec = useCallback(
     (
       newSpec: typeof activeSpec,
@@ -1056,14 +1041,6 @@ export function ChatPage({
     sendSessionResetToAgent,
     setUiSpec,
   ]);
-
-  const handleBookAnother = useCallback(() => {
-    logStudyEvent('study.control.book_another', {
-      source: 'participant',
-    });
-    sendSessionResetToAgent('host-book-another');
-    handleBookAnotherLocal();
-  }, [sendSessionResetToAgent, handleBookAnotherLocal, logStudyEvent]);
 
   const handleAgentBridgeToggle = useCallback(() => {
     const nextEnabled = !agentBridgeEnabled;
@@ -1522,17 +1499,21 @@ export function ChatPage({
         )}
 
         {booking && (
-          <div className="shrink-0 px-4 py-4 border-t border-dark-border bg-dark-light">
-            <div className="max-w-3xl mx-auto text-center">
-              <div className="text-2xl mb-2">Booking Complete</div>
-              <p className="text-fg-strong font-medium">Booking Confirmed!</p>
-              <p className="text-fg-muted text-sm mb-3">Booking ID: {booking.id}</p>
-              <button
-                onClick={handleBookAnother}
-                className="px-4 py-2 bg-primary text-primary-fg rounded-lg hover:bg-primary/80"
-              >
-                Book Another
-              </button>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4">
+            <div className="booking-complete-overlay pointer-events-auto w-full max-w-xl rounded-2xl border border-primary/35 bg-dark-light/95 p-5 shadow-2xl shadow-black/30 backdrop-blur">
+              <div className="text-center">
+                <div className="mb-1 text-2xl">Booking Complete</div>
+                <p className="font-medium text-fg-strong">Booking Confirmed!</p>
+                <p className="mb-4 text-sm text-fg-muted">Booking ID: {booking.id}</p>
+                <button
+                  type="button"
+                  onClick={handleFinishStudy}
+                  disabled={loading}
+                  className="rounded-lg bg-primary px-4 py-2 text-primary-fg transition-colors hover:bg-primary/80 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Finish Task
+                </button>
+              </div>
             </div>
           </div>
         )}
