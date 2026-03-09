@@ -31,7 +31,6 @@ export function SeatStage({
 
   // Highlight 정보
   const highlightedIds = new Set(spec.modification.highlight?.itemIds ?? []);
-  const seatById = new Map(spec.items.map((seat) => [seat.id, seat]));
 
   // 좌석을 행별로 그룹화 (원본 items 사용)
   const seatsByRow = rows.map((row) =>
@@ -44,10 +43,6 @@ export function SeatStage({
       .filter((rowSeats) => rowSeats.length > 0)
       .map((rowSeats) => [rowSeats[0].row, rowSeats[0].price])
   );
-  const selectedSeatsDetailed = selectedIds
-    .map((seatId) => seatById.get(seatId))
-    .filter((seat): seat is SeatItem => seat !== undefined);
-  const selectedTotalPrice = selectedSeatsDetailed.reduce((sum, seat) => sum + seat.price, 0);
 
   return (
     <div className="flex w-full max-w-full flex-col items-center gap-5 sm:gap-6">
@@ -96,15 +91,15 @@ export function SeatStage({
                       title={`${seat.label} • ${formatUsd(seat.price)} • ${seat.type}`}
                       style={{ gridColumn: `${seat.number} / span 1` }}
                       className={`
-                        aspect-square min-w-0 w-full rounded-t-md text-[10px] font-medium transition-all sm:rounded-t-lg sm:text-xs
+                        aspect-square min-w-0 w-full rounded-t-md text-[10px] transition-all sm:rounded-t-lg sm:text-xs
                         ${
                           isOccupied
-                            ? 'bg-dark-border cursor-not-allowed'
+                            ? 'cursor-not-allowed bg-dark-border text-fg-faint font-normal'
                             : isSelected
-                            ? 'bg-primary text-primary-fg'
+                            ? 'bg-primary text-primary-fg font-semibold'
                             : isPremium
-                            ? 'bg-amber-900/55 text-amber-100 hover:bg-amber-800/60'
-                            : 'bg-dark-light hover:bg-dark-lighter text-fg-strong'
+                            ? 'bg-amber-900/55 text-amber-100 font-semibold hover:bg-amber-800/60'
+                            : 'bg-dark-light text-fg-strong font-semibold hover:bg-dark-lighter'
                         }
                         ${highlightClass}
                       `}
@@ -138,17 +133,6 @@ export function SeatStage({
           <span>Occupied</span>
         </div>
       </div>
-
-      {/* Selected seats info */}
-      {selectedList.length > 0 && (
-        <div className="max-w-full text-center text-xs leading-6 text-fg-muted sm:text-sm">
-          Selected:{' '}
-          {selectedSeatsDetailed
-            .map((seat) => `${seat.label} (${formatUsd(seat.price)})`)
-            .join(', ')}{' '}
-          ({selectedList.length} seats, total {formatUsd(selectedTotalPrice)})
-        </div>
-      )}
 
       <ActionBar
         onBack={onBack}

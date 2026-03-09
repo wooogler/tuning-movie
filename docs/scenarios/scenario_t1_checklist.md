@@ -14,14 +14,14 @@
 
 ## Data Checks (UI/API)
 - Movie list includes:
-  - `Desk for Two`, `Love Punchline`, `Cosmic Laughs`, `Happy Feet Friday`
+  - `Shared Shift`, `Last Call for Love`, `Orbital Punchlines`, `Happy Feet Friday`
 - Theater list includes out-of-range theater:
   - `Hilltop Screening Room` with `12` miles
 
 ## Attempt Path Checks (C2~C8)
 
-### Attempt 1: Cosmic Laughs at Theater A
-- Date options for `Cosmic Laughs + Theater A`:
+### Attempt 1: Orbital Punchlines at Theater A
+- Date options for `Orbital Punchlines + Theater A`:
   - includes opening `2026-03-15` (Sunday) and following weekdays
   - in the target weekend (`2026-03-14`~`2026-03-15`), only Sunday is available
 - Time options include:
@@ -31,15 +31,15 @@
   - `15:30`: no 3 adjacent (C3)
   - `20:00`: 3 adjacent exists (C4 candidate, but late-ending runtime conflict)
 
-### Attempt 2: Cosmic Laughs at Theater B
-- Date options for `Cosmic Laughs + Theater B`:
+### Attempt 2: Orbital Punchlines at Theater B
+- Date options for `Orbital Punchlines + Theater B`:
   - `2026-03-16` and later only
   - no weekend date (C5)
 
-### Attempt 3: Love Punchline
-- Date options for `Love Punchline + Theater A`:
+### Attempt 3: Last Call for Love
+- Date options for `Last Call for Love + Theater A`:
   - through `2026-03-13` only (C6)
-- Date options for `Love Punchline + Theater C`:
+- Date options for `Last Call for Love + Theater C`:
   - includes `2026-03-14` (Saturday), excludes Sunday
 - Saturday time options at Theater C:
   - `10:00`, `14:00`, `16:30`, `19:00`

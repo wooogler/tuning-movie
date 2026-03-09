@@ -29,6 +29,8 @@ const PREFERENCE_STAGE_META: Record<PreferenceStage, { step: number; label: stri
   confirm: { step: 6, label: 'Confirm' },
 };
 
+const SPECIFIC_DATE_PREFERENCE_PATTERN = /^date-(\d{4})-(\d{2})-(\d{2})$/;
+
 const KNOWN_PREFERENCE_LABELS: Record<string, string> = {
   'ai-recommendation': 'AI recommendation preferred',
   action: 'Action genre',
@@ -40,6 +42,7 @@ const KNOWN_PREFERENCE_LABELS: Record<string, string> = {
   'closest-theater': 'Closest theater preferred',
   comedy: 'Comedy genre',
   'cosmic-laughs': 'Watch Cosmic Laughs',
+  'date-2026-03-12': 'Watch on Thu, Mar 12',
   'distance-under-12mi': 'Theater within 12 miles',
   'end-before-1030pm': 'End before 10:30 PM',
   'weekend-only': 'This weekend only',
@@ -47,6 +50,7 @@ const KNOWN_PREFERENCE_LABELS: Record<string, string> = {
   'end-before-6pm': 'End before 6 PM',
   'end-before-5pm': 'End before 5 PM',
   'no-sunday-morning': 'No Sunday morning showtimes',
+  'next-weekend-only': 'Next weekend only',
   'end-before-10pm': 'Movie ends before 10 PM',
   'imax-required': 'IMAX required',
   'kid-friendly': 'Kid-friendly movie',
@@ -65,7 +69,7 @@ const KNOWN_PREFERENCE_LABELS: Record<string, string> = {
   thriller: 'Thriller genre',
   'under-2-hours': 'Under 2 hours preferred',
   'avoid-romcom': 'Avoid romantic comedy',
-  'desk-for-two': 'Prefer Desk for Two',
+  'desk-for-two': 'Prefer Shared Shift',
   'saturday-afternoon': 'Prefer Saturday afternoon',
 };
 
@@ -80,6 +84,7 @@ const KNOWN_PREFERENCE_DESCRIPTIONS: Record<string, string> = {
   'closest-theater': 'Prefer the nearest theater option.',
   comedy: 'Choose a movie that includes comedy.',
   'cosmic-laughs': 'The movie must be Cosmic Laughs.',
+  'date-2026-03-12': 'The tickets should be booked for Thursday, March 12, 2026.',
   'distance-under-12mi': 'Only theaters within 12 miles are acceptable.',
   'end-before-1030pm': 'Pick a showtime that ends before 10:30 PM.',
   'weekend-only': 'Must watch this weekend (Saturday or Sunday).',
@@ -87,6 +92,7 @@ const KNOWN_PREFERENCE_DESCRIPTIONS: Record<string, string> = {
   'end-before-6pm': 'Pick a showing that ends before 6:00 PM.',
   'end-before-5pm': 'Pick a showing that ends before 5:00 PM.',
   'no-sunday-morning': 'Sunday morning showtimes are not available.',
+  'next-weekend-only': 'Must watch next weekend (Saturday or Sunday).',
   'end-before-10pm': 'Pick a showtime that ends before 10:00 PM.',
   'imax-required': 'Only IMAX screenings are acceptable.',
   'kid-friendly': 'Choose a movie suitable for children around ages 7 to 9.',
@@ -105,7 +111,7 @@ const KNOWN_PREFERENCE_DESCRIPTIONS: Record<string, string> = {
   thriller: 'Choose a movie in the thriller genre.',
   'under-2-hours': 'Prefer a movie shorter than two hours when other constraints allow it.',
   'avoid-romcom': 'Prefer non-romantic-comedy options if available.',
-  'desk-for-two': 'Initial preference is the movie "Desk for Two".',
+  'desk-for-two': 'Initial preference is the movie "Shared Shift".',
   'saturday-afternoon': 'For Saturday, afternoon times are preferred.',
 };
 
@@ -124,6 +130,10 @@ const KNOWN_PREFERENCE_STORY_HIGHLIGHTS: Record<string, string[]> = {
   'closest-theater': ['closest theater'],
   comedy: ['agreed on a comedy', "as long as it's a comedy movie"],
   'cosmic-laughs': ['watch Cosmic Laughs'],
+  'date-2026-03-12': [
+    'anniversary is tomorrow, Thursday, March 12',
+    'tickets to be for their actual anniversary tomorrow',
+  ],
   'distance-under-12mi': ['within 12 miles is acceptable'],
   'end-before-1030pm': ['end before 10:30 PM'],
   'weekend-only': [
@@ -135,6 +145,7 @@ const KNOWN_PREFERENCE_STORY_HIGHLIGHTS: Record<string, string[]> = {
   'end-before-6pm': ['end before 6 PM'],
   'end-before-5pm': ['end before 5 PM'],
   'no-sunday-morning': ['Sunday mornings are out'],
+  'next-weekend-only': ['next weekend'],
   'end-before-10pm': ['ends before 10 PM'],
   'imax-required': ['must watch it in IMAX format', 'must be in IMAX'],
   'kid-friendly': [
@@ -164,7 +175,7 @@ const KNOWN_PREFERENCE_STORY_HIGHLIGHTS: Record<string, string[]> = {
     'prefer to avoid romantic comedies',
     "you're open to it if the other options don't work out",
   ],
-  'desk-for-two': ['Desk for Two'],
+  'desk-for-two': ['Shared Shift'],
   'saturday-afternoon': ['On Saturdays, you tend to sleep in, so morning showtimes are not ideal'],
 };
 
@@ -179,6 +190,7 @@ const KNOWN_PREFERENCE_STAGES: Record<string, PreferenceStage> = {
   'closest-theater': 'theater',
   comedy: 'movie',
   'cosmic-laughs': 'movie',
+  'date-2026-03-12': 'date',
   'distance-under-12mi': 'theater',
   'end-before-1030pm': 'time',
   'high-rating': 'movie',
@@ -191,6 +203,7 @@ const KNOWN_PREFERENCE_STAGES: Record<string, PreferenceStage> = {
   'end-before-5pm': 'time',
   'weekend-only': 'date',
   'no-sunday-morning': 'time',
+  'next-weekend-only': 'date',
   'end-before-10pm': 'time',
   'imax-required': 'time',
   'kid-friendly': 'movie',
@@ -229,21 +242,90 @@ function basePreferenceId(preferenceType: string): string {
   return preferenceType;
 }
 
+function parseSpecificDatePreference(baseId: string): Date | null {
+  const match = SPECIFIC_DATE_PREFERENCE_PATTERN.exec(baseId);
+  if (!match) return null;
+
+  const year = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10);
+  const day = Number.parseInt(match[3], 10);
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatSpecificDateShort(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+function formatSpecificDateLong(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+}
+
+function buildSpecificDateHighlightPhrases(date: Date): string[] {
+  const weekdayLong = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    timeZone: 'UTC',
+  }).format(date);
+  const monthDay = new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(date);
+
+  return [
+    `${weekdayLong}, ${monthDay}`,
+    formatSpecificDateLong(date),
+    `this ${weekdayLong}, ${monthDay}`,
+  ];
+}
+
 function toPreferenceLabel(baseId: string): string {
   const known = KNOWN_PREFERENCE_LABELS[baseId];
   if (known) return known;
+  const specificDate = parseSpecificDatePreference(baseId);
+  if (specificDate) return `Watch on ${formatSpecificDateShort(specificDate)}`;
   return toTitleCase(baseId.replace(/[_-]+/g, ' '));
 }
 
 function toPreferenceDescription(baseId: string): string | undefined {
-  return KNOWN_PREFERENCE_DESCRIPTIONS[baseId];
+  const known = KNOWN_PREFERENCE_DESCRIPTIONS[baseId];
+  if (known) return known;
+  const specificDate = parseSpecificDatePreference(baseId);
+  if (specificDate) {
+    return `The tickets should be booked for ${formatSpecificDateLong(specificDate)}.`;
+  }
+  return undefined;
 }
 
 export function getStoryHighlightPhrases(preferenceTypes: string[]): string[] {
   const phrases = new Set<string>();
   for (const preferenceType of preferenceTypes) {
     const baseId = basePreferenceId(preferenceType);
-    const candidates = KNOWN_PREFERENCE_STORY_HIGHLIGHTS[baseId] ?? [];
+    const specificDate = parseSpecificDatePreference(baseId);
+    const candidates = specificDate
+      ? buildSpecificDateHighlightPhrases(specificDate)
+      : (KNOWN_PREFERENCE_STORY_HIGHLIGHTS[baseId] ?? []);
     for (const candidate of candidates) {
       phrases.add(candidate);
     }
@@ -254,6 +336,7 @@ export function getStoryHighlightPhrases(preferenceTypes: string[]): string[] {
 function inferStage(baseId: string): PreferenceStage {
   const known = KNOWN_PREFERENCE_STAGES[baseId];
   if (known) return known;
+  if (parseSpecificDatePreference(baseId)) return 'date';
 
   if (/(seat|row|adjacent|ticket)/.test(baseId)) return 'seat';
   if (/(theater|distance|mile)/.test(baseId)) return 'theater';

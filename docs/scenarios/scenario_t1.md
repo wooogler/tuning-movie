@@ -4,7 +4,7 @@
 
 Today is Wednesday, March 11\. You live in a small college town in Virginia and have been stressed out from a heavy workload lately. You and two friends, Taylor and Avery, have finally found time to see a movie together this weekend. All three of you are busy, so if not this weekend, it will be a while before your schedules align again. You are in charge of booking the tickets.
 
-The three of you chatted in a group message and agreed on a comedy to blow off some steam. You recall a coworker recently mentioning that they enjoyed "Desk for Two," so you are thinking of looking into it. However, all of you are open to watching something else as long as it’s a comedy movie. The three of you would prefer to avoid romantic comedies if possible, but you’re open to it if the other options don’t work out. You generally prefer movies with high ratings.
+The three of you chatted in a group message and agreed on a comedy to blow off some steam. You recall a coworker recently mentioning that they enjoyed "Shared Shift," so you are thinking of looking into it. However, all of you are open to watching something else as long as it’s a comedy movie. The three of you would prefer to avoid romantic comedies if possible, but you’re open to it if the other options don’t work out. You generally prefer movies with high ratings.
 
 All the theaters in town are within 10 miles.  Anything outside the town would not work. As for timing, Sunday mornings are out because Avery goes to church. On Saturdays, you tend to sleep in, so morning showtimes are not ideal. Taylor wants to watch a movie that ends before 10 PM, as he goes to bed at 10:30 PM every day. 
 
@@ -17,7 +17,7 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 | \# | Preference | Hard/Soft |
 | :---- | :---- | :---- |
 | P1 | Comedy (stress relief) | **hard** |
-| P2 | Prefers to watch "Desk for Two" (coworker recommendation) | soft |
+| P2 | Prefers to watch "Shared Shift" (coworker recommendation) | soft |
 | P3 | Theater within 10 miles | **hard** |
 | P4 | This weekend (Sat/Sun) only | **hard** |
 | P5 | No Sunday mornings (Friend B — church) | **hard** |
@@ -34,9 +34,9 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 
 | Movie | Genre | Rating | Runtime | Notes |
 | :---- | :---- | :---- | :---- | :---- |
-| Desk for Two | Romance / Drama | ★4.2 | 1h 50m | Coworker rec, not a comedy |
-| Love Punchline | Romance / **Comedy** | ★4.5 | 1h 45m | Highest rated, been out for a while |
-| Cosmic Laughs | Sci-Fi / **Comedy** | ★4.3 | 3h 10m | Blockbuster, opening Sunday |
+| Shared Shift | Romance / Drama | ★4.2 | 1h 50m | Coworker rec, not a comedy |
+| Last Call for Love | Romance / **Comedy** | ★4.5 | 1h 45m | Highest rated, been out for a while |
+| Orbital Punchlines | Sci-Fi / **Comedy** | ★4.3 | 3h 10m | Blockbuster, opening Sunday |
 | Happy Feet Friday | **Comedy** | ★1.5 | 1h 40m | Lowest rated → naturally ruled out |
 | (Other non-comedy movies) | ... | ... | ... | Background filler |
 
@@ -48,20 +48,20 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 | :---- | :---- | :---- | :---- |
 | A (Starlight Cinema) | 3 mi | Large | Closest and largest |
 | B (Crescent Theater) | 7 mi | Medium |  |
-| C (Oakwood Cinema) | 9 mi | Medium | Showing Love Punchline |
+| C (Oakwood Cinema) | 9 mi | Medium | Showing Last Call for Love |
 | D (Hilltop Screening Room) | 12 mi | Small | Beyond 10 miles |
 
 ### Screening Schedule by Theater
 
-**Cosmic Laughs (SF/Comedy):**
+**Orbital Punchlines (SF/Comedy):**
 
 - Theater A: Opens Sunday (early premiere at large theaters)  
 - Theater B: Starting Monday (general release)  
 - Theater C: Not screening
 
-**Love Punchline (Romance/Comedy):**
+**Last Call for Love (Romance/Comedy):**
 
-- Theater A: Through Friday only (screen being swapped for Cosmic Laughs premiere)  
+- Theater A: Through Friday only (screen being swapped for the Orbital Punchlines premiere)  
 - Theater C: Through Saturday  
 - Theater B: Run ended
 
@@ -74,26 +74,26 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 #### \[Movie\] Visit 1
 
 - GUI: Movie list (titles, posters)  
-- Action: Check "Desk for Two" → genre is Romance/Drama → not a comedy (violates P1) → skip  
+- Action: Check "Shared Shift" → genre is Romance/Drama → not a comedy (violates P1) → skip  
 - Find 3 movies with comedy as a genre  
 - Want to check ratings (P7) → rating info may not be immediately visible in the GUI  
-- Love Punchline (★4.5) highest rated but romantic comedy → feels awkward, skip (P8)  
-- Cosmic Laughs (★4.3) SF/comedy, 3h10m runtime blockbuster  
+- Last Call for Love (★4.5) highest rated but romantic comedy → feels awkward, skip (P8)  
+- Orbital Punchlines (★4.3) SF/comedy, 3h10m runtime blockbuster  
 - Happy Feet Friday (★1.5) lowest rated  
-- **Select: Cosmic Laughs**
+- **Select: Orbital Punchlines**
 
-**Conflict C1** (same-step): P2 "Desk for Two" ↔ P1 "comedy" → give up Desk for Two
+**Conflict C1** (same-step): P2 "Shared Shift" ↔ P1 "comedy" → give up Shared Shift
 
 #### \[Theater\] Visit 1
 
-- GUI: Theaters screening Cosmic Laughs  
+- GUI: Theaters screening Orbital Punchlines  
 - Within 10 miles: Theater A (3mi), Theater B (7mi)  
 - **Select: Theater A** (closest and largest, satisfies P3)
 
 #### \[Date\] Visit 1
 
 - GUI: Calendar  
-- Cosmic Laughs opens Sunday at Theater A → no Saturday showtimes  
+- Orbital Punchlines opens Sunday at Theater A → no Saturday showtimes  
 - **Select: Sunday (3/16)** (only option)
 
 **Constraint discovered**: This movie has an early premiere at large theaters only — Theater A starts screening on Sunday
@@ -157,12 +157,12 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 #### \[Date\] Visit 2
 
 - GUI: Calendar  
-- Cosmic Laughs at Theater B starts **Monday** — only large theaters got the early premiere; mid-size theaters start on the general release date (Monday)  
+- Orbital Punchlines at Theater B starts **Monday** — only large theaters got the early premiere; mid-size theaters start on the general release date (Monday)  
 - No weekend showtimes\!
 
 **Conflict C5** (cross-step): P4 "this weekend" (hard) ↔ "Theater B opens Monday" → cannot see it this weekend
 
-- Cosmic Laughs has exhausted all theaters within 10 miles (Theater A: seat/curfew conflict, Theater B: no weekend screenings)  
+- Orbital Punchlines has exhausted all theaters within 10 miles (Theater A: seat/curfew conflict, Theater B: no weekend screenings)  
 - **Decision: Give up this movie and find another** → backtrack to movie
 
 ---
@@ -171,16 +171,16 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 
 #### \[Movie\] Visit 2
 
-- Give up Cosmic Laughs (cannot simultaneously satisfy weekend \+ 10mi theater \+ row-2 3-adjacent \+ curfew)  
-- Remaining comedy options: Love Punchline (★4.5, romantic comedy), Happy Feet Friday (★1.5, out of the question)  
+- Give up Orbital Punchlines (cannot simultaneously satisfy weekend \+ 10mi theater \+ row-2 3-adjacent \+ curfew)  
+- Remaining comedy options: Last Call for Love (★4.5, romantic comedy), Happy Feet Friday (★1.5, out of the question)  
 - Romantic comedy feels awkward (P8 soft), but it has the highest rating and there is effectively no other option  
-- **Select: Love Punchline** (relax P8 — concede soft preference)
+- **Select: Last Call for Love** (relax P8 — concede soft preference)
 
-**Preference change**: P8 "avoid romantic comedy" conceded → accept Love Punchline
+**Preference change**: P8 "avoid romantic comedy" conceded → accept Last Call for Love
 
 #### \[Theater\] Visit 3
 
-- GUI: Theaters screening Love Punchline  
+- GUI: Theaters screening Last Call for Love  
 - Within 10 miles: Theater A (3mi), Theater C (9mi)  
 - Theater B: run ended  
 - **Select: Theater A** (closest)
@@ -188,7 +188,7 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 #### \[Date\] Visit 3
 
 - GUI: Calendar  
-- Love Punchline at Theater A runs **through Friday only** — the screen is being swapped for the Cosmic Laughs premiere  
+- Last Call for Love at Theater A runs **through Friday only** — the screen is being swapped for the Orbital Punchlines premiere  
 - No Saturday or Sunday showtimes\!
 
 **Conflict C6** (cross-step): P4 "this weekend" (hard) ↔ "Theater A runs through Friday only" → cannot see it this weekend
@@ -203,7 +203,7 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 #### \[Date\] Visit 4
 
 - GUI: Calendar  
-- Love Punchline at Theater C runs **through Saturday**  
+- Last Call for Love at Theater C runs **through Saturday**  
 - Between Saturday and Sunday, only Saturday is available  
 - **Select: Saturday (3/15)**
 
@@ -255,7 +255,7 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 
 | \# | Conflict | Preferences | Constraint | Discovery | Type | Resolution |
 | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
-| C1 | Desk for Two ↔ comedy | P2 ↔ P1 | Genre mismatch | Movie V1 | same-step | Drop P2 |
+| C1 | Shared Shift ↔ comedy | P2 ↔ P1 | Genre mismatch | Movie V1 | same-step | Drop P2 |
 | C2 | 1:00 PM row-2 3-adj unavailable | P6+P11 ↔ seat availability | No 3-adj in row 2 | Seats V1 | same-step | Try 3:30 PM |
 | C3 | 3:30 PM row-2 3-adj unavailable | P6+P11 ↔ seat availability | No 3-adj in row 2 | Seats V2 | same-step | Try 8:00 PM |
 | C4 | 8:00 PM row-2 3-adj ↔ curfew | P6+P11 ↔ P9 | Ends 11:10 PM, home by 10 PM impossible | Seats V3 | cross-step | Change theater |
@@ -269,11 +269,11 @@ The three of you must sit together in adjacent seats. Avery has low vision and p
 | Point | Change | Reason |
 | :---- | :---- | :---- |
 | Movie V1 | P2 dropped | Genre mismatch (violates P1 hard) |
-| Movie V2 | P8 relaxed | No viable alternative after Cosmic Laughs ruled out |
+| Movie V2 | P8 relaxed | No viable alternative after Orbital Punchlines ruled out |
 
 ## Backtrack Path
 
-Movie(Cosmic) → Theater A → Sunday
+Movie(Orbital Punchlines) → Theater A → Sunday
 
   → 1:00 PM → Seats C2 (no row-2 3-adj)
 
@@ -283,7 +283,7 @@ Movie(Cosmic) → Theater A → Sunday
 
         ↩ Theater B → Date C5 (Monday release)
 
-          ↩ Movie(Love Punchline) → Theater A → Date C6 (ends Friday)
+          ↩ Movie(Last Call for Love) → Theater A → Date C6 (ends Friday)
 
             ↩ Theater C → Saturday
 

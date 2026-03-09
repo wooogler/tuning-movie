@@ -3,7 +3,7 @@
     {
       "id": "scn_t1_college_weekend",
       "title": "T1: College Weekend Group Booking",
-      "story": "Today is Wednesday, March 11. You live in a small college town in Virginia and have been stressed out from a heavy workload lately. You and two friends, Taylor and Avery, have finally found time to see a movie together this weekend. All three of you are busy, so if not this weekend, it will be a while before your schedules align again. You are in charge of booking the tickets.\n\nThe three of you chatted in a group message and agreed on a comedy to blow off some steam. You recall a coworker recently mentioning that they enjoyed \"Desk for Two,\" so you are thinking of looking into it. However, all of you are open to watching something else as long as it's a comedy movie. The three of you would prefer to avoid romantic comedies if possible, but you're open to it if the other options don't work out. You generally prefer movies with high ratings.\n\nAll the theaters in town are within 10 miles. Anything outside the town would not work. As for timing, Sunday mornings are out because Avery goes to church. On Saturdays, you tend to sleep in, so morning showtimes are not ideal. Taylor wants to watch a movie that ends before 10 PM, as he goes to bed at 10:30 PM every day.\n\nThe three of you must sit together in adjacent seats. Avery has low vision and prefers to sit in the second row - the first row is too close and causes neck pain, but anything beyond the third row is too far.",
+      "story": "Today is Wednesday, March 11. You live in a small college town in Virginia and have been stressed out from a heavy workload lately. You and two friends, Taylor and Avery, have finally found time to see a movie together this weekend. All three of you are busy, so if not this weekend, it will be a while before your schedules align again. You are in charge of booking the tickets.\n\nThe three of you chatted in a group message and agreed on a comedy to blow off some steam. You recall a coworker recently mentioning that they enjoyed \"Shared Shift,\" so you are thinking of looking into it. However, all of you are open to watching something else as long as it's a comedy movie. The three of you would prefer to avoid romantic comedies if possible, but you're open to it if the other options don't work out. You generally prefer movies with high ratings.\n\nAll the theaters in town are within 10 miles. Anything outside the town would not work. As for timing, Sunday mornings are out because Avery goes to church. On Saturdays, you tend to sleep in, so morning showtimes are not ideal. Taylor wants to watch a movie that ends before 10 PM, as he goes to bed at 10:30 PM every day.\n\nThe three of you must sit together in adjacent seats. Avery has low vision and prefers to sit in the second row - the first row is too close and causes neck pain, but anything beyond the third row is too far.",
       "narratorPreferenceTypes": [
         "comedy-hard",
         "weekend-only-hard",
@@ -23,10 +23,10 @@
     {
       "id": "scn_s1_anniversary_premium",
       "title": "S1-T1: Parents' Anniversary Premium Seats",
-      "story": "Today is Wednesday, March 11, 2026. Your parents' anniversary is tomorrow, Thursday, March 12, and you want to surprise them with two movie tickets. You want AI to recommend a movie first, and if it suggests several options, you prefer the highest-rated recommendation unless it fails one of the stricter requirements.\n\nYou want the closest theater. The show should start after 2 PM and end before 6 PM. Because of back pain, your parents need premium reclining seats with extra legroom, and the two seats must be together.",
+      "story": "Today is Wednesday, March 11, 2026. Your parents' anniversary is tomorrow, Thursday, March 12, and you want to surprise them with two movie tickets. You want the tickets to be for their actual anniversary tomorrow, not for a later make-up night. If there are several movie options that fit, you prefer the highest-rated one unless it fails one of the stricter requirements.\n\nYou want the closest theater. The show should start after 2 PM and end before 6 PM. Because of back pain, your parents need premium reclining seats with extra legroom, and the two seats must be together.",
       "narratorPreferenceTypes": [
-        "ai-recommendation-soft",
         "high-rating-soft",
+        "date-2026-03-12-hard",
         "closest-theater-soft",
         "start-after-2pm-hard",
         "end-before-6pm-hard",
@@ -38,11 +38,12 @@
     },
     {
       "id": "scn_s1_thursday_action",
-      "title": "S1-T2: Thursday Night Action With Spouse",
-      "story": "Today is Wednesday, March 11, 2026. You want to see a movie with your spouse tomorrow night, Thursday, March 12. It must be an action movie. If there is more than one action movie, you prefer the highest-rated one, but that preference is softer than the timing and seat constraints.\n\nBecause of work, the earliest you can arrive at the theater is 5:30 PM. The movie must end before 10:30 PM because of your spouse's sleeping routine. You need two adjacent seats, and you want to avoid the first three rows because of neck pain.",
+      "title": "S1-T2: Saturday Night Action With Spouse",
+      "story": "Today is Wednesday, March 11, 2026. You want to see a movie with your spouse this Saturday, March 14. The booking site may still show dates from Thursday, March 12 through Monday, March 16, but you want this Saturday specifically. It must be an action movie. If there is more than one action movie, you prefer the highest-rated one, but that preference is softer than the timing and seat constraints.\n\nBecause of work, the earliest you can arrive at the theater is 5:30 PM. The movie must end before 10:30 PM because of your spouse's sleeping routine. You need two adjacent seats, and you want to avoid the first three rows because of neck pain.",
       "narratorPreferenceTypes": [
         "action-hard",
         "high-rating-soft",
+        "date-2026-03-14-hard",
         "arrive-after-530pm-hard",
         "end-before-1030pm-hard",
         "two-adjacent-seats-hard",
@@ -54,9 +55,10 @@
     {
       "id": "scn_s1_solo_weekend_3d",
       "title": "S1-T3: Solo Weekend 3D Booking",
-      "story": "Today is Wednesday, March 11, 2026. You want to watch Cosmic Laughs alone this weekend, either Saturday, March 14, or Sunday, March 15. You are free as long as the showing finishes before 7 PM.\n\nYou prefer the closest theater, but any theater within 10 miles is acceptable. The screening must be in 3D. You do not want a side seat, especially for 3D, so the seat needs to be reasonably centered on the screen.",
+      "story": "Today is Wednesday, March 11, 2026. You want to watch Cosmic Laughs alone this weekend, either Saturday, March 14, or Sunday, March 15. The booking site may also show Monday, March 16, and Tuesday, March 17, but those dates do not work for you. You are free as long as the showing finishes before 7 PM.\n\nYou prefer the closest theater, but any theater within 10 miles is acceptable. The screening must be in 3D. You do not want a side seat, especially for 3D, so the seat needs to be reasonably centered on the screen.",
       "narratorPreferenceTypes": [
         "cosmic-laughs-hard",
+        "weekend-only-hard",
         "before-7pm-hard",
         "distance-under-10mi-hard",
         "closest-theater-soft",
@@ -69,13 +71,11 @@
     {
       "id": "scn_s2_child_playdate",
       "title": "S2-T1: Child's Playdate Kid-Friendly Booking",
-      "story": "Today is Wednesday, March 11, 2026. Your child has a playdate this Saturday, March 14, and you are taking the two kids to a movie afterward. You want AI to recommend a kid-friendly movie appropriate for ages 7 to 9, and if there are several options, you prefer the highest-rated one.\n\nYou want the closest theater, the outing must stay on the weekend, the show should start after 1 PM and end before 5 PM, and the children need two adjacent seats that are not in the first two rows. You strongly prefer a movie under two hours, but that preference is softer than the timing and seat constraints.",
+      "story": "Today is Wednesday, March 11, 2026. Your child has a playdate on Sunday, March 15, and you are taking the two kids to a movie right afterward. The booking site may also show Saturday, March 14 and Monday, March 16 through Tuesday, March 17, but Sunday is the only day that works. The movie must be appropriate for kids ages 7 to 9. If there is more than one kid-friendly option, you prefer a movie under two hours.\n\nYou prefer the closest theater. The show should start after 1 PM and end before 5 PM, and the children need two adjacent seats that are not in the first two rows.",
       "narratorPreferenceTypes": [
-        "kid-friendly-soft",
-        "ai-recommendation-soft",
-        "high-rating-soft",
+        "kid-friendly-hard",
+        "date-2026-03-15-hard",
         "closest-theater-soft",
-        "weekend-only-hard",
         "start-after-1pm-hard",
         "end-before-5pm-hard",
         "two-adjacent-seats-hard",
@@ -88,10 +88,12 @@
     {
       "id": "scn_s2_sibling_thriller",
       "title": "S2-T2: Friday Night Thriller With Sibling",
-      "story": "Today is Wednesday, March 11, 2026. You want to watch a movie with your sibling on Friday night, March 13. It must be a thriller. If there is more than one thriller available, you prefer the highest-rated one, but the timing and seat constraints matter more.\n\nThe earliest you can arrive at the theater is 6:00 PM, the movie must end before 10:00 PM, and you need two adjacent seats that are not in the last two rows because of low vision.",
+      "story": "Today is Wednesday, March 11, 2026. You want to watch a movie with your sibling on Friday night, March 13. The booking site may still show dates from Thursday, March 12 through Monday, March 16, but Friday is the only night that works. It must be a thriller. If there is more than one thriller available, you prefer the highest-rated one, but the timing and seat constraints matter more.\n\nYou prefer the closest theater. The earliest you can arrive at the theater is 6:00 PM, the movie must end before 10:00 PM, and you need two adjacent seats that are not in the last two rows because of low vision.",
       "narratorPreferenceTypes": [
         "thriller-hard",
         "high-rating-soft",
+        "date-2026-03-13-hard",
+        "closest-theater-soft",
         "arrive-after-6pm-hard",
         "end-before-10pm-hard",
         "two-adjacent-seats-hard",
@@ -103,9 +105,10 @@
     {
       "id": "scn_s2_ocean_depths_imax",
       "title": "S2-T3: Next Weekend Ocean Depths IMAX",
-      "story": "Today is Wednesday, March 11, 2026. You want to see Ocean Depths alone next weekend, either Saturday, March 21, or Sunday, March 22. You are unavailable after 8 PM on both days.\n\nYou prefer the closest theater, but any theater within 12 miles is acceptable. The screening must be in IMAX, and you want a center-section seat that is not in the first two rows.",
+      "story": "Today is Wednesday, March 11, 2026. You want to see Ocean Depths alone next weekend, either Saturday, March 21, or Sunday, March 22. The booking site may also show Monday, March 23 and Tuesday, March 24, but those dates do not work for you. You are unavailable after 8 PM on both weekend days.\n\nYou prefer the closest theater, but any theater within 12 miles is acceptable. The screening must be in IMAX, and you want a center-section seat that is not in the first two rows.",
       "narratorPreferenceTypes": [
         "ocean-depths-hard",
+        "next-weekend-only-hard",
         "before-8pm-hard",
         "distance-under-12mi-hard",
         "closest-theater-soft",

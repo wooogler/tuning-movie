@@ -524,22 +524,22 @@ export function FullTuningSplitView({
             {latestSnapshotIndex >= 0 ? `${activeSnapshotIndex + 1} / ${latestSnapshotIndex + 1}` : '0 / 0'}
           </div>
 
-          <div className="flex h-full items-center gap-4 pt-10">
+          <div className="flex h-full flex-col gap-4 pt-10">
             <SnapshotNavButton
               direction="prev"
               disabled={!canGoToPreviousSnapshot}
               onClick={() => scrollToSnapshot(activeSnapshotIndex - 1)}
             />
 
-            <div className="flex h-full min-h-[320px] flex-1 items-center justify-center overflow-hidden px-4 py-4 sm:min-h-[360px]">
+            <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-hidden px-4 py-2 sm:min-h-[360px]">
               {activeSnapshot ? (
                 <div className="relative flex h-full w-full max-w-2xl items-center justify-center">
                   {transitionState?.outgoing ? (
                     <div
                       className={`absolute inset-0 flex items-center justify-center gui-stage-panel ${
                         transitionState.direction === 'forward'
-                          ? 'gui-stage-slide-out-left'
-                          : 'gui-stage-slide-out-right'
+                          ? 'gui-stage-slide-out-up'
+                          : 'gui-stage-slide-out-down'
                       }`}
                     >
                       <GuiSnapshotCard
@@ -553,8 +553,8 @@ export function FullTuningSplitView({
                     className={`relative flex h-full w-full items-center justify-center gui-stage-panel ${
                       transitionState
                         ? transitionState.direction === 'forward'
-                          ? 'gui-stage-slide-in-right'
-                          : 'gui-stage-slide-in-left'
+                          ? 'gui-stage-slide-in-down'
+                          : 'gui-stage-slide-in-up'
                         : ''
                     }`}
                   >
@@ -743,7 +743,7 @@ function SnapshotNavButton({
       title={isPrevious ? 'Show previous GUI snapshot' : 'Show next GUI snapshot'}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-20 w-12 shrink-0 items-center justify-center rounded-2xl border border-dark-border bg-dark-light text-fg-muted transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-35 sm:h-24"
+      className="flex h-12 w-20 shrink-0 items-center justify-center self-center rounded-2xl border border-dark-border bg-dark-light text-fg-muted transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-35 sm:h-14 sm:w-24"
     >
       <svg
         className="h-5 w-5"
@@ -755,7 +755,7 @@ function SnapshotNavButton({
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={2}
-          d={isPrevious ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'}
+          d={isPrevious ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'}
         />
       </svg>
     </button>

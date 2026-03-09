@@ -35,6 +35,11 @@ function getItemFieldValue<T extends DataItem>(
 function getComparableValue(field: string, rawValue: unknown, valueField: string): unknown {
   const effectiveField = field === 'value' ? valueField : field;
 
+  if (effectiveField === 'rating') {
+    const parsed = typeof rawValue === 'number' ? rawValue : Number.parseFloat(String(rawValue));
+    return Number.isFinite(parsed) ? parsed : rawValue;
+  }
+
   if (effectiveField === 'duration') {
     return parseDurationToMinutes(rawValue) ?? rawValue;
   }

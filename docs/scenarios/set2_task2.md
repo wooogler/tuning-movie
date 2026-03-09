@@ -1,19 +1,21 @@
 # Set 2 – Task 2: Sibling Friday Night (Thriller)
 
-> **Equivalent to**: Set 1 – Task 2 (Spouse Thursday, Action)
-> **Pattern**: 장르+최고 평점 → 좌석 실패 → 런타임 때문에 시간 실패 → 짧은 영화로 전환
+> **Equivalent to**: Set 1 – Task 2 (Spouse Saturday, Action)
+> **Pattern**: 장르 hard + 최고 평점 soft + Friday hard + showtime/seat 실패 후 다른 thriller로 전환
 
 ---
 
 ## Scenario (Participant Instructions)
 
-Today is Wednesday, March 11, 2026. You would like to watch a movie with your sibling on Friday night, March 13, 2026.
+Today is Wednesday, March 11, 2026. You would like to watch a movie with your sibling on Friday night, March 13, 2026. The booking site may also show Thursday March 12 through Monday March 16, but Friday is the only night that works.
 
 1. You want to watch a thriller movie.
 2. If multiple thriller movies are available, you prefer the one with the highest audience rating, but the other constraints are more important.
-3. The earliest you can arrive at the theater is 6:00 PM.
-4. The movie must end before 10:00 PM.
-5. You want two adjacent seats, and you do not want to sit in the last two rows due to low vision.
+3. Prefer the theater closest to you.
+4. The tickets must be for Friday, March 13, 2026.
+5. The earliest you can arrive at the theater is 6:00 PM.
+6. The movie must end before 10:00 PM.
+7. You want two adjacent seats, and you do not want to sit in the last two rows due to low vision.
 
 ---
 
@@ -21,108 +23,137 @@ Today is Wednesday, March 11, 2026. You would like to watch a movie with your si
 
 | # | Preference | Hard/Soft |
 |---|-----------|-----------|
-| P1 | 스릴러 장르 | **hard** |
-| P2 | 최고 관객 평점 우선 | soft |
-| P3 | 도착 가능 시간 ≥ 6:00 PM | **hard** |
-| P4 | 종료 시간 < 10:00 PM | **hard** |
-| P5 | 나란히 2석 | **hard** |
-| P6 | 뒤 2열 제외 | **hard** |
+| P1 | Thriller genre | **hard** |
+| P2 | Highest rating among thrillers | soft |
+| P3 | Closest theater preferred | soft |
+| P4 | Friday, March 13, 2026 | **hard** |
+| P5 | Arrival after 6:00 PM | **hard** |
+| P6 | End before 10:00 PM | **hard** |
+| P7 | 2 adjacent seats | **hard** |
+| P8 | Do not sit in the last 2 rows | **hard** |
 
 ---
 
 ## Movie Data
 
-| Movie | Genre | Rating | Runtime | Notes |
-|-------|-------|--------|---------|-------|
-| Night Ledger | Thriller | ★4.4 | 155 min (2h 35m) | 높은 평점 |
-| Cold Signal | Thriller | ★3.7 | 105 min (1h 45m) | 짧은 러닝타임 |
+기본 노출 순서:
+
+| Order | Movie | Genre | Rating | Runtime | Notes |
+|------|-------|-------|--------|---------|-------|
+| 1 | Paper Lanterns | Drama | ★4.7 | 1h 49m | 비스릴러 더미 |
+| 2 | Borrowed Summer | Comedy/Drama | ★3.9 | 1h 41m | 비스릴러 더미 |
+| 3 | Night Ledger | Thriller | ★4.4 | 2h 35m | 스릴러 중 최고 평점 |
+| 4 | Cold Signal | Thriller | ★3.8 | 1h 45m | 더 짧은 대안 |
+
+실제 thriller 후보는 `Night Ledger`와 `Cold Signal` 두 편뿐이다.
 
 ---
 
 ## Theater Data
 
-| Theater | Notes |
-|---------|-------|
-| Riverview Cinema | Midtown Screens와 동일한 스케줄/좌석 현황 |
-| Midtown Screens | Riverview Cinema와 동일한 스케줄/좌석 현황 |
+기본 노출 순서:
+
+| Order | Theater | Distance | Notes |
+|------|---------|----------|-------|
+| 1 | Midtown Screens | 8.2 mi | Dolby Atmos |
+| 2 | Riverview Cinema | 3.4 mi | 가장 가까움 |
+
+두 극장은 같은 Friday thriller 스케줄과 핵심 seat pattern을 가진다.  
+따라서 theater 단계는 주로 P3를 드러내는 단계다.
+
+---
+
+## Date Availability
+
+- Visible dates: Thu, Mar 12 / Fri, Mar 13 / Sat, Mar 14 / Sun, Mar 15 / Mon, Mar 16
+- Valid date: **Fri, Mar 13** only (P4)
 
 ---
 
 ## Screening Schedule
 
-### Night Ledger @ Both Theaters (Runtime: 2h 35m)
+### Night Ledger @ Any Theater on Friday, March 13
 
-| Showtime | Ends | P3 (≥6PM) | P4 (<10PM) | Seats |
-|----------|------|-----------|------------|-------|
-| 6:00 PM | 8:35 PM | ✓ | ✓ | **뒤 2열만 인접석 가능** |
-| 7:30 PM | 10:05 PM | ✓ | ✗ | — |
-| 9:00 PM | 11:35 PM | ✓ | ✗ | — |
+| Showtime | Ends | P5 (≥6PM arrival) | P6 (<10PM) | Seats |
+|----------|------|-------------------|------------|-------|
+| 5:30 PM | 8:05 PM | ✗ | ✓ | — |
+| 7:00 PM | 9:35 PM | ✓ | ✓ | **A-D는 single만 남고, E/F에만 pair** |
+| 8:30 PM | 11:05 PM | ✓ | ✗ | — |
 
-### Cold Signal @ Both Theaters (Runtime: 1h 45m)
+`7:00 PM` 좌석은 이런 식이다:
 
-| Showtime | Ends | P3 | P4 | Seats |
+- Row A: 1, 4, 6
+- Row B: 2, 5, 7
+- Row C: 1, 3, 8
+- Row D: 2, 6
+- Row E: 3, 4, 7
+
+즉, acceptable rows인 A-D에는 인접 2석이 없고, 붙은 좌석은 뒤 2열(E/F)에만 남아 있다.
+
+### Cold Signal @ Any Theater on Friday, March 13
+
+| Showtime | Ends | P5 | P6 | Seats |
 |----------|------|----|----|-------|
-| 6:00 PM | 7:45 PM | ✓ | ✓ | 나란히 가능 ✓ |
-| 7:30 PM | 9:15 PM | ✓ | ✓ | 나란히 가능 ✓ |
-| 9:00 PM | 10:45 PM | ✓ | ✗ | — |
+| 5:30 PM | 7:15 PM | ✗ | ✓ | — |
+| 7:00 PM | 8:45 PM | ✓ | ✓ | C/D에 인접 2석 가능 ✓ |
+| 8:30 PM | 10:15 PM | ✓ | ✗ | D에 인접 2석은 있지만 종료 시간이 늦음 |
 
 ---
 
 ## Expected User Flow
 
-### === 1차 시도: Night Ledger (★4.4, 155분) ===
+### === 1차 시도: Night Ledger 우선 ===
 
-#### [Movie] 1차 방문
-- 스릴러: Night Ledger (★4.4), Cold Signal (★3.7)
-- **선택: Night Ledger**
+#### [Movie]
+- 기본 노출은 `Paper Lanterns -> Borrowed Summer -> Night Ledger -> Cold Signal`
+- P1 때문에 실제 후보는 `Night Ledger`와 `Cold Signal`
+- P2 때문에 **Night Ledger**를 먼저 선택
 
-#### [Theater] 1차 방문
-- **선택: Riverview Cinema**
+#### [Theater]
+- 기본 노출은 `Midtown Screens -> Riverview Cinema`
+- P3 때문에 **Riverview Cinema** 선택
 
-#### [Date] 1차 방문
-- **선택: Friday, March 13**
+#### [Date]
+- 3/12-3/16이 보이지만 P4 때문에 **Fri, Mar 13** 선택
 
 #### [Showtime] 1차 방문
-- 6:00 PM → 8:35 PM ✓
-- **선택: 6:00 PM**
+- 5:30 PM → 6:00 PM 도착 조건 때문에 불가
+- 7:00 PM → 시간 조건은 충족
+- **선택: 7:00 PM**
 
 #### [Seats] 1차 방문
-- 뒤 2열만 인접석 가능 → P6 위반
+- A-D에는 듬성듬성 남은 single seats만 있음
+- 인접 2석은 E/F에만 남아 있어 P8 위반
 
-> **Conflict C1** (same-step): P6 ↔ 6:00 PM 좌석 현황
+> **Conflict C1**: P7 + P8 ↔ `Night Ledger @ 7:00 PM` seat availability
 
-- **결정**: 다른 시간대 시도
+- **결정**: 같은 영화의 다른 showtime 확인
 
 #### [Showtime] 2차 방문
-- 7:30 PM → 10:05 PM → P4 위반
+- 8:30 PM → 11:05 PM 종료 → P6 위반
 
-> **Conflict C2** (cross-step): P4 ↔ 7:30 PM + 155분 = 10:05 PM
+> **Conflict C2**: P6 ↔ `Night Ledger @ 8:30 PM` runtime
 
-- 9:00 PM도 11:35 PM 종료로 실패
-- Night Ledger는 두 극장 모두 동일하게 실패
+- 이 시점에서 `Night Ledger`는 Friday 기준으로 전체 실패
 
-> **Conflict C3** (cross-step): Night Ledger는 P3+P4+P6 동시 충족 불가
+> **Conflict C3**: `Night Ledger`는 P5 + P6 + P7 + P8을 동시에 만족할 수 없음
 
-- **결정**: Cold Signal로 전환
+- **결정**: `Cold Signal`로 전환
 
-### === 2차 시도: Cold Signal (★3.7, 105분) ===
+### === 2차 시도: Cold Signal ===
 
-#### [Movie] 2차 방문
+#### [Movie]
 - **선택: Cold Signal**
 
-#### [Theater] 2차 방문
-- **선택: Riverview Cinema**
-
-#### [Date] 2차 방문
-- **선택: Friday, March 13**
-
 #### [Showtime] 3차 방문
-- 7:30 PM → 9:15 PM ✓
-- **선택: 7:30 PM**
+- 7:00 PM → 8:45 PM ✓
+- **선택: 7:00 PM**
 
 #### [Seats] 2차 방문
-- 뒤 2열이 아닌 구역에서 인접 2석 가능 ✓
-- **예매 완료!**
+- C/D 구역에 인접 2석 가능 ✓
+- **예매 완료**
+
+**Preferred answer**: Riverview Cinema, Friday March 13, 7:00 PM, Cold Signal
 
 ---
 
@@ -130,9 +161,9 @@ Today is Wednesday, March 11, 2026. You would like to watch a movie with your si
 
 | # | Conflict | Preferences | Type | Resolution |
 |---|---------|------------|------|-----------|
-| C1 | 6:00 PM은 뒤 2열만 가능 | P6 ↔ 좌석 현황 | same-step | 7:30 PM 시도 |
-| C2 | 7:30 PM → 10:05 PM 종료 | P4 ↔ 런타임+시간 | cross-step | 다음 영화 검토 |
-| C3 | Night Ledger 전체 실패 | P3+P4+P6 ↔ 긴 러닝타임 | cross-step | Cold Signal 선택 |
+| C1 | Night Ledger 7:00 PM: 붙은 좌석이 뒤 2열에만 남음 | P7 + P8 ↔ 좌석 현황 | same-step | 8:30 PM 확인 |
+| C2 | Night Ledger 8:30 PM → 11:05 PM 종료 | P6 ↔ 런타임+시간 | cross-step | 다른 thriller 검토 |
+| C3 | Night Ledger 전체 실패 | P5 + P6 + P7 + P8 ↔ 긴 런타임과 좌석 현황 | cross-step | Cold Signal 선택 |
 
 ---
 
@@ -140,10 +171,7 @@ Today is Wednesday, March 11, 2026. You would like to watch a movie with your si
 
 ```text
 Night Ledger → Riverview Cinema → Fri, Mar 13
-  → 6:00 PM → Seats C1 (뒤 2열만)
-    ↩ 7:30 PM → C2 (10:05 PM 종료)
-      ↩ Cold Signal → Riverview Cinema → Fri, Mar 13 → 7:30 PM → Seats ✓
+  → 7:00 PM → Seats C1
+    ↩ 8:30 PM → C2
+      ↩ Cold Signal → 7:00 PM → Seats ✓ → 예매 완료
 ```
-
-**Total backtracks**: 2
-**Total step visits**: Movie(2) + Theater(2) + Date(2) + Showtime(3) + Seats(2) = 11
