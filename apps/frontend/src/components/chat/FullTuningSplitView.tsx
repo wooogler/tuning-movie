@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -191,7 +192,6 @@ export function FullTuningSplitView({
 }: FullTuningSplitViewProps) {
   const timelineContainerRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
-  const bottomRef = useRef<HTMLDivElement | null>(null);
   const activeSnapshotRef = useRef<GuiSnapshot | null>(null);
   const activeSnapshotIndexRef = useRef<number>(-1);
   const transitionTimeoutRef = useRef<number | null>(null);
@@ -309,6 +309,7 @@ export function FullTuningSplitView({
     timelineRows[timelineRows.length - 1]?.id ?? null
   );
   const [timelineTopInsetPx, setTimelineTopInsetPx] = useState(0);
+  const latestTimelineRow = timelineRows[timelineRows.length - 1] ?? null;
 
   useEffect(() => {
     setActiveSnapshotIndex((current) => {
@@ -412,16 +413,21 @@ export function FullTuningSplitView({
 
   useEffect(() => {
     if (timelineRows.length === 0) return;
-    const rafId = requestAnimationFrame(() => {
-      syncActiveSnapshotToScroll();
-    });
-    return () => cancelAnimationFrame(rafId);
+    syncActiveSnapshotToScroll();
   }, [timelineRows, syncActiveSnapshotToScroll]);
 
-  useEffect(() => {
-    if (timelineRows.length === 0) return;
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, isAgentTyping, timelineRows.length]);
+  useLayoutEffect(() => {
+    if (!latestTimelineRow) return;
+
+    setActiveSnapshotIndex((current) =>
+      current === latestTimelineRow.snapshotIndex ? current : latestTimelineRow.snapshotIndex
+    );
+    setActiveSyncRowId((current) => (current === latestTimelineRow.id ? current : latestTimelineRow.id));
+
+    const container = timelineContainerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }, [latestTimelineRow?.id]);
 
   const scrollToSnapshot = useCallback(
     (snapshotIndex: number) => {
@@ -582,6 +588,7 @@ export function FullTuningSplitView({
             ref={timelineContainerRef}
             onScroll={syncActiveSnapshotToScroll}
             className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
+            style={{ overflowAnchor: 'none' }}
           >
             <div
               className="mx-auto flex min-h-full w-full max-w-5xl flex-col justify-end pb-4"
@@ -615,8 +622,6 @@ export function FullTuningSplitView({
               {timelineRows.length === 0 && !isAgentTyping ? (
                 <div className="py-12 text-center text-fg-faint">Loading conversation...</div>
               ) : null}
-
-              <div ref={bottomRef} />
             </div>
           </div>
 
@@ -674,22 +679,24 @@ function GuiSnapshotCard({
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-info-label">
+          <div className="flex items-start justify-between gap-4">
+            <span className="min-w-0 text-sm font-semibold text-info-label">
               {getSnapshotContextLabel(snapshot)}
             </span>
-            <span className="rounded-full border border-info-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-info-text">
-              {snapshot.stage}
-            </span>
-            <span
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
-                snapshot.isLatest
-                  ? 'border-primary/50 text-primary'
-                  : 'border-dark-border text-fg-muted'
-              }`}
-            >
-              {snapshot.isLatest ? 'Live' : 'History'}
-            </span>
+            <div className="flex shrink-0 items-center justify-end gap-2 self-start">
+              <span className="rounded-full border border-info-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-info-text">
+                {snapshot.stage}
+              </span>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                  snapshot.isLatest
+                    ? 'border-primary/50 text-primary'
+                    : 'border-dark-border text-fg-muted'
+                }`}
+              >
+                {snapshot.isLatest ? 'Live' : 'History'}
+              </span>
+            </div>
           </div>
           <div className="mt-2 text-base font-medium leading-7 text-info-text">
             {renderMessageText(getSnapshotContextText(snapshot))}

@@ -13,6 +13,7 @@ type RenderPhase = 'stable' | 'entering' | 'exiting';
 interface RenderItem extends DisplayItem {
   phase: RenderPhase;
   textChanged: boolean;
+  previousValue?: string;
 }
 
 const ENTRY_DURATION_MS = 440;
@@ -55,6 +56,8 @@ export function ButtonGroup({
   const previousRectsRef = useRef(new Map<string, DOMRect>());
   const timeoutIdsRef = useRef<number[]>([]);
   const lastAppliedSignatureRef = useRef(itemSignature);
+  const skipNextFlipRef = useRef(false);
+  const previousStableOrderRef = useRef(items.map((item) => item.id));
 
   useEffect(
     () => () => {
@@ -68,11 +71,14 @@ export function ButtonGroup({
     timeoutIdsRef.current = [];
     previousRectsRef.current = new Map();
     lastAppliedSignatureRef.current = itemSignature;
+    skipNextFlipRef.current = false;
+    previousStableOrderRef.current = items.map((item) => item.id);
     setRenderItems(
       items.map((item) => ({
         ...item,
         phase: 'stable',
         textChanged: false,
+        previousValue: undefined,
       }))
     );
   }, [animationScope]);
@@ -89,10 +95,14 @@ export function ButtonGroup({
 
       const nextRenderItems: RenderItem[] = items.map((item) => {
         const previousItem = previousById.get(item.id);
+        const reenteringFromExit = previousItem?.phase === 'exiting';
+        const textChanged =
+          !!previousItem && !reenteringFromExit && previousItem.value !== item.value;
         return {
           ...item,
-          phase: previousItem ? 'stable' : 'entering',
-          textChanged: previousItem ? previousItem.value !== item.value : false,
+          phase: previousItem ? (reenteringFromExit ? 'entering' : 'stable') : 'entering',
+          textChanged,
+          previousValue: textChanged ? previousItem?.value : undefined,
         };
       });
 
@@ -102,6 +112,7 @@ export function ButtonGroup({
           ...item,
           phase: 'exiting' as const,
           textChanged: false,
+          previousValue: undefined,
         }));
 
       for (const removedItem of removedItems) {
@@ -124,7 +135,9 @@ export function ButtonGroup({
           window.setTimeout(() => {
             setRenderItems((previous) =>
               previous.map((entry) =>
-                entry.id === item.id ? { ...entry, phase: 'stable' } : entry
+                entry.id === item.id
+                  ? { ...entry, phase: 'stable', previousValue: undefined }
+                  : entry
               )
             );
           }, ENTRY_DURATION_MS)
@@ -146,7 +159,9 @@ export function ButtonGroup({
           window.setTimeout(() => {
             setRenderItems((previous) =>
               previous.map((entry) =>
-                entry.id === item.id ? { ...entry, textChanged: false } : entry
+                entry.id === item.id
+                  ? { ...entry, textChanged: false, previousValue: undefined }
+                  : entry
               )
             );
           }, TEXT_CHANGE_DURATION_MS)
@@ -157,6 +172,13 @@ export function ButtonGroup({
 
   useLayoutEffect(() => {
     const nextRects = new Map<string, DOMRect>();
+    const hasStructuralAnimation = renderItems.some((item) => item.phase !== 'stable');
+    const stableOrder = renderItems
+      .filter((item) => item.phase === 'stable')
+      .map((item) => item.id);
+    const orderChanged =
+      stableOrder.length !== previousStableOrderRef.current.length ||
+      stableOrder.some((id, index) => id !== previousStableOrderRef.current[index]);
 
     for (const item of renderItems) {
       const node = itemRefs.current.get(item.id);
@@ -164,11 +186,57 @@ export function ButtonGroup({
       nextRects.set(item.id, node.getBoundingClientRect());
     }
 
+    if (hasStructuralAnimation) {
+      skipNextFlipRef.current = true;
+      for (const item of renderItems) {
+        const node = itemRefs.current.get(item.id);
+        if (!node) continue;
+        node.style.transition = '';
+        node.style.transform = '';
+      }
+
+      previousRectsRef.current = nextRects;
+      return;
+    }
+
+    if (skipNextFlipRef.current) {
+      skipNextFlipRef.current = false;
+      for (const item of renderItems) {
+        const node = itemRefs.current.get(item.id);
+        if (!node) continue;
+        node.style.transition = '';
+        node.style.transform = '';
+      }
+
+      previousRectsRef.current = nextRects;
+      previousStableOrderRef.current = stableOrder;
+      return;
+    }
+
+    if (!orderChanged) {
+      for (const item of renderItems) {
+        const node = itemRefs.current.get(item.id);
+        if (!node) continue;
+        node.style.transition = '';
+        node.style.transform = '';
+      }
+
+      previousRectsRef.current = nextRects;
+      previousStableOrderRef.current = stableOrder;
+      return;
+    }
+
     for (const item of renderItems) {
       const node = itemRefs.current.get(item.id);
       const previousRect = previousRectsRef.current.get(item.id);
       const nextRect = nextRects.get(item.id);
-      if (!node || !previousRect || !nextRect || item.phase === 'exiting') continue;
+      if (!node) continue;
+      if (item.phase !== 'stable') {
+        node.style.transition = '';
+        node.style.transform = '';
+        continue;
+      }
+      if (!previousRect || !nextRect) continue;
 
       const deltaX = previousRect.left - nextRect.left;
       const deltaY = previousRect.top - nextRect.top;
@@ -185,6 +253,7 @@ export function ButtonGroup({
     }
 
     previousRectsRef.current = nextRects;
+    previousStableOrderRef.current = stableOrder;
   }, [renderItems]);
 
   return (
@@ -230,9 +299,16 @@ export function ButtonGroup({
                 ${item.textChanged ? 'gui-item-text-shift' : ''}
               `}
             >
-              <span className={`block ${item.textChanged ? 'gui-item-text-flash' : ''}`}>
-                {item.value}
-              </span>
+              {item.textChanged && item.previousValue ? (
+                <span className="gui-item-text-stack">
+                  <span aria-hidden="true" className="gui-item-text-previous">
+                    {item.previousValue}
+                  </span>
+                  <span className="gui-item-text-current">{item.value}</span>
+                </span>
+              ) : (
+                <span className="block">{item.value}</span>
+              )}
             </button>
           </div>
         );

@@ -47,31 +47,31 @@
 @keyframes gui-item-enter {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.97);
-    filter: blur(6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
   }
 }
 
-@keyframes gui-text-flash {
+@keyframes gui-text-current-in {
   0% {
-    opacity: 0.35;
-    filter: blur(7px);
-    transform: translateY(6px);
-  }
-  38% {
-    opacity: 1;
-    filter: blur(0);
-    transform: translateY(0);
+    opacity: 0;
+    filter: blur(5px);
   }
   100% {
     opacity: 1;
     filter: blur(0);
-    transform: translateY(0);
+  }
+}
+
+@keyframes gui-text-previous-out {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(4px);
   }
 }
 
@@ -144,11 +144,9 @@
   transform-origin: top center;
   transition:
     opacity 380ms ease,
-    transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
     max-height 380ms cubic-bezier(0.22, 1, 0.36, 1),
-    margin-bottom 380ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 320ms ease;
-  will-change: transform, opacity, max-height;
+    margin-bottom 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, max-height;
   max-height: 120px;
 }
 
@@ -162,8 +160,6 @@
 
 .gui-item-exit {
   opacity: 0;
-  transform: translateX(18px) scale(0.96);
-  filter: blur(5px);
   max-height: 0;
   margin-bottom: 0;
   pointer-events: none;
@@ -177,7 +173,23 @@
 }
 
 .gui-item-text-flash {
-  animation: gui-text-flash 980ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: gui-text-current-in 980ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gui-item-text-stack {
+  display: grid;
+}
+
+.gui-item-text-stack > span {
+  grid-area: 1 / 1;
+}
+
+.gui-item-text-current {
+  animation: gui-text-current-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.gui-item-text-previous {
+  animation: gui-text-previous-out 420ms ease both;
 }
 
 .gui-highlight-wave {
@@ -211,6 +223,8 @@
   .gui-item-enter,
   .gui-item-exit,
   .gui-item-text-flash,
+  .gui-item-text-current,
+  .gui-item-text-previous,
   .gui-highlight-wave,
   .gui-stage-slide-in-right,
   .gui-stage-slide-out-left,

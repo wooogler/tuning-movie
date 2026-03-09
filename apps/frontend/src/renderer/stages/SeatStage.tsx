@@ -27,6 +27,7 @@ export function SeatStage({
 
   // Derive row ordering from the seat items instead of stage meta.
   const rows = [...new Set(spec.items.map((seat) => seat.row))].sort();
+  const maxSeatNumber = Math.max(...spec.items.map((seat) => seat.number), 0);
 
   // Highlight 정보
   const highlightedIds = new Set(spec.modification.highlight?.itemIds ?? []);
@@ -49,66 +50,77 @@ export function SeatStage({
   const selectedTotalPrice = selectedSeatsDetailed.reduce((sum, seat) => sum + seat.price, 0);
 
   return (
-    <div className="flex flex-col items-center gap-6">
+    <div className="flex w-full max-w-full flex-col items-center gap-5 sm:gap-6">
       {/* Screen indicator */}
-      <div className="w-full max-w-lg">
+      <div className="w-full max-w-sm sm:max-w-lg">
         <div className="w-3/4 h-2 mx-auto bg-gradient-to-b from-gray-300 to-gray-500 rounded-t-full mb-2" />
         <div className="text-center text-sm text-fg-faint mb-6">SCREEN</div>
       </div>
 
       {/* Seat map */}
-      <div className="flex flex-col gap-2">
-        {seatsByRow.map((rowSeats, rowIndex) => (
-          <div key={rows[rowIndex]} className="flex items-center gap-2">
-            {/* Row label */}
-            <span className="w-16 text-center text-[11px] text-fg-faint">
-              {rows[rowIndex]}
-              {rowPriceMap.has(rows[rowIndex]) && (
-                <span className="block text-[10px]">{formatUsd(rowPriceMap.get(rows[rowIndex]) ?? 0)}</span>
-              )}
-            </span>
+      <div className="w-full max-w-xl">
+        <div className="mx-auto flex w-full flex-col gap-2">
+          {seatsByRow.map((rowSeats, rowIndex) => (
+            <div
+              key={rows[rowIndex]}
+              className="grid grid-cols-[2.6rem_minmax(0,1fr)] items-center gap-1.5 sm:grid-cols-[4rem_minmax(0,1fr)] sm:gap-2"
+            >
+              {/* Row label */}
+              <span className="text-center text-[10px] text-fg-faint sm:text-[11px]">
+                {rows[rowIndex]}
+                {rowPriceMap.has(rows[rowIndex]) && (
+                  <span className="block text-[9px] sm:text-[10px]">
+                    {formatUsd(rowPriceMap.get(rows[rowIndex]) ?? 0)}
+                  </span>
+                )}
+              </span>
 
-            {/* Seats */}
-            <div className="flex gap-1">
-              {rowSeats.map((seat) => {
-                const isSelected = selectedIds.includes(seat.id);
-                const isOccupied = seat.status === 'occupied';
-                const isHighlighted = highlightedIds.has(seat.id);
-                const isPremium = seat.type === 'premium';
+              {/* Seats */}
+              <div
+                className="grid min-w-0 gap-0.5 sm:gap-1"
+                style={{ gridTemplateColumns: `repeat(${maxSeatNumber}, minmax(0, 1fr))` }}
+              >
+                {rowSeats.map((seat) => {
+                  const isSelected = selectedIds.includes(seat.id);
+                  const isOccupied = seat.status === 'occupied';
+                  const isHighlighted = highlightedIds.has(seat.id);
+                  const isPremium = seat.type === 'premium';
 
-                const highlightClass = isHighlighted ? 'ring-2 ring-primary gui-highlight-wave' : '';
+                  const highlightClass = isHighlighted ? 'ring-2 ring-primary gui-highlight-wave' : '';
 
-                return (
-                  <button
-                    key={seat.id}
-                    onClick={() => !isOccupied && onToggle(seat.id)}
-                    disabled={isOccupied}
-                    title={`${seat.label} • ${formatUsd(seat.price)} • ${seat.type}`}
-                    className={`
-                      w-8 h-8 rounded-t-lg text-xs font-medium transition-all
-                      ${
-                        isOccupied
-                          ? 'bg-dark-border cursor-not-allowed'
-                          : isSelected
-                          ? 'bg-primary text-primary-fg'
-                          : isPremium
-                          ? 'bg-amber-900/55 text-amber-100 hover:bg-amber-800/60'
-                          : 'bg-dark-light hover:bg-dark-lighter text-fg-strong'
-                      }
-                      ${highlightClass}
-                    `}
-                  >
-                    {seat.number}
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      key={seat.id}
+                      onClick={() => !isOccupied && onToggle(seat.id)}
+                      disabled={isOccupied}
+                      title={`${seat.label} • ${formatUsd(seat.price)} • ${seat.type}`}
+                      style={{ gridColumn: `${seat.number} / span 1` }}
+                      className={`
+                        aspect-square min-w-0 w-full rounded-t-md text-[10px] font-medium transition-all sm:rounded-t-lg sm:text-xs
+                        ${
+                          isOccupied
+                            ? 'bg-dark-border cursor-not-allowed'
+                            : isSelected
+                            ? 'bg-primary text-primary-fg'
+                            : isPremium
+                            ? 'bg-amber-900/55 text-amber-100 hover:bg-amber-800/60'
+                            : 'bg-dark-light hover:bg-dark-lighter text-fg-strong'
+                        }
+                        ${highlightClass}
+                      `}
+                    >
+                      {seat.number}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* Legend */}
-      <div className="flex gap-6 text-sm text-fg-muted">
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-fg-muted sm:gap-x-6 sm:text-sm">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded-t bg-dark-light" />
           <span>Standard</span>
@@ -129,7 +141,7 @@ export function SeatStage({
 
       {/* Selected seats info */}
       {selectedList.length > 0 && (
-        <div className="text-fg-muted">
+        <div className="max-w-full text-center text-xs leading-6 text-fg-muted sm:text-sm">
           Selected:{' '}
           {selectedSeatsDetailed
             .map((seat) => `${seat.label} (${formatUsd(seat.price)})`)

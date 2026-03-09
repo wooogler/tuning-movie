@@ -26,12 +26,12 @@ export function ActionBar({
   showBack = true,
 }: ActionBarProps) {
   return (
-    <div className="mt-6 flex flex-col items-center gap-3">
-      <div className="flex justify-center gap-4">
+    <div className="mt-6 flex w-full flex-col items-center gap-3">
+      <div className="flex w-full max-w-sm flex-col justify-center gap-3 sm:w-auto sm:max-w-none sm:flex-row sm:gap-4">
         {showBack && onBack && (
           <button
             type="button"
-            className={`px-6 py-3 rounded-lg transition-colors ${
+            className={`w-full rounded-lg px-6 py-3 transition-colors sm:w-auto ${
               backDisabled
                 ? 'bg-dark-border/50 text-fg-faint cursor-not-allowed'
                 : 'bg-dark-border text-fg-strong hover:bg-dark-lighter'
@@ -46,7 +46,7 @@ export function ActionBar({
         {onNext && (
           <button
             type="button"
-            className={`px-6 py-3 rounded-lg transition-colors ${
+            className={`w-full rounded-lg px-6 py-3 transition-colors sm:w-auto ${
               nextDisabled
                 ? 'bg-primary/50 text-primary-fg/50 cursor-not-allowed'
                 : 'bg-primary hover:bg-primary-hover text-primary-fg'
