@@ -6,7 +6,11 @@ import {
   listScenarios,
 } from '../study/sessionService';
 import { getStudyModeConfig, isStudyModeId, DEFAULT_STUDY_MODE } from '../study/modes';
-import { appendInteractionLog, hasInteractionLogging } from '../study/interactionLogService';
+import {
+  appendInteractionLog,
+  hasInteractionLogging,
+  readInteractionLogFile,
+} from '../study/interactionLogService';
 
 function getStudyTokenFromHeader(headers: Record<string, unknown>): string | null {
   const raw = headers['x-study-session-token'];
@@ -188,5 +192,31 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
       logged,
       interactionLogFile: context.record.interactionLogFile ?? null,
     };
+  });
+
+  fastify.get('/study/logs/export', async (request, reply) => {
+    const token = getStudyTokenFromHeader(request.headers as Record<string, unknown>);
+    if (!token) {
+      return reply.code(401).send({ error: 'Missing x-study-session-token header' });
+    }
+
+    const context = getSessionContextByToken(token);
+    if (!context) {
+      return reply.code(401).send({ error: 'Invalid or expired study session' });
+    }
+
+    if (!hasInteractionLogging(context.record)) {
+      return reply.code(404).send({ error: 'Interaction logging is not enabled for this session' });
+    }
+
+    const logFile = readInteractionLogFile(context.record);
+    if (!logFile) {
+      return reply.code(404).send({ error: 'Interaction log file was not found' });
+    }
+
+    reply.header('content-type', 'application/x-ndjson; charset=utf-8');
+    reply.header('content-disposition', `attachment; filename="${logFile.fileName}"`);
+    reply.header('cache-control', 'no-store');
+    return reply.send(logFile.content);
   });
 }

@@ -273,6 +273,7 @@ export function ChatPage({
   );
   const [isResizingScenarioPanelWidth, setIsResizingScenarioPanelWidth] = useState(false);
   const [awaitingAgentResponse, setAwaitingAgentResponse] = useState(false);
+  const [downloadingLog, setDownloadingLog] = useState(false);
 
   const initialized = useRef(false);
   const appliedStudyModePresetRef = useRef<StudyModeId | null>(null);
@@ -1212,6 +1213,37 @@ export function ChatPage({
   const scenarioStory = studySession?.scenario.story ?? '';
   const scenarioPreferenceTypes = studySession?.scenario.narratorPreferenceTypes ?? [];
   const showScenarioBriefing = scenarioStory.length > 0 || scenarioPreferenceTypes.length > 0;
+  const canDownloadLog = Boolean(studySession?.interactionLogFile);
+
+  const handleDownloadLog = useCallback(async () => {
+    if (!studySession?.studyToken || !canDownloadLog || downloadingLog) return;
+
+    setDownloadingLog(true);
+    setError(null);
+
+    await logStudyEventNow('study.control.log_download_requested', {
+      source: 'participant',
+    });
+
+    try {
+      const result = await api.downloadStudyLog(studySession.studyToken);
+      const downloadUrl = window.URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download =
+        result.fileName ??
+        studySession.interactionLogFile?.split('/').pop() ??
+        'study-interaction-log.jsonl';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download interaction log');
+    } finally {
+      setDownloadingLog(false);
+    }
+  }, [canDownloadLog, downloadingLog, logStudyEventNow, studySession]);
 
   return (
     <div className="relative h-screen bg-dark">
@@ -1332,6 +1364,19 @@ export function ChatPage({
                 </button>
               </>
             )}
+            <button
+              type="button"
+              onClick={handleDownloadLog}
+              disabled={!canDownloadLog || downloadingLog}
+              title={
+                canDownloadLog
+                  ? 'Download the current JSONL interaction log'
+                  : 'Interaction log is unavailable for this session'
+              }
+              className="px-3 py-1 text-xs rounded border border-dark-border text-fg hover:text-fg-strong hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {downloadingLog ? 'Downloading...' : 'Download Log'}
+            </button>
             <button
               type="button"
               onClick={handleFinishStudy}

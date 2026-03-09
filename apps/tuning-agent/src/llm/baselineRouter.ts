@@ -36,7 +36,6 @@ type LlmTraceListener = (event: LlmTraceEvent) => void;
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const OPENAI_MODEL = process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
 const DEFAULT_OPENAI_TEMPERATURE = 0;
-const OPENAI_TEMPERATURE_OFF_SENTINELS = new Set(['default', 'none', 'omit', 'off']);
 const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
 
 function parseBooleanEnv(value: string | undefined): boolean | null {
@@ -123,17 +122,7 @@ function readTrimmedString(value: unknown): string | null {
 }
 
 function resolveOpenAITemperature(): number | undefined {
-  const raw = process.env.AGENT_OPENAI_TEMPERATURE;
-  if (typeof raw !== 'string' || !raw.trim()) return DEFAULT_OPENAI_TEMPERATURE;
-
-  const normalized = raw.trim().toLowerCase();
-  if (OPENAI_TEMPERATURE_OFF_SENTINELS.has(normalized)) {
-    return undefined;
-  }
-
-  const parsed = Number.parseFloat(raw);
-  if (!Number.isFinite(parsed)) return DEFAULT_OPENAI_TEMPERATURE;
-  return Math.min(2, Math.max(0, parsed));
+  return DEFAULT_OPENAI_TEMPERATURE;
 }
 
 function isUnsupportedTemperatureError(status: number, errorText: string): boolean {

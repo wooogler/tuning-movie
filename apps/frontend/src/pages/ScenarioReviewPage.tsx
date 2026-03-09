@@ -123,7 +123,7 @@ export function ScenarioReviewPage({
               enabled for <span className="text-fg-strong">{loggingParticipantId.trim()}</span>
             </span>
           ) : (
-            <span className="text-fg-muted">disabled</span>
+            <span className="text-fg-muted">enabled with timestamp-only filename</span>
           )}
         </div>
 

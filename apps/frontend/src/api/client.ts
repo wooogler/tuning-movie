@@ -46,21 +46,46 @@ interface FetchApiOptions extends RequestInit {
   studyToken?: string;
 }
 
-async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise<T> {
+function getStudyRequestHeaders(studyToken?: string): Record<string, string> {
   const session = getStoredStudySession();
+  const resolvedStudyToken = studyToken ?? session?.studyToken;
+  const headers: Record<string, string> = {};
+  if (resolvedStudyToken) {
+    headers['x-study-session-token'] = resolvedStudyToken;
+  }
+  return headers;
+}
+
+function parseContentDispositionFileName(value: string | null): string | null {
+  if (!value) return null;
+
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const basicMatch = value.match(/filename="?([^"]+)"?/i);
+  return basicMatch?.[1] ?? null;
+}
+
+async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise<T> {
   const {
     includeStudyToken = true,
     studyToken: explicitStudyToken,
     headers: optionHeaders,
     ...requestInit
   } = options ?? {};
-  const studyToken = explicitStudyToken ?? session?.studyToken;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...getStudyRequestHeaders(includeStudyToken ? explicitStudyToken : undefined),
     ...(optionHeaders as Record<string, string> | undefined),
   };
-  if (includeStudyToken && studyToken) {
-    headers['x-study-session-token'] = studyToken;
+  if (!includeStudyToken) {
+    delete headers['x-study-session-token'];
   }
 
   let response: Response;
@@ -127,6 +152,30 @@ export const api = {
         body: JSON.stringify({ events }),
       }
     ),
+  downloadStudyLog: async (studyToken?: string) => {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/study/logs/export`, {
+        method: 'GET',
+        headers: getStudyRequestHeaders(studyToken),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Network request failed';
+      throw new Error(
+        `Cannot reach backend API (${API_BASE_URL || 'same-origin'}). ${message}`
+      );
+    }
+
+    if (!response.ok) {
+      const message = await getErrorMessage(response);
+      throw new Error(message);
+    }
+
+    return {
+      blob: await response.blob(),
+      fileName: parseContentDispositionFileName(response.headers.get('content-disposition')),
+    };
+  },
 
   // Movies
   getMovies: () => fetchApi<{ movies: Movie[] }>('/movies'),

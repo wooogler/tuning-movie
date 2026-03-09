@@ -395,9 +395,7 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
     typeof input.loggingParticipantId === 'string' && input.loggingParticipantId.trim()
       ? input.loggingParticipantId.trim()
       : undefined;
-  const interactionLogFile = loggingParticipantId
-    ? createInteractionLogFilePath(loggingParticipantId, createdAt)
-    : undefined;
+  const interactionLogFile = createInteractionLogFilePath(loggingParticipantId, createdAt);
 
   const dbHandle = createSessionDbFromTemplate(sessionId, templateDbPath);
   try {
@@ -406,7 +404,7 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
       relaySessionId,
       participantId,
       ...(loggingParticipantId ? { loggingParticipantId } : {}),
-      ...(interactionLogFile ? { interactionLogFile } : {}),
+      interactionLogFile,
       scenarioId: scenario.id,
       studyMode,
       dbPath: dbHandle.dbPath,
@@ -415,21 +413,19 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
       expiresAt,
     };
 
-    if (interactionLogFile) {
-      appendInteractionLog(record, {
-        type: 'study.session.started',
-        payload: {
-          createdAt,
-          expiresAt,
-          scenario: {
-            id: scenario.id,
-            title: scenario.title,
-          },
-          participantId,
-          loggingParticipantId,
+    appendInteractionLog(record, {
+      type: 'study.session.started',
+      payload: {
+        createdAt,
+        expiresAt,
+        scenario: {
+          id: scenario.id,
+          title: scenario.title,
         },
-      });
-    }
+        participantId,
+        loggingParticipantId: loggingParticipantId ?? null,
+      },
+    });
 
     sessions.set(sessionId, record);
 

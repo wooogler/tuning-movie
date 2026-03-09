@@ -38,14 +38,20 @@ function getRelativeLogFile(record: StudySessionRecord): string | null {
   return value || null;
 }
 
-export function createInteractionLogFileName(participantId: string, createdAt: string): string {
-  const safePid = sanitizeFileToken(participantId, 'participant');
+export function createInteractionLogFileName(
+  participantId: string | null | undefined,
+  createdAt: string
+): string {
   const safeTimestamp = formatFileTimestamp(createdAt);
-  return `${safePid}-${safeTimestamp}.jsonl`;
+  const safePid =
+    typeof participantId === 'string' && participantId.trim()
+      ? sanitizeFileToken(participantId, 'participant')
+      : null;
+  return safePid ? `${safePid}-${safeTimestamp}.jsonl` : `${safeTimestamp}.jsonl`;
 }
 
 export function createInteractionLogFilePath(
-  participantId: string,
+  participantId: string | null | undefined,
   createdAt: string
 ): string {
   const fileName = createInteractionLogFileName(participantId, createdAt);
@@ -53,18 +59,18 @@ export function createInteractionLogFilePath(
 }
 
 export function hasInteractionLogging(record: StudySessionRecord): boolean {
-  return Boolean(getLogParticipantId(record) && getRelativeLogFile(record));
+  return Boolean(getRelativeLogFile(record));
 }
 
 export function appendInteractionLog(
   record: StudySessionRecord,
   event: StudyInteractionLogEventInput
 ): string | null {
-  const participantId = getLogParticipantId(record);
   const relativeFile = getRelativeLogFile(record);
-  if (!participantId || !relativeFile) {
+  if (!relativeFile) {
     return null;
   }
+  const loggingParticipantId = getLogParticipantId(record);
 
   const filePath = resolveLogFilePath(relativeFile);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -74,7 +80,8 @@ export function appendInteractionLog(
     ...(event.clientTimestamp ? { clientTimestamp: event.clientTimestamp } : {}),
     sessionId: record.sessionId,
     relaySessionId: record.relaySessionId,
-    participantId,
+    participantId: loggingParticipantId,
+    sessionParticipantId: record.participantId,
     scenarioId: record.scenarioId,
     studyMode: record.studyMode,
     type: event.type,
@@ -95,6 +102,25 @@ export function appendInteractionLogSafe(
     console.error('Failed to append interaction log:', error);
     return null;
   }
+}
+
+export function readInteractionLogFile(
+  record: StudySessionRecord
+): { fileName: string; content: Buffer } | null {
+  const relativeFile = getRelativeLogFile(record);
+  if (!relativeFile) {
+    return null;
+  }
+
+  const filePath = resolveLogFilePath(relativeFile);
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  return {
+    fileName: path.posix.basename(relativeFile),
+    content: fs.readFileSync(filePath),
+  };
 }
 
 export function ensureInteractionLogDir(): void {

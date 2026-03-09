@@ -180,8 +180,8 @@ export function StudyStartPage({
               />
             </label>
             <p className="mt-2 text-sm text-fg-muted">
-              Leave this blank to disable file logging. When provided, chat-page interactions are
-              appended live to a `PID + timestamp` JSONL file.
+              PID를 입력하면 `PID + timestamp`, 비워두면 `timestamp`만으로 JSONL 로그 파일이
+              생성됩니다. 채팅 페이지 인터랙션은 실시간 append됩니다.
             </p>
           </div>
         </section>

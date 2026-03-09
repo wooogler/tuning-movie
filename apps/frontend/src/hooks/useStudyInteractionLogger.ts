@@ -34,7 +34,7 @@ export function useStudyInteractionLogger({
   booking,
   error,
 }: UseStudyInteractionLoggerOptions): UseStudyInteractionLoggerResult {
-  const loggingEnabled = Boolean(studySession?.loggingParticipantId?.trim());
+  const loggingEnabled = Boolean(studySession?.interactionLogFile?.trim());
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const lastMessageCountRef = useRef(0);
   const lastActiveSpecSignatureRef = useRef<string | null>(null);
