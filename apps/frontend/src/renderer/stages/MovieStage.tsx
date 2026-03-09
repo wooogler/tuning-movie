@@ -19,6 +19,7 @@ export function MovieStage({
   return (
     <div className="flex flex-col items-center gap-6">
       <ButtonGroup
+        animationScope="movie"
         items={spec.visibleItems}
         onSelect={onSelect}
         selectedId={spec.state.selected?.id}

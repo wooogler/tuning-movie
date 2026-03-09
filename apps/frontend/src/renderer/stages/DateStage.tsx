@@ -157,7 +157,7 @@ export function DateStage({
 
         {/* Calendar days */}
         {calendarDays.map((day, index) => {
-          const highlightClass = day.isHighlighted ? 'ring-2 ring-primary' : '';
+          const highlightClass = day.isHighlighted ? 'ring-2 ring-primary gui-highlight-wave' : '';
 
           return (
             <button

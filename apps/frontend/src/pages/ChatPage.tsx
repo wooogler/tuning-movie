@@ -30,7 +30,7 @@ import {
   type UISpec,
   type Stage,
 } from '../spec';
-import { MessageList, ChatInput } from '../components/chat';
+import { MessageList, FullTuningSplitView, ChatInput } from '../components/chat';
 import { ScenarioBriefing } from '../components/scenario/ScenarioBriefing';
 import { StageRenderer } from '../renderer';
 import { useToolHandler, useAgentBridge } from '../hooks';
@@ -290,6 +290,7 @@ export function ChatPage({
   );
   const sessionLocked = Boolean(studySession);
   const isBaselineMode = studyModePreset === 'baseline';
+  const isFullTuningSplit = studyModePreset === 'full-tuning';
 
   const getMaxChatWidth = useCallback(() => {
     if (typeof window === 'undefined') return DEFAULT_CHAT_WIDTH_PX;
@@ -1139,6 +1140,14 @@ export function ChatPage({
     !isAgentBridgeConnected ||
     !isAgentBridgeJoined ||
     !hasConnectedAgent;
+  const chatInputPlaceholder =
+    !isAgentBridgeConnected
+      ? 'Waiting for agent relay connection...'
+      : !isAgentBridgeJoined
+      ? 'Joining agent session...'
+      : !hasConnectedAgent
+      ? 'Waiting for an external agent to connect...'
+      : 'Send a message to the external agent...';
 
   const stageSpecMap = useMemo(() => {
     const map = new Map<Stage, UISpec>();
@@ -1336,7 +1345,22 @@ export function ChatPage({
           </div>
         )}
 
-        {viewMode === 'chat' ? (
+        {isFullTuningSplit ? (
+          <FullTuningSplitView
+            messages={messages}
+            activeSpec={activeSpec}
+            isAgentTyping={isAgentTyping}
+            inputDisabled={inputDisabled}
+            inputPlaceholder={chatInputPlaceholder}
+            onSubmitInput={agentBridgeEnabled ? handleChatInputSubmit : undefined}
+            onSelect={handleSelect}
+            onToggle={handleToggle}
+            onNext={handleNext}
+            onBack={handleBack}
+            onStartOver={handleStartOver}
+            onConfirm={handleConfirm}
+          />
+        ) : viewMode === 'chat' ? (
           <MessageList
             messages={messages}
             activeSpec={activeSpec}
@@ -1481,20 +1505,14 @@ export function ChatPage({
           </div>
         )}
 
-        {agentBridgeEnabled && (
+        {agentBridgeEnabled && !isFullTuningSplit && (
           <ChatInput
             chatWidthPx={chatWidthPx}
             disabled={inputDisabled}
             onSubmit={handleChatInputSubmit}
             placeholder={
-              !isAgentBridgeConnected
-                ? 'Waiting for agent relay connection...'
-                : !isAgentBridgeJoined
-                ? 'Joining agent session...'
-                : !hasConnectedAgent
-                ? 'Waiting for an external agent to connect...'
-                : viewMode === 'chat'
-                ? 'Send a message to the external agent...'
+              viewMode === 'chat'
+                ? chatInputPlaceholder
                 : 'Carousel mode: input is available here as well'
             }
           />

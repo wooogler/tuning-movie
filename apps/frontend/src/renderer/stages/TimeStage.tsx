@@ -21,6 +21,7 @@ export function TimeStage({
   return (
     <div className="flex flex-col items-center gap-6">
       <ButtonGroup
+        animationScope={`time-${String(spec.meta?.theaterId ?? '')}-${String(spec.meta?.date ?? '')}`}
         items={spec.visibleItems}
         onSelect={onSelect}
         selectedId={spec.state.selected?.id}

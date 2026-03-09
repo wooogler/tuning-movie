@@ -1,4 +1,5 @@
 export { MessageList } from './MessageList';
+export { FullTuningSplitView } from './FullTuningSplitView';
 export { SystemMessage } from './SystemMessage';
 export { UserMessage } from './UserMessage';
 export { AgentMessage } from './AgentMessage';

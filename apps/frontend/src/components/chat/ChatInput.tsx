@@ -13,7 +13,7 @@ function resizeTextareaToContent(element: HTMLTextAreaElement) {
 interface ChatInputProps {
   disabled?: boolean;
   placeholder?: string;
-  chatWidthPx?: number;
+  chatWidthPx?: number | null;
   onSubmit?: (text: string) => void;
 }
 
@@ -58,7 +58,10 @@ export function ChatInput({
 
   return (
     <div className="border-t border-dark-border bg-dark p-4">
-      <div className="mx-auto" style={{ width: `min(100%, ${chatWidthPx}px)` }}>
+      <div
+        className="mx-auto w-full"
+        style={chatWidthPx ? { width: `min(100%, ${chatWidthPx}px)` } : undefined}
+      >
         <div className="flex items-end gap-3">
           <textarea
             ref={textareaRef}

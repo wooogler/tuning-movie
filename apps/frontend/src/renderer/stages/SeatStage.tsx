@@ -76,7 +76,7 @@ export function SeatStage({
                 const isHighlighted = highlightedIds.has(seat.id);
                 const isPremium = seat.type === 'premium';
 
-                const highlightClass = isHighlighted ? 'ring-2 ring-primary' : '';
+                const highlightClass = isHighlighted ? 'ring-2 ring-primary gui-highlight-wave' : '';
 
                 return (
                   <button
