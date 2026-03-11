@@ -41,6 +41,7 @@ export type {
 
 // Modifiers
 export {
+  computeDisplayItems,
   computeVisibleItems,
   refreshVisibleItems,
   applyFilter,

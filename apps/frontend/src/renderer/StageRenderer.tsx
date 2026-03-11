@@ -13,6 +13,7 @@ import {
   SeatStage,
   ConfirmStage,
 } from './stages';
+import type { GuiMotionProfile } from './stages';
 
 export interface StageRendererProps {
   spec: UISpec;
@@ -22,6 +23,7 @@ export interface StageRendererProps {
   onBack?: () => void;
   onStartOver?: () => void;
   onConfirm?: () => void;
+  motionProfile?: GuiMotionProfile;
 }
 
 export function StageRenderer({
@@ -32,6 +34,7 @@ export function StageRenderer({
   onBack,
   onStartOver,
   onConfirm,
+  motionProfile = 'default',
 }: StageRendererProps) {
   switch (spec.stage) {
     case 'movie':
@@ -40,6 +43,7 @@ export function StageRenderer({
           spec={spec as UISpec<MovieItem>}
           onSelect={onSelect}
           onNext={onNext}
+          motionProfile={motionProfile}
         />
       );
 
@@ -51,6 +55,7 @@ export function StageRenderer({
           onNext={onNext}
           onBack={onBack}
           onStartOver={onStartOver}
+          motionProfile={motionProfile}
         />
       );
 
@@ -62,6 +67,7 @@ export function StageRenderer({
           onNext={onNext}
           onBack={onBack}
           onStartOver={onStartOver}
+          motionProfile={motionProfile}
         />
       );
 
@@ -73,6 +79,7 @@ export function StageRenderer({
           onNext={onNext}
           onBack={onBack}
           onStartOver={onStartOver}
+          motionProfile={motionProfile}
         />
       );
 
@@ -85,6 +92,7 @@ export function StageRenderer({
           onNext={onNext}
           onBack={onBack}
           onStartOver={onStartOver}
+          motionProfile={motionProfile}
         />
       );
 
@@ -96,6 +104,7 @@ export function StageRenderer({
           onNext={onNext}
           onBack={onBack}
           onStartOver={onStartOver}
+          motionProfile={motionProfile}
         />
       );
 

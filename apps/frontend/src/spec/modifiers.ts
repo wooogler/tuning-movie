@@ -71,17 +71,21 @@ function hasSameFilter(existing: FilterState[], next: FilterState): boolean {
 /**
  * items + modification → visibleItems 계산
  */
-export function computeVisibleItems<T extends DataItem>(
-  spec: UISpec<T>
+export function computeDisplayItems<T extends DataItem>(
+  spec: UISpec<T>,
+  options?: { ignoreFilter?: boolean }
 ): DisplayItem[] {
   const { items, modification, display } = spec;
   const valueField = display.valueField;
+  const ignoreFilter = options?.ignoreFilter ?? false;
 
   // 1. Filter 적용
   let filteredItems = [...items];
-  const filters = normalizeFilters(modification.filter);
-  for (const filter of filters) {
-    filteredItems = applyFilterLogic(filteredItems, filter, valueField);
+  if (!ignoreFilter) {
+    const filters = normalizeFilters(modification.filter);
+    for (const filter of filters) {
+      filteredItems = applyFilterLogic(filteredItems, filter, valueField);
+    }
   }
 
   // 2. Sort 적용
@@ -114,6 +118,12 @@ export function computeVisibleItems<T extends DataItem>(
 
     return displayItem;
   });
+}
+
+export function computeVisibleItems<T extends DataItem>(
+  spec: UISpec<T>
+): DisplayItem[] {
+  return computeDisplayItems(spec);
 }
 
 /**

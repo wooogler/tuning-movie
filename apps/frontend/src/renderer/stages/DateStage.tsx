@@ -105,6 +105,7 @@ export function DateStage({
   onNext,
   onBack,
   onStartOver,
+  motionProfile = 'default',
 }: StageProps<DateItem>) {
   const canProceed = !!spec.state.selected;
 
@@ -131,11 +132,6 @@ export function DateStage({
     year: 'numeric',
   });
 
-  // 선택된 날짜 정보
-  const selectedDate = spec.items.find(
-    (item) => item.id === spec.state.selected?.id
-  );
-
   return (
     <div className="flex flex-col items-center gap-6">
       {/* Month header */}
@@ -157,7 +153,13 @@ export function DateStage({
 
         {/* Calendar days */}
         {calendarDays.map((day, index) => {
-          const highlightClass = day.isHighlighted ? 'ring-2 ring-primary gui-highlight-wave' : '';
+          const highlightClass = day.isHighlighted
+            ? motionProfile === 'full-tuning'
+              ? 'border-primary/80 shadow-[0_0_0_2px_rgba(229,9,20,0.18)] gui-highlight-border-once'
+              : 'ring-2 ring-primary gui-highlight-wave'
+            : '';
+          const isOutsideMonth = !day.isCurrentMonth;
+          const isUnavailable = day.isCurrentMonth && !day.isAvailable;
 
           return (
             <button
@@ -165,20 +167,28 @@ export function DateStage({
               onClick={() => day.isAvailable && day.isCurrentMonth && onSelect(day.date)}
               disabled={!day.isAvailable || !day.isCurrentMonth}
               className={`
-                relative aspect-square flex items-center justify-center rounded-lg transition-all text-sm
-                ${!day.isCurrentMonth
-                  ? 'text-fg-faint'
+                relative aspect-square flex items-center justify-center overflow-hidden rounded-lg border text-sm transition-all
+                ${isOutsideMonth
+                  ? 'border-transparent bg-transparent text-fg-faint/45'
                   : day.isSelected
-                  ? 'bg-primary text-primary-fg font-semibold'
+                  ? 'border-primary bg-primary text-primary-fg font-semibold'
                   : day.isAvailable
-                  ? 'bg-dark-light text-fg-strong hover:bg-dark-lighter'
-                  : 'bg-dark-border/50 text-fg-faint cursor-not-allowed'
+                  ? 'border-dark-border bg-dark-light text-fg-strong hover:bg-dark-lighter'
+                  : 'border-dark-border bg-dark-border text-fg-muted cursor-not-allowed'
+                }
+                ${isOutsideMonth
+                  ? 'text-fg-faint'
+                  : ''
                 }
                 ${day.isToday && !day.isSelected ? 'ring-1 ring-primary/50' : ''}
                 ${highlightClass}
               `}
             >
-              {day.dayNum}
+              <span>{day.dayNum}</span>
+
+              {isUnavailable && (
+                <span className="pointer-events-none absolute left-[18%] right-[18%] top-1/2 h-px -translate-y-1/2 bg-fg-faint/70" />
+              )}
 
               {/* Today indicator */}
               {day.isToday && !day.isSelected && day.isCurrentMonth && (
@@ -189,12 +199,22 @@ export function DateStage({
         })}
       </div>
 
-      {/* 선택된 날짜 표시 */}
-      {selectedDate && (
-        <div className="text-fg-muted">
-          Selected: {selectedDate.displayText}
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-fg-muted sm:text-sm">
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-4 rounded border border-dark-border bg-dark-light" />
+          <span>Available</span>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <div className="relative h-4 w-4 rounded border border-dark-border bg-dark-border">
+            <span className="absolute left-[18%] right-[18%] top-1/2 h-px -translate-y-1/2 rotate-[-32deg] bg-fg-faint/70" />
+          </div>
+          <span>Unavailable</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-4 rounded border border-primary bg-primary" />
+          <span>Selected</span>
+        </div>
+      </div>
 
       <ActionBar
         onBack={onBack}

@@ -25,10 +25,13 @@ export function ChatInput({
 }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const shouldRestoreFocusRef = useRef(false);
+  const previousDisabledRef = useRef(disabled);
 
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
+    shouldRestoreFocusRef.current = true;
     onSubmit?.(trimmed);
     setText('');
   };
@@ -55,6 +58,21 @@ export function ChatInput({
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  useLayoutEffect(() => {
+    const wasDisabled = previousDisabledRef.current;
+    previousDisabledRef.current = disabled;
+
+    if (disabled || !wasDisabled || !shouldRestoreFocusRef.current) return;
+
+    const element = textareaRef.current;
+    if (!element) return;
+
+    element.focus();
+    const cursorPosition = element.value.length;
+    element.setSelectionRange(cursorPosition, cursorPosition);
+    shouldRestoreFocusRef.current = false;
+  }, [disabled]);
 
   return (
     <div className="border-t border-dark-border bg-dark p-4">

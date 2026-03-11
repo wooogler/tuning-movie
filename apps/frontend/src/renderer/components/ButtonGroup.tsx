@@ -7,6 +7,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DisplayItem } from '../../spec';
+import type { GuiMotionProfile } from '../stages';
 
 type RenderPhase = 'stable' | 'entering' | 'exiting';
 
@@ -19,6 +20,9 @@ interface RenderItem extends DisplayItem {
 const ENTRY_DURATION_MS = 440;
 const EXIT_DURATION_MS = 380;
 const TEXT_CHANGE_DURATION_MS = 980;
+const DEFAULT_SORT_MOVE_DURATION_MS = 560;
+const FULL_TUNING_SORT_MOVE_DURATION_MS = DEFAULT_SORT_MOVE_DURATION_MS * 3;
+const SORT_MOVE_EASING = 'cubic-bezier(0.42, 0, 0.58, 1)';
 
 interface ButtonGroupProps {
   items: DisplayItem[];
@@ -27,6 +31,9 @@ interface ButtonGroupProps {
   highlightedIds?: string[];
   disabled?: boolean;
   animationScope?: string;
+  motionProfile?: GuiMotionProfile;
+  allItems?: DisplayItem[];
+  filteredOutIds?: string[];
 }
 
 export function ButtonGroup({
@@ -36,17 +43,32 @@ export function ButtonGroup({
   highlightedIds = [],
   disabled = false,
   animationScope = 'default',
+  motionProfile = 'default',
+  allItems,
+  filteredOutIds = [],
 }: ButtonGroupProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const highlightSet = useMemo(() => new Set(highlightedIds), [highlightedIds]);
+  const filteredOutSet = useMemo(() => new Set(filteredOutIds), [filteredOutIds]);
+  const hasExpandableFilter = Boolean(allItems) && filteredOutIds.length > 0;
+  const sourceItems = useMemo(
+    () => (hasExpandableFilter && isExpanded && allItems ? allItems : items),
+    [allItems, hasExpandableFilter, isExpanded, items]
+  );
+  const sortMoveDurationMs =
+    motionProfile === 'full-tuning'
+      ? FULL_TUNING_SORT_MOVE_DURATION_MS
+      : DEFAULT_SORT_MOVE_DURATION_MS;
+  const sortFadeDurationMs = Math.round(sortMoveDurationMs * 0.57);
   const itemSignature = useMemo(
     () =>
-      items
+      sourceItems
         .map((item) => `${item.id}::${item.value}::${item.isDisabled ? '1' : '0'}`)
         .join('|'),
-    [items]
+    [sourceItems]
   );
   const [renderItems, setRenderItems] = useState<RenderItem[]>(() =>
-    items.map((item) => ({
+    sourceItems.map((item) => ({
       ...item,
       phase: 'stable',
       textChanged: false,
@@ -57,7 +79,7 @@ export function ButtonGroup({
   const timeoutIdsRef = useRef<number[]>([]);
   const lastAppliedSignatureRef = useRef(itemSignature);
   const skipNextFlipRef = useRef(false);
-  const previousStableOrderRef = useRef(items.map((item) => item.id));
+  const previousStableOrderRef = useRef(sourceItems.map((item) => item.id));
 
   useEffect(
     () => () => {
@@ -67,14 +89,20 @@ export function ButtonGroup({
   );
 
   useEffect(() => {
+    if (!hasExpandableFilter) {
+      setIsExpanded(false);
+    }
+  }, [hasExpandableFilter]);
+
+  useEffect(() => {
     timeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     timeoutIdsRef.current = [];
     previousRectsRef.current = new Map();
     lastAppliedSignatureRef.current = itemSignature;
     skipNextFlipRef.current = false;
-    previousStableOrderRef.current = items.map((item) => item.id);
+    previousStableOrderRef.current = sourceItems.map((item) => item.id);
     setRenderItems(
-      items.map((item) => ({
+      sourceItems.map((item) => ({
         ...item,
         phase: 'stable',
         textChanged: false,
@@ -91,9 +119,9 @@ export function ButtonGroup({
 
     setRenderItems((previous) => {
       const previousById = new Map(previous.map((item) => [item.id, item]));
-      const nextById = new Map(items.map((item) => [item.id, item]));
+      const nextById = new Map(sourceItems.map((item) => [item.id, item]));
 
-      const nextRenderItems: RenderItem[] = items.map((item) => {
+      const nextRenderItems: RenderItem[] = sourceItems.map((item) => {
         const previousItem = previousById.get(item.id);
         const reenteringFromExit = previousItem?.phase === 'exiting';
         const textChanged =
@@ -123,7 +151,7 @@ export function ButtonGroup({
 
       return nextRenderItems;
     });
-  }, [itemSignature, items]);
+  }, [itemSignature, sourceItems]);
 
   useEffect(() => {
     timeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -247,24 +275,41 @@ export function ButtonGroup({
 
       requestAnimationFrame(() => {
         node.style.transition =
-          'transform 560ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms ease';
+          `transform ${sortMoveDurationMs}ms ${SORT_MOVE_EASING}, opacity ${sortFadeDurationMs}ms ease-in-out`;
         node.style.transform = '';
       });
     }
 
     previousRectsRef.current = nextRects;
     previousStableOrderRef.current = stableOrder;
-  }, [renderItems]);
+  }, [renderItems, sortFadeDurationMs, sortMoveDurationMs]);
 
   return (
     <div className="flex w-full max-w-md flex-col">
+      {hasExpandableFilter ? (
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setIsExpanded((current) => !current)}
+            className="rounded-full border border-dark-border bg-dark-light/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-fg-muted transition-colors hover:border-primary hover:text-fg-strong"
+            title={`${filteredOutIds.length} filtered item(s) available for inspection`}
+          >
+            {isExpanded ? 'Collapse' : 'Expand'}
+          </button>
+        </div>
+      ) : null}
       {renderItems.map((item) => {
         const isSelected = item.id === selectedId;
         const isHighlighted = highlightSet.has(item.id);
+        const isFilteredOut = filteredOutSet.has(item.id);
 
-        const highlightClass = isHighlighted ? 'ring-2 ring-primary gui-highlight-wave' : '';
+        const highlightClass = isHighlighted
+          ? motionProfile === 'full-tuning'
+            ? 'border-primary/80 shadow-[0_0_0_2px_rgba(229,9,20,0.18)] gui-highlight-border-once'
+            : 'ring-2 ring-primary gui-highlight-wave'
+          : '';
 
-        const isDisabled = disabled || item.isDisabled;
+        const isDisabled = disabled || item.isDisabled || isFilteredOut;
 
         return (
           <div
@@ -292,10 +337,12 @@ export function ButtonGroup({
                 ${
                   isSelected
                     ? 'border-primary bg-primary font-semibold text-primary-fg'
+                    : isFilteredOut
+                    ? 'border-dark-border/80 bg-dark-border/35 text-fg-faint'
                     : 'border-dark-border bg-dark-light text-fg-strong hover:border-dark-border hover:bg-dark-lighter'
                 }
                 ${highlightClass}
-                ${isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+                ${isDisabled ? (isFilteredOut ? 'cursor-not-allowed opacity-65' : 'cursor-not-allowed opacity-50') : 'cursor-pointer'}
                 ${item.textChanged ? 'gui-item-text-shift' : ''}
               `}
             >

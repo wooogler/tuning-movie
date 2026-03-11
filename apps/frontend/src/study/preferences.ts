@@ -80,7 +80,7 @@ const KNOWN_PREFERENCE_DESCRIPTIONS: Record<string, string> = {
   'arrive-after-6pm': 'Do not pick a showing that requires arriving before 6:00 PM.',
   'before-7pm': 'Pick a showing that finishes before 7:00 PM.',
   'before-8pm': 'Pick a showing that finishes before 8:00 PM.',
-  'center-seat': 'Seats should be near the center of the screen.',
+  'center-seat': 'Seats should be near the center of the screen. Seats 3, 4, 5, and 6 are acceptable.',
   'closest-theater': 'Prefer the nearest theater option.',
   comedy: 'Choose a movie that includes comedy.',
   'cosmic-laughs': 'The movie must be Cosmic Laughs.',

@@ -18,6 +18,7 @@ export function SeatStage({
   onNext,
   onBack,
   onStartOver,
+  motionProfile = 'default',
 }: SeatStageProps) {
   const formatUsd = (value: number): string =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
@@ -81,7 +82,11 @@ export function SeatStage({
                   const isHighlighted = highlightedIds.has(seat.id);
                   const isPremium = seat.type === 'premium';
 
-                  const highlightClass = isHighlighted ? 'ring-2 ring-primary gui-highlight-wave' : '';
+                  const highlightClass = isHighlighted
+                    ? motionProfile === 'full-tuning'
+                      ? 'border-primary/80 shadow-[0_0_0_2px_rgba(229,9,20,0.18)] gui-highlight-border-once'
+                      : 'ring-2 ring-primary gui-highlight-wave'
+                    : '';
 
                   return (
                     <button

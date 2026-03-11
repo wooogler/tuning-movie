@@ -18,6 +18,7 @@ import type {
 } from '../../store/chatStore';
 import { AgentMessage } from './AgentMessage';
 import { ChatInput } from './ChatInput';
+import { SelectionBreadcrumb } from './SelectionBreadcrumb';
 import { UserMessage } from './UserMessage';
 import { renderMessageText } from './renderMessageText';
 
@@ -545,6 +546,7 @@ export function FullTuningSplitView({
                       <GuiSnapshotCard
                         snapshot={transitionState.outgoing}
                         interactive={false}
+                        agentActive={false}
                       />
                     </div>
                   ) : null}
@@ -561,6 +563,7 @@ export function FullTuningSplitView({
                     <GuiSnapshotCard
                       snapshot={activeSnapshot}
                       interactive={activeSnapshot.isLatest}
+                      agentActive={Boolean(isAgentTyping && activeSnapshot.isLatest)}
                       onSelect={onSelect}
                       onToggle={onToggle}
                       onNext={onNext}
@@ -644,6 +647,7 @@ export function FullTuningSplitView({
 function GuiSnapshotCard({
   snapshot,
   interactive,
+  agentActive = false,
   onSelect,
   onToggle,
   onNext,
@@ -653,6 +657,7 @@ function GuiSnapshotCard({
 }: {
   snapshot: GuiSnapshot;
   interactive: boolean;
+  agentActive?: boolean;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
   onNext?: () => void;
@@ -660,65 +665,81 @@ function GuiSnapshotCard({
   onStartOver?: () => void;
   onConfirm?: () => void;
 }) {
+  const statusBadgeClass = snapshot.isLatest
+    ? 'border-info-border bg-info-bg/70 text-info-text'
+    : 'border-dark-border bg-dark-light text-fg-muted';
+
   return (
-    <div className="w-full rounded-2xl border border-dark-border bg-dark p-4">
-      <div className="mb-4 flex items-start gap-3">
-        <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-info-border bg-primary text-primary-fg">
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <div className="w-[400px] max-w-full">
+      <SelectionBreadcrumb spec={snapshot.spec} subdued={!interactive} />
+      <div
+        className={`rounded-2xl border bg-dark p-4 transition-colors ${
+          agentActive
+            ? 'border-info-border shadow-[0_0_0_2px_rgba(96,165,250,0.22)]'
+            : 'border-dark-border'
+        }`}
+      >
+        <div className="mb-4 flex items-start gap-3">
+          <div
+            className={`mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-info-border bg-primary text-primary-fg ${
+              agentActive
+                ? 'ring-2 ring-blue-400 shadow-[0_0_0_4px_rgba(59,130,246,0.18)]'
+                : ''
+            }`}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-            />
-          </svg>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-4">
-            <span className="min-w-0 text-sm font-semibold text-info-label">
-              {getSnapshotContextLabel(snapshot)}
-            </span>
-            <div className="flex shrink-0 items-center justify-end gap-2 self-start">
-              <span className="rounded-full border border-info-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-info-text">
-                {snapshot.stage}
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+              />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-4">
+              <span className="min-w-0 text-sm font-semibold text-info-label">
+                {getSnapshotContextLabel(snapshot)}
               </span>
-              <span
-                className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
-                  snapshot.isLatest
-                    ? 'border-primary/50 text-primary'
-                    : 'border-dark-border text-fg-muted'
-                }`}
-              >
-                {snapshot.isLatest ? 'Live' : 'History'}
-              </span>
+              <div className="flex shrink-0 items-center justify-end gap-2 self-start">
+                <span className="rounded-full border border-info-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-info-text">
+                  {snapshot.stage}
+                </span>
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${statusBadgeClass}`}
+                >
+                  {snapshot.isLatest ? 'Agent' : 'Read Only'}
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 text-base font-medium leading-7 text-info-text">
+              {renderMessageText(getSnapshotContextText(snapshot))}
             </div>
           </div>
-          <div className="mt-2 text-base font-medium leading-7 text-info-text">
-            {renderMessageText(getSnapshotContextText(snapshot))}
-          </div>
         </div>
-      </div>
 
-      <div className="rounded-2xl border border-dark-border bg-dark-light p-4">
-        <div
-          className={`transition-opacity duration-200 ${
-            interactive ? '' : 'pointer-events-none opacity-65'
-          }`}
-        >
-          <StageRenderer
-            spec={snapshot.spec}
-            onSelect={interactive && onSelect ? onSelect : () => {}}
-            onToggle={interactive && onToggle ? onToggle : () => {}}
-            onNext={interactive && onNext ? onNext : () => {}}
-            onBack={interactive ? onBack : undefined}
-            onStartOver={interactive ? onStartOver : undefined}
-            onConfirm={interactive && onConfirm ? onConfirm : () => {}}
-          />
+        <div className="rounded-2xl border border-dark-border bg-dark-light p-4">
+          <div
+            className={`transition-opacity duration-200 ${
+              interactive ? '' : 'pointer-events-none opacity-65'
+            }`}
+          >
+            <StageRenderer
+              spec={snapshot.spec}
+              onSelect={interactive && onSelect ? onSelect : () => {}}
+              onToggle={interactive && onToggle ? onToggle : () => {}}
+              onNext={interactive && onNext ? onNext : () => {}}
+              onBack={interactive ? onBack : undefined}
+              onStartOver={interactive ? onStartOver : undefined}
+              onConfirm={interactive && onConfirm ? onConfirm : () => {}}
+              motionProfile="full-tuning"
+            />
+          </div>
         </div>
       </div>
     </div>

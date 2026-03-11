@@ -2,6 +2,7 @@ import type { SystemMessage as SystemMessageType } from '../../store/chatStore';
 import type { UISpec } from '../../spec';
 import { StageRenderer } from '../../renderer';
 import { renderMessageText } from './renderMessageText';
+import { SelectionBreadcrumb } from './SelectionBreadcrumb';
 
 function getToolActionLabel(toolName: string): string {
   switch (toolName) {
@@ -65,74 +66,85 @@ export function SystemMessage({
       : annotation?.reason ?? '';
   const titleClass = isActive ? 'text-fg-strong font-medium mb-1' : 'text-fg-faint font-medium mb-1';
   const descriptionClass = isActive ? 'text-fg-muted text-sm mb-3' : 'text-fg-faint text-sm mb-3';
-  const stageCard = (
-    <div className="bg-dark border border-dark-border rounded-2xl rounded-tl-sm px-4 py-3">
-      {/* Stage Title */}
-      <div className={titleClass}>{spec.title}</div>
-      {spec.description && (
-        <div className={descriptionClass}>{spec.description}</div>
-      )}
+  const breadcrumb = <SelectionBreadcrumb spec={spec} subdued={!isActive} />;
+  const stageCardContent = (
+    <div className="w-full max-w-[444px] min-w-0">
+      <div className="flex items-start gap-3">
+        <div
+          className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary ${
+            isAgentControlled ? 'ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]' : ''
+          }`}
+        >
+          <svg
+            className="w-5 h-5 text-primary-fg"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+        <div className="w-[400px] max-w-[calc(100%-2.75rem)] min-w-0 rounded-2xl rounded-tl-sm border border-dark-border bg-dark px-4 py-3">
+          <div className={titleClass}>{spec.title}</div>
+          {spec.description && (
+            <div className={descriptionClass}>{spec.description}</div>
+          )}
 
-      {/* Stage Component */}
-      <div
-        className={`transition-opacity ${
-          !isActive ? 'opacity-50 pointer-events-none' : ''
-        }`}
-      >
-        <StageRenderer
-          spec={spec}
-          onSelect={isActive && onSelect ? onSelect : () => {}}
-          onToggle={isActive && onToggle ? onToggle : () => {}}
-          onNext={isActive && onNext ? onNext : () => {}}
-          onBack={isActive && onBack ? onBack : undefined}
-          onStartOver={isActive && onStartOver ? onStartOver : undefined}
-          onConfirm={isActive && onConfirm ? onConfirm : () => {}}
-        />
+          <div
+            className={`transition-opacity ${
+              !isActive ? 'opacity-50 pointer-events-none' : ''
+            }`}
+          >
+            <StageRenderer
+              spec={spec}
+              onSelect={isActive && onSelect ? onSelect : () => {}}
+              onToggle={isActive && onToggle ? onToggle : () => {}}
+              onNext={isActive && onNext ? onNext : () => {}}
+              onBack={isActive && onBack ? onBack : undefined}
+              onStartOver={isActive && onStartOver ? onStartOver : undefined}
+              onConfirm={isActive && onConfirm ? onConfirm : () => {}}
+            />
+          </div>
+        </div>
       </div>
+    </div>
+  );
+  const stageCard = (
+    <div className="w-full max-w-[444px] min-w-0">
+      <div className="ml-11 min-w-0">
+        {breadcrumb}
+      </div>
+      {stageCardContent}
     </div>
   );
 
   return (
-    <div className="flex gap-3 py-4 justify-start">
-      {/* System Avatar */}
-      <div
-        className={`flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center self-start mt-1 ${
-          isAgentControlled ? 'ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]' : ''
-        }`}
-      >
-        <svg
-          className="w-5 h-5 text-primary-fg"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-          />
-        </svg>
-      </div>
-
-      {/* Message Content */}
-      <div className="max-w-[85%] min-w-0">
+    <div className="py-4">
+      <div className="max-w-full min-w-0">
         {isToolModification ? (
-          <div className="-mr-3 rounded-2xl rounded-tl-sm p-3 bg-info-bg border border-info-border">
-            {annotation ? (
-              <div className="w-0 min-w-full">
-                <div className="text-info-label text-xs font-semibold mb-1">
-                  {annotation.source === 'devtools' ? 'DevTools' : 'Agent'}{' '}
-                  {getToolActionLabel(annotation.toolName)}
-                </div>
-                {toolDescriptionText ? (
-                  <div className="text-info-text text-base font-medium mb-3 whitespace-pre-wrap break-words">
-                    {renderMessageText(toolDescriptionText)}
+          <div className="w-full max-w-[444px] min-w-0">
+            {breadcrumb}
+            <div className="-mr-3 rounded-2xl rounded-tl-sm border border-info-border bg-info-bg p-3">
+              {annotation ? (
+                <div className="w-0 min-w-full">
+                  <div className="mb-1 text-info-label text-xs font-semibold">
+                    {annotation.source === 'devtools' ? 'DevTools' : 'Agent'}{' '}
+                    {getToolActionLabel(annotation.toolName)}
                   </div>
-                ) : null}
-              </div>
-            ) : null}
-            {stageCard}
+                  {toolDescriptionText ? (
+                    <div className="mb-3 whitespace-pre-wrap break-words text-base font-medium text-info-text">
+                      {renderMessageText(toolDescriptionText)}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {stageCardContent}
+            </div>
           </div>
         ) : (
           stageCard

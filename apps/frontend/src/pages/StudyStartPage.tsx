@@ -179,10 +179,6 @@ export function StudyStartPage({
                 className="w-full rounded-lg border border-dark-border bg-dark-light px-3 py-2 text-sm text-fg-strong outline-none transition-colors placeholder:text-fg-faint focus:border-primary"
               />
             </label>
-            <p className="mt-2 text-sm text-fg-muted">
-              PID를 입력하면 `PID + timestamp`, 비워두면 `timestamp`만으로 JSONL 로그 파일이
-              생성됩니다. 채팅 페이지 인터랙션은 실시간 append됩니다.
-            </p>
           </div>
         </section>
 

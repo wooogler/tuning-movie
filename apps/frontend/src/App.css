@@ -207,6 +207,25 @@
   animation: gui-highlight-wave 1.9s ease-out infinite;
 }
 
+@keyframes gui-highlight-border-once {
+  0% {
+    box-shadow: 0 0 0 0 rgba(229, 9, 20, 0);
+    filter: saturate(1);
+  }
+  35% {
+    box-shadow: 0 0 0 5px rgba(229, 9, 20, 0.22);
+    filter: saturate(1.06);
+  }
+  100% {
+    box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.18);
+    filter: saturate(1);
+  }
+}
+
+.gui-highlight-border-once {
+  animation: gui-highlight-border-once 900ms cubic-bezier(0.22, 1, 0.36, 1) 1 both;
+}
+
 .gui-stage-panel {
   will-change: transform, opacity, filter;
 }
@@ -241,6 +260,7 @@
   .gui-item-text-current,
   .gui-item-text-previous,
   .gui-highlight-wave,
+  .gui-highlight-border-once,
   .gui-stage-slide-in-down,
   .gui-stage-slide-out-up,
   .gui-stage-slide-in-up,

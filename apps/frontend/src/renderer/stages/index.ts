@@ -9,4 +9,4 @@ export { TimeStage } from './TimeStage';
 export { SeatStage } from './SeatStage';
 export { ConfirmStage } from './ConfirmStage';
 export { ActionBar } from './ActionBar';
-export type { StageProps } from './types';
+export type { StageProps, GuiMotionProfile } from './types';
