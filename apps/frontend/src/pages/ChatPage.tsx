@@ -23,10 +23,13 @@ import {
   generateSeatSpec,
   generateConfirmSpec,
   createDateItems,
+  refreshVisibleItems,
   selectItem,
+  selectItems,
   toggleItem,
   type ConfirmMeta,
   type BookingContext,
+  type DataItem,
   type UISpec,
   type Stage,
 } from '../spec';
@@ -43,6 +46,7 @@ import type { StudySessionState } from '../study/sessionStorage';
 
 interface StageContext {
   booking?: BookingContext;
+  restoreSnapshot?: boolean;
 }
 
 type ViewMode = 'chat' | 'carousel';
@@ -227,6 +231,73 @@ function projectBookingForStage(stage: Stage, booking: BookingContext): BookingC
   }
 }
 
+function getStageContextKey(stage: Stage, booking: BookingContext): string {
+  switch (stage) {
+    case 'movie':
+      return 'movie';
+    case 'theater':
+      return `movie:${booking.movie?.id ?? ''}`;
+    case 'date':
+      return `movie:${booking.movie?.id ?? ''}|theater:${booking.theater?.id ?? ''}`;
+    case 'time':
+      return `movie:${booking.movie?.id ?? ''}|theater:${booking.theater?.id ?? ''}|date:${booking.date ?? ''}`;
+    case 'seat':
+      return `movie:${booking.movie?.id ?? ''}|theater:${booking.theater?.id ?? ''}|date:${booking.date ?? ''}|showing:${booking.showing?.id ?? ''}`;
+    case 'confirm':
+      return `movie:${booking.movie?.id ?? ''}|theater:${booking.theater?.id ?? ''}|date:${booking.date ?? ''}|showing:${booking.showing?.id ?? ''}|seats:${(booking.selectedSeats ?? []).map((seat) => seat.id).join(',')}`;
+    default:
+      return '';
+  }
+}
+
+function getLatestStageSnapshot(stage: Stage): UISpec | null {
+  const { messages } = useChatStore.getState();
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.type === 'system' && message.stage === stage) {
+      return message.spec;
+    }
+  }
+
+  return null;
+}
+
+function restoreStageSnapshot<T extends DataItem>(
+  baseSpec: UISpec<T>,
+  stage: Stage,
+  booking: BookingContext,
+  snapshot: UISpec | null
+): UISpec<T> {
+  let spec = withBookingContext(baseSpec, booking);
+
+  if (!snapshot || snapshot.stage !== stage) {
+    return spec;
+  }
+
+  const snapshotBooking = getBookingContext(snapshot);
+  if (getStageContextKey(stage, snapshotBooking) !== getStageContextKey(stage, booking)) {
+    return spec;
+  }
+
+  spec = refreshVisibleItems({
+    ...spec,
+    modification: snapshot.modification,
+  });
+
+  const selectedIds = snapshot.state.selectedList?.map((item) => item.id) ?? [];
+  if (selectedIds.length > 0) {
+    return selectItems(spec, selectedIds);
+  }
+
+  const selectedId = snapshot.state.selected?.id;
+  if (selectedId) {
+    return selectItem(spec, selectedId);
+  }
+
+  return spec;
+}
+
 export function ChatPage({
   theme,
   onThemeToggle,
@@ -404,6 +475,18 @@ export function ChatPage({
       setError(null);
 
       const bookingCtx = ctx.booking ?? getBookingContext(activeSpec);
+      const shouldRestoreSnapshot = ctx.restoreSnapshot !== false;
+      const buildStageSpec = <T extends DataItem>(
+        nextStage: Stage,
+        baseSpec: UISpec<T>,
+        booking: BookingContext
+      ) =>
+        restoreStageSnapshot(
+          baseSpec,
+          nextStage,
+          booking,
+          shouldRestoreSnapshot ? getLatestStageSnapshot(nextStage) : null
+        );
 
       try {
         switch (stage) {
@@ -411,7 +494,7 @@ export function ChatPage({
             const data = await api.getMovies();
             setMovies(data.movies);
             setBackendData({ movies: data.movies });
-            const spec = withBookingContext(generateMovieSpec(data.movies), {});
+            const spec = buildStageSpec('movie', generateMovieSpec(data.movies), {});
             addSystemMessage('movie', spec);
             setUiSpec(spec);
             break;
@@ -425,7 +508,8 @@ export function ChatPage({
             const data = await api.getTheatersByMovie(bookingCtx.movie.id);
             setTheaters(data.theaters);
             setBackendData({ theaters: data.theaters });
-            const spec = withBookingContext(
+            const spec = buildStageSpec(
+              'theater',
               generateTheaterSpec(data.theaters, bookingCtx.movie.id),
               bookingCtx
             );
@@ -442,7 +526,8 @@ export function ChatPage({
             const data = await api.getDates(bookingCtx.movie.id, bookingCtx.theater.id);
             setBackendData({ dates: data.dates });
             const dateItems = createDateItems(getFixedCurrentDate(), 14, data.dates);
-            const spec = withBookingContext(
+            const spec = buildStageSpec(
+              'date',
               generateDateSpec(dateItems, bookingCtx.movie.id, bookingCtx.theater.id),
               bookingCtx
             );
@@ -463,7 +548,8 @@ export function ChatPage({
             );
             setShowings(data.showings);
             setBackendData({ showings: data.showings });
-            const spec = withBookingContext(
+            const spec = buildStageSpec(
+              'time',
               generateTimeSpec(
                 data.showings,
                 bookingCtx.movie.id,
@@ -489,10 +575,7 @@ export function ChatPage({
             }
             const data = await api.getSeats(bookingCtx.showing.id);
             setBackendData({ seats: data.seats });
-            const spec = withBookingContext(
-              generateSeatSpec(data.seats),
-              bookingCtx
-            );
+            const spec = buildStageSpec('seat', generateSeatSpec(data.seats), bookingCtx);
             addSystemMessage('seat', spec);
             setUiSpec(spec);
             break;
@@ -529,7 +612,7 @@ export function ChatPage({
               totalPrice,
             };
 
-            const spec = withBookingContext(generateConfirmSpec(meta), bookingCtx);
+            const spec = buildStageSpec('confirm', generateConfirmSpec(meta), bookingCtx);
             addSystemMessage('confirm', spec);
             setUiSpec(spec);
             break;
@@ -547,7 +630,7 @@ export function ChatPage({
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true;
-      loadStageData('movie', { booking: {} });
+      loadStageData('movie', { booking: {}, restoreSnapshot: false });
     }
   }, [loadStageData]);
 
@@ -903,10 +986,10 @@ export function ChatPage({
     }
 
     setBooking(null);
-    loadStageData('movie', { booking: {} });
+    loadStageData('movie', { booking: {}, restoreSnapshot: false });
   }, [activeSpec, currentStage, addUserMessage, annotateLastAgentMessage, loadStageData]);
 
-  const handleRepeatStep = useCallback((_context?: ToolApplyContext) => {
+  const handleRepeatStep = useCallback(() => {
     if (!activeSpec) return;
     addSystemMessage(activeSpec.stage, activeSpec);
     setUiSpec(activeSpec);

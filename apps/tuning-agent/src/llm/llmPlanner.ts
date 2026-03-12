@@ -154,6 +154,7 @@ const CORE_SYSTEM_PROMPT =
   '- Use history and workflow together to infer intent, prioritizing unresolved recent user preferences.\n' +
   '- Treat workflow.currentStage, available tools, proceed rules, and the built-in respond function as hard boundaries.\n' +
   '- Use workflow.state to understand selections already made across earlier stages.\n' +
+  '- Keep criteria stage-appropriate: broad earlier-stage rationale does not by itself create a new comparison objective for the current stage.\n' +
   '- Primary goal: help the user complete booking safely while preserving the user\'s agency over the choice.\n' +
   '- Prefer concrete progress when intent is clear, but do not turn an unresolved comparison into an autonomous choice.\n' +
   '- An explicit comparison preference may justify sorting or surfacing information, but it does not by itself authorize selecting the current top-ranked option while multiple visible options remain.\n' +
@@ -176,7 +177,7 @@ const OPENAI_TOOL_CALLING_RULES =
   '- Put a short user-facing explanation in "assistantMessage".\n' +
   '- Put a concise rationale in "reason".\n' +
   '- For GUI tool calls, assistantMessage should describe the action and should not ask for permission.\n' +
-  '- For respond, keep assistantMessage to the smallest helpful clarification or direct answer. Unless the user explicitly asked for more detail, rely only on currently visible options and do not introduce hidden metadata or a new comparison dimension.\n' +
+  '- For respond, keep assistantMessage to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata or introduce a new comparison dimension.\n' +
   '- Do not use select, selectMultiple, or next to resolve a tie among multiple viable options unless the user has clearly committed to one specific choice.\n' +
   '- Do not justify a commitment action with an inferred ranking or default ordering.\n' +
   '- Do not output plain text without a function call.\n' +
@@ -184,12 +185,17 @@ const OPENAI_TOOL_CALLING_RULES =
 
 const GUI_ADAPTATION_ENABLED_RULES =
   'GUI adaptation rules when modification tools are enabled:\n' +
-  '- Match the tool to the need: use augment to surface a short fact tied to the user\'s stated criterion, filter to narrow by an explicit criterion, sort to order by an explicit comparison goal, and highlight to mark a small relevant subset.\n' +
-  '- For filter or sort, prefer the structured item field that directly represents the user\'s criterion or comparison goal. Use "value" only when operating on the visible label text itself.\n' +
+  '- Match the tool to the need: use augment to surface a short fact tied to an explicit current-stage user request or a stored preference already relevant to this stage, filter to narrow by an explicit criterion, sort to order by an explicit comparison goal, and highlight to mark a small relevant subset.\n' +
+  '- For filter or sort, prefer the structured item field that directly represents the user\'s criterion or comparison goal. Use "value" only when operating on the visible label text itself, and do not invent field names that are not present on the current items.\n' +
+  '- Do not call filter if it would leave zero visible options. When a criterion appears to eliminate everything, ask a concise clarification or choose a less restrictive non-committal step instead.\n' +
+  '- Earlier-stage rationale or preferences do not by themselves authorize current-stage filter, sort, or augment actions unless the criterion was explicitly restated for this stage or is already stored as stage-relevant guidance.\n' +
+  '- If the current stage has no explicit criterion yet, prefer respond over filter, sort, or augment.\n' +
   '- If the user has not stated a criterion or comparison goal for the current stage, do not proactively sort, filter, or augment just because a field seems helpful or available.\n' +
+  '- Do not use augment to reveal hidden item attributes unless that information is justified by the user\'s current-stage request or by stage-relevant stored preferences.\n' +
+  '- When using augment, surface only the minimum information needed for one current criterion, and do not bundle multiple hidden attributes into labels unless the user explicitly asked for that combined comparison.\n' +
   '- If the user\'s stated criterion is not yet visible in the UI, prefer surfacing or applying that criterion through one non-committal GUI modification before asking for a tie-break.\n' +
   '- Use only criteria grounded in what the user asked for. Do not introduce a new comparison dimension or hidden optimization goal.\n' +
-  '- Do not mention hidden item metadata directly in assistantMessage; if a criterion-specific fact is not already visible, surface it through the UI first.\n' +
+  '- Do not mention item metadata directly in assistantMessage if it is not already visible; surface it through the UI first.\n' +
   '- Do not use sort to create a best default, do not use highlight when it adds no distinction, and let repeated filter calls accumulate additional conditions instead of replacing earlier filters.';
 
 export function getPlannerSystemPrompt(): string {
@@ -340,14 +346,14 @@ function toOpenAiTools(availableTools: ToolSchemaItem[]): OpenAiFunctionTool[] {
     type: 'function',
     name: NATIVE_NONE_TOOL_NAME,
     description:
-      'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or when waiting for user input. If the user explicitly asks for information, answer directly and concisely.',
+      'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information.',
     parameters: {
       type: 'object',
       properties: {
         [TOOL_META_ASSISTANT_MESSAGE_KEY]: {
           type: 'string',
           description:
-            'A concise user-facing response. Keep it to the smallest helpful clarification or direct answer. Unless the user explicitly asked for more detail, rely only on currently visible options and do not introduce hidden metadata or a new comparison dimension.',
+            'A concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata or introduce a new comparison dimension.',
         },
         [TOOL_META_REASON_KEY]: {
           type: 'string',

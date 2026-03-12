@@ -28,12 +28,12 @@ export const modificationTools: ToolDefinition[] = [
   {
     name: 'filter',
     description:
-      'Add a filter condition; repeated filter calls accumulate with AND semantics. For structured criteria, prefer the item attribute that directly represents the user\'s request. Use "value" only when filtering the visible label text itself.',
+      'Add a filter condition; repeated filter calls accumulate with AND semantics. For structured criteria, prefer the item attribute that directly represents the user\'s request. Use "value" only when filtering the visible label text itself. Use only fields that already exist on the current items, and do not apply a filter that would leave zero visible options.',
     parameters: {
       field: {
         type: 'string',
         description:
-          'Field to filter by. Prefer the structured item attribute that directly encodes the user\'s criterion, such as "genre", "time", or "format". Use "value" only when the criterion is literally expressed in the visible label text. Do not add a new filtering objective the user did not ask for.',
+          'Field to filter by. Prefer the structured item attribute that directly encodes the user\'s criterion, such as "genre", "time", or "format". Use "value" only when the criterion is literally expressed in the visible label text. Do not invent new field names or add a new filtering objective the user did not ask for.',
       },
       operator: {
         type: 'string',
@@ -49,7 +49,7 @@ export const modificationTools: ToolDefinition[] = [
   {
     name: 'sort',
     description:
-      'Sort items by a specific field only when the user explicitly asked for that comparison objective in the current stage and the ordering basis is already visible or has already been surfaced through the UI. Prefer the structured comparison attribute over "value" unless sorting the visible label text itself. Do not use this just because a field seems helpful or available.',
+      'Sort items by a specific field only when the user explicitly asked for that comparison objective in the current stage and the ordering basis is already visible or has already been surfaced through the UI. Prefer the structured comparison attribute over "value" unless sorting the visible label text itself. Do not use this just because a field seems helpful or available, and do not invent new field names.',
     parameters: {
       field: {
         type: 'string',
@@ -77,7 +77,7 @@ export const modificationTools: ToolDefinition[] = [
   {
     name: 'augment',
     description:
-      'Change the display value of specific items to surface short information tied to the user\'s stated criterion without committing to a selection. Do not use this to add a new comparison dimension or to proactively expose a new decision axis when the user has not asked for one in the current stage.',
+      'Change the display value of specific items to surface short information tied to an explicit current-stage user request or a stored preference already relevant to this stage, without committing to a selection. Do not use this to add a new comparison dimension or to proactively expose hidden metadata just because it exists.',
     parameters: {
       items: {
         type: 'array',
@@ -136,7 +136,7 @@ export const interactionTools: ToolDefinition[] = [
   },
   {
     name: 'prev',
-    description: 'Go back to previous stage (current state is discarded)',
+    description: 'Go back to previous stage while restoring the last compatible snapshot for that stage when available',
     parameters: {},
   },
   {

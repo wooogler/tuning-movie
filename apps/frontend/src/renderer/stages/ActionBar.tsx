@@ -38,7 +38,7 @@ export function ActionBar({
                 ? 'bg-dark-border/50 text-fg-faint cursor-not-allowed'
                 : 'bg-dark-border text-fg-strong hover:bg-dark-lighter'
             }`}
-            onClick={onBack}
+            onClick={() => onBack()}
             disabled={backDisabled}
           >
             {backLabel}
@@ -53,7 +53,7 @@ export function ActionBar({
                 ? 'bg-primary/50 text-primary-fg/50 cursor-not-allowed'
                 : 'bg-primary hover:bg-primary-hover text-primary-fg'
             }`}
-            onClick={onNext}
+            onClick={() => onNext()}
             disabled={nextDisabled}
           >
             {nextLabel}
@@ -63,7 +63,7 @@ export function ActionBar({
       {onStartOver && (
         <button
           type="button"
-          onClick={onStartOver}
+          onClick={() => onStartOver()}
           className="bg-transparent p-0 text-sm text-fg-muted underline underline-offset-4 transition-colors hover:text-fg-strong"
         >
           {startOverLabel}

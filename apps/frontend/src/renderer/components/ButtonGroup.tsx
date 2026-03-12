@@ -51,6 +51,10 @@ export function ButtonGroup({
   const highlightSet = useMemo(() => new Set(highlightedIds), [highlightedIds]);
   const filteredOutSet = useMemo(() => new Set(filteredOutIds), [filteredOutIds]);
   const hasExpandableFilter = Boolean(allItems) && filteredOutIds.length > 0;
+  const filterToggleLabel = isExpanded ? 'Show less' : 'Show all';
+  const filterToggleTitle = isExpanded
+    ? 'Hide filtered-out items'
+    : `${filteredOutIds.length} filtered item(s) hidden. Show all items.`;
   const sourceItems = useMemo(
     () => (hasExpandableFilter && isExpanded && allItems ? allItems : items),
     [allItems, hasExpandableFilter, isExpanded, items]
@@ -292,9 +296,9 @@ export function ButtonGroup({
             type="button"
             onClick={() => setIsExpanded((current) => !current)}
             className="rounded-full border border-dark-border bg-dark-light/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-fg-muted transition-colors hover:border-primary hover:text-fg-strong"
-            title={`${filteredOutIds.length} filtered item(s) available for inspection`}
+            title={filterToggleTitle}
           >
-            {isExpanded ? 'Collapse' : 'Expand'}
+            {filterToggleLabel}
           </button>
         </div>
       ) : null}

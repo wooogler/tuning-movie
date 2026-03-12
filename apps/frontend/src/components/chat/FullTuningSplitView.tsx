@@ -149,7 +149,7 @@ function getSnapshotContextLabel(snapshot: GuiSnapshot): string {
   if (snapshot.linkedActionTag) {
     return `Agent ${getAgentActionLabel(snapshot.linkedActionTag)}`;
   }
-  return snapshot.isLatest ? 'Live GUI' : 'GUI snapshot';
+  return snapshot.spec.title;
 }
 
 function getSnapshotContextText(snapshot: GuiSnapshot): string {
@@ -162,9 +162,10 @@ function getSnapshotContextText(snapshot: GuiSnapshot): string {
   const actionReason = snapshot.linkedActionTag?.reason?.trim();
   if (actionReason) return actionReason;
 
-  return snapshot.isLatest
-    ? 'The latest GUI state is shown here.'
-    : 'Scroll the conversation to inspect earlier GUI states.';
+  const stageDescription = snapshot.spec.description?.trim();
+  if (stageDescription) return stageDescription;
+
+  return snapshot.spec.title;
 }
 
 function buildMarkerLabel(snapshot: GuiSnapshot): string {
@@ -266,7 +267,6 @@ export function FullTuningSplitView({
       }
 
       if (message.type === 'user') {
-        if (message.action !== 'input') continue;
         registerRow({
           id: message.id,
           type: 'user',
@@ -525,19 +525,19 @@ export function FullTuningSplitView({
             {latestSnapshotIndex >= 0 ? `${activeSnapshotIndex + 1} / ${latestSnapshotIndex + 1}` : '0 / 0'}
           </div>
 
-          <div className="flex h-full flex-col gap-4 pt-10">
+          <div className="flex h-full flex-col gap-3 pt-10">
             <SnapshotNavButton
               direction="prev"
               disabled={!canGoToPreviousSnapshot}
               onClick={() => scrollToSnapshot(activeSnapshotIndex - 1)}
             />
 
-            <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-hidden px-4 py-2 sm:min-h-[360px]">
+            <div className="min-h-[320px] flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 sm:min-h-[360px] sm:px-4">
               {activeSnapshot ? (
-                <div className="relative flex h-full w-full max-w-2xl items-center justify-center">
+                <div className="relative flex min-h-full w-full max-w-2xl items-center justify-center py-1">
                   {transitionState?.outgoing ? (
                     <div
-                      className={`absolute inset-0 flex items-center justify-center gui-stage-panel ${
+                      className={`absolute inset-0 flex items-center justify-center py-1 gui-stage-panel ${
                         transitionState.direction === 'forward'
                           ? 'gui-stage-slide-out-up'
                           : 'gui-stage-slide-out-down'
@@ -552,7 +552,7 @@ export function FullTuningSplitView({
                   ) : null}
 
                   <div
-                    className={`relative flex h-full w-full items-center justify-center gui-stage-panel ${
+                    className={`relative flex min-h-full w-full items-center justify-center py-1 gui-stage-panel ${
                       transitionState
                         ? transitionState.direction === 'forward'
                           ? 'gui-stage-slide-in-down'
@@ -764,10 +764,10 @@ function SnapshotNavButton({
       title={isPrevious ? 'Show previous GUI snapshot' : 'Show next GUI snapshot'}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-12 w-20 shrink-0 items-center justify-center self-center rounded-2xl border border-dark-border bg-dark-light text-fg-muted transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-35 sm:h-14 sm:w-24"
+      className="flex h-10 w-16 shrink-0 items-center justify-center self-center rounded-2xl border border-dark-border bg-dark-light text-fg-muted transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-35 sm:h-11 sm:w-20"
     >
       <svg
-        className="h-5 w-5"
+        className="h-4 w-4 sm:h-5 sm:w-5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"

@@ -186,8 +186,6 @@ export interface TimeItem extends DataItem {
   id: string;
   time: string;
   format: 'Standard' | 'IMAX' | '3D';
-  availableSeats: number;
-  totalSeats: number;
 }
 
 export function generateTimeSpec(
@@ -200,8 +198,6 @@ export function generateTimeSpec(
     id: s.id,
     time: formatTime12Hour(s.time),
     format: s.format,
-    availableSeats: s.availableSeats,
-    totalSeats: s.totalSeats,
   }));
 
   return createSpec({

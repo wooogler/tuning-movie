@@ -58,9 +58,14 @@ export function useToolHandler<T extends DataItem>({
         let newSpec = spec;
 
         switch (toolName) {
-          case 'filter':
-            newSpec = applyFilter(spec, params as unknown as FilterState);
+          case 'filter': {
+            const filteredSpec = applyFilter(spec, params as unknown as FilterState);
+            if (context?.source !== 'devtools' && filteredSpec.visibleItems.length === 0) {
+              throw new Error('filter would leave no visible items');
+            }
+            newSpec = filteredSpec;
             break;
+          }
           case 'sort':
             newSpec = applySort(spec, params as unknown as SortState);
             break;
