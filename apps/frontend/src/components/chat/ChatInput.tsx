@@ -15,6 +15,9 @@ interface ChatInputProps {
   placeholder?: string;
   chatWidthPx?: number | null;
   onSubmit?: (text: string) => void;
+  voiceModeEnabled?: boolean;
+  voiceStatusLabel?: string | null;
+  voiceError?: string | null;
 }
 
 export function ChatInput({
@@ -22,11 +25,16 @@ export function ChatInput({
   placeholder = 'Type a message...',
   chatWidthPx = 768,
   onSubmit,
+  voiceModeEnabled = false,
+  voiceStatusLabel = null,
+  voiceError = null,
 }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldRestoreFocusRef = useRef(false);
   const previousDisabledRef = useRef(disabled);
+  const isInputReady = !disabled;
+  const isVoiceInputHighlighted = isInputReady && voiceModeEnabled;
 
   const handleSubmit = () => {
     const trimmed = text.trim();
@@ -80,45 +88,72 @@ export function ChatInput({
         className="mx-auto w-full"
         style={chatWidthPx ? { width: `min(100%, ${chatWidthPx}px)` } : undefined}
       >
-        <div className="flex items-end gap-3">
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            disabled={disabled}
-            placeholder={placeholder}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            className={`flex-1 resize-none bg-dark-light border border-dark-border rounded-3xl px-4 py-3 text-fg-strong placeholder-fg-faint leading-6 focus:outline-none focus:border-primary ${
-              disabled ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-          />
-          <button
-            disabled={disabled}
-            onClick={handleSubmit}
-            className={`w-10 h-10 rounded-full bg-primary flex items-center justify-center ${
-              disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-primary/80'
-            }`}
-          >
-            <svg
-              className="w-5 h-5 text-primary-fg"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        {(voiceModeEnabled || voiceStatusLabel || voiceError) && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 px-2 text-xs">
+            {voiceModeEnabled && (
+              <span className="rounded-full border border-info-border bg-info-bg px-2 py-1 text-info-text">
+                Voice mode
+              </span>
+            )}
+            {voiceStatusLabel && (
+              <span className="text-fg-muted">{voiceStatusLabel}</span>
+            )}
+            {voiceError && (
+              <span className="text-primary">{voiceError}</span>
+            )}
+          </div>
+        )}
+        <div
+          className={`rounded-[30px] p-1 transition-[background-color,border-color,box-shadow] duration-200 ${
+            isVoiceInputHighlighted
+              ? 'border border-rose-500/70 bg-rose-500/[0.08] shadow-[0_0_0_3px_rgba(244,63,94,0.18)]'
+              : 'border border-transparent'
+          }`}
+        >
+          <div className="flex items-end gap-3">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              disabled={disabled}
+              placeholder={placeholder}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              className={`flex-1 resize-none rounded-3xl border bg-dark-light px-4 py-3 leading-6 text-fg-strong placeholder-fg-faint transition-colors focus:outline-none ${
+                isVoiceInputHighlighted
+                  ? 'border-rose-400/70 focus:border-rose-300'
+                  : 'border-dark-border focus:border-primary'
+              } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+            />
+            <button
+              disabled={disabled}
+              onClick={handleSubmit}
+              className={`self-center flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors ${
+                isVoiceInputHighlighted
+                  ? 'bg-rose-500 text-white hover:bg-rose-400'
+                  : 'bg-primary text-primary-fg'
+              } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-              />
-            </svg>
-          </button>
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>

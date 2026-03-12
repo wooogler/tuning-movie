@@ -72,7 +72,29 @@ function parseContentDispositionFileName(value: string | null): string | null {
   return basicMatch?.[1] ?? null;
 }
 
-async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise<T> {
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Failed to encode audio payload'));
+        return;
+      }
+
+      const separatorIndex = reader.result.indexOf(',');
+      resolve(separatorIndex >= 0 ? reader.result.slice(separatorIndex + 1) : reader.result);
+    };
+
+    reader.onerror = () => {
+      reject(new Error('Failed to read audio payload'));
+    };
+
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchApiResponse(endpoint: string, options?: FetchApiOptions): Promise<Response> {
   const {
     includeStudyToken = true,
     studyToken: explicitStudyToken,
@@ -106,6 +128,11 @@ async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise
     throw new Error(message);
   }
 
+  return response;
+}
+
+async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise<T> {
+  const response = await fetchApiResponse(endpoint, options);
   return response.json();
 }
 
@@ -217,11 +244,29 @@ export const api = {
     fetchApi<{ booking: Booking }>(`/bookings/${id}`, { method: 'DELETE' }),
 
   // Agent config
-  getAgentModel: () => fetchApi<{ model: 'openai' }>('/agent/config/model'),
   getGuiAdaptationConfig: () => fetchApi<{ enabled: boolean }>('/agent/config/gui-adaptation'),
   setGuiAdaptationConfig: (enabled: boolean) =>
     fetchApi<{ enabled: boolean }>('/agent/config/gui-adaptation', {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     }),
+  transcribeSpeech: async (audio: Blob, language: 'en' | 'ko') => {
+    const audioBase64 = await blobToBase64(audio);
+    return fetchApi<{ text: string; language: 'en' | 'ko' }>('/speech/transcribe', {
+      method: 'POST',
+      body: JSON.stringify({
+        audioBase64,
+        mimeType: audio.type || 'audio/webm',
+        language,
+      }),
+    });
+  },
+  synthesizeSpeech: async (text: string, signal?: AbortSignal) => {
+    const response = await fetchApiResponse('/speech/synthesize', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+      signal,
+    });
+    return response.blob();
+  },
 };

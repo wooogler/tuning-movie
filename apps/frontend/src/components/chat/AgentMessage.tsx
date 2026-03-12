@@ -4,10 +4,21 @@ import { renderMessageText } from './renderMessageText';
 interface AgentMessageProps {
   message: AgentMessageType;
   highlighted?: boolean;
+  speaking?: boolean;
 }
 
-export function AgentMessage({ message, highlighted = false }: AgentMessageProps) {
+export function AgentMessage({
+  message,
+  highlighted = false,
+  speaking = false,
+}: AgentMessageProps) {
   const actionTag = message.actionTag;
+  const containerClass = highlighted
+    ? 'border border-primary/45 bg-primary/5'
+    : 'border border-transparent';
+  const bubbleClass = speaking
+    ? 'border border-rose-400/70 bg-rose-500/[0.08] text-info-text'
+    : 'border border-info-border bg-info-bg text-info-text';
 
   return (
     <div className="flex gap-3 py-4 justify-start">
@@ -28,9 +39,7 @@ export function AgentMessage({ message, highlighted = false }: AgentMessageProps
       </div>
 
       <div
-        className={`max-w-[80%] min-w-0 rounded-3xl px-3 py-2 transition-colors duration-700 ${
-          highlighted ? 'border border-primary/45 bg-primary/5' : 'border border-transparent'
-        }`}
+        className={`max-w-[80%] min-w-0 rounded-3xl px-3 py-2 transition-colors duration-700 ${containerClass}`}
       >
         <div className="text-sm text-info-label mb-1 flex items-center gap-2">
           <span>Agent</span>
@@ -43,7 +52,9 @@ export function AgentMessage({ message, highlighted = false }: AgentMessageProps
             </span>
           ) : null}
         </div>
-        <div className="rounded-2xl rounded-tl-sm px-4 py-2 bg-info-bg border border-info-border text-info-text text-base font-medium whitespace-pre-wrap break-words">
+        <div
+          className={`rounded-2xl rounded-tl-sm px-4 py-2 text-base font-medium whitespace-pre-wrap break-words ${bubbleClass}`}
+        >
           {renderMessageText(message.text)}
         </div>
       </div>

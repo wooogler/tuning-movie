@@ -33,6 +33,7 @@ interface SystemMessageProps {
   message: SystemMessageType;
   isActive: boolean;
   linkedAssistantText?: string;
+  linkedAssistantSpeaking?: boolean;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
   onNext?: () => void;
@@ -47,6 +48,7 @@ export function SystemMessage({
   message,
   isActive,
   linkedAssistantText,
+  linkedAssistantSpeaking = false,
   onSelect,
   onToggle,
   onNext,
@@ -64,9 +66,13 @@ export function SystemMessage({
     typeof linkedAssistantText === 'string' && linkedAssistantText.trim()
       ? linkedAssistantText.trim()
       : annotation?.reason ?? '';
+  const toolDescriptionClass = 'mb-3 whitespace-pre-wrap break-words text-base font-medium text-info-text';
   const titleClass = isActive ? 'text-fg-strong font-medium mb-1' : 'text-fg-faint font-medium mb-1';
   const descriptionClass = isActive ? 'text-fg-muted text-sm mb-3' : 'text-fg-faint text-sm mb-3';
   const breadcrumb = <SelectionBreadcrumb spec={spec} subdued={!isActive} />;
+  const stageCardClass = linkedAssistantSpeaking
+    ? 'w-[400px] max-w-[calc(100%-2.75rem)] min-w-0 rounded-2xl rounded-tl-sm border border-rose-500/70 bg-dark px-4 py-3 shadow-[0_0_0_3px_rgba(244,63,94,0.18)]'
+    : 'w-[400px] max-w-[calc(100%-2.75rem)] min-w-0 rounded-2xl rounded-tl-sm border border-dark-border bg-dark px-4 py-3';
   const stageCardContent = (
     <div className="w-full max-w-[444px] min-w-0">
       <div className="flex items-start gap-3">
@@ -89,7 +95,7 @@ export function SystemMessage({
             />
           </svg>
         </div>
-        <div className="w-[400px] max-w-[calc(100%-2.75rem)] min-w-0 rounded-2xl rounded-tl-sm border border-dark-border bg-dark px-4 py-3">
+        <div className={stageCardClass}>
           <div className={titleClass}>{spec.title}</div>
           {spec.description && (
             <div className={descriptionClass}>{spec.description}</div>
@@ -129,15 +135,17 @@ export function SystemMessage({
         {isToolModification ? (
           <div className="w-full max-w-[444px] min-w-0">
             {breadcrumb}
-            <div className="-mr-3 rounded-2xl rounded-tl-sm border border-info-border bg-info-bg p-3">
+            <div className="-mr-3 rounded-2xl rounded-tl-sm border border-info-border bg-info-bg p-3 transition-colors">
               {annotation ? (
                 <div className="w-0 min-w-full">
                   <div className="mb-1 text-info-label text-xs font-semibold">
-                    {annotation.source === 'devtools' ? 'DevTools' : 'Agent'}{' '}
-                    {getToolActionLabel(annotation.toolName)}
+                    <span>
+                      {annotation.source === 'devtools' ? 'DevTools' : 'Agent'}{' '}
+                      {getToolActionLabel(annotation.toolName)}
+                    </span>
                   </div>
                   {toolDescriptionText ? (
-                    <div className="mb-3 whitespace-pre-wrap break-words text-base font-medium text-info-text">
+                    <div className={toolDescriptionClass}>
                       {renderMessageText(toolDescriptionText)}
                     </div>
                   ) : null}

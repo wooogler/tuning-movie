@@ -131,8 +131,6 @@ function App() {
                 path="/task-review"
                 element={selectedScenarioId ? (
                   <ScenarioReviewPage
-                    theme={theme}
-                    onThemeToggle={handleThemeToggle}
                     studyMode={studyMode}
                     selectedScenarioId={selectedScenarioId}
                     loggingParticipantId={loggingParticipantId}
@@ -146,8 +144,6 @@ function App() {
                 path="/booking"
                 element={studySession ? (
                   <ChatPage
-                    theme={theme}
-                    onThemeToggle={handleThemeToggle}
                     studyModePreset={studyMode}
                     studySession={studySession}
                   />
@@ -159,8 +155,6 @@ function App() {
                 path="/end"
                 element={
                   <StudyEndPage
-                    theme={theme}
-                    onThemeToggle={handleThemeToggle}
                     selectedMode={studyMode}
                     selectedScenarioTitle={selectedScenarioTitle}
                     onResetMode={handleStudyReset}

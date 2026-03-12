@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getSessionContextByToken } from '../study/sessionService';
 
-const PROTECTED_PREFIXES = ['/movies', '/theaters', '/showings', '/seats', '/bookings'];
+const PROTECTED_PREFIXES = ['/movies', '/theaters', '/showings', '/seats', '/bookings', '/speech'];
 
 function isProtectedPath(url: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => url === prefix || url.startsWith(`${prefix}/`) || url.startsWith(`${prefix}?`));

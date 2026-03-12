@@ -5,11 +5,7 @@ import type { StudyModeId } from './studyOptions';
 import { ScenarioBriefing } from '../components/scenario/ScenarioBriefing';
 import type { StudyScenarioDetail, StudySessionState } from '../study/sessionStorage';
 
-type Theme = 'dark' | 'light';
-
 interface ScenarioReviewPageProps {
-  theme: Theme;
-  onThemeToggle: () => void;
   studyMode: StudyModeId;
   selectedScenarioId: string;
   loggingParticipantId: string;
@@ -17,8 +13,6 @@ interface ScenarioReviewPageProps {
 }
 
 export function ScenarioReviewPage({
-  theme,
-  onThemeToggle,
   studyMode,
   selectedScenarioId,
   loggingParticipantId,
@@ -87,17 +81,6 @@ export function ScenarioReviewPage({
               Review the story and preferences before entering the booking task.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onThemeToggle}
-            className={`px-3 py-1 text-xs rounded border transition-colors ${
-              theme === 'dark'
-                ? 'border-amber-300/60 bg-amber-100/10 text-amber-200 hover:border-amber-200 hover:text-amber-100'
-                : 'border-sky-500/45 bg-sky-500/10 text-sky-700 hover:border-sky-500 hover:text-sky-800'
-            }`}
-          >
-            {theme === 'dark' ? 'Bright Mode' : 'Dark Mode'}
-          </button>
         </div>
 
         {loadingScenarios ? (

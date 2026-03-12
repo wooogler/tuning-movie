@@ -62,7 +62,7 @@ interface ChatActions {
   addUserMessage: (stage: Stage, action: 'select' | 'back' | 'input', label: string) => void;
 
   /** Add agent explanation message */
-  addAgentMessage: (stage: Stage, text: string) => void;
+  addAgentMessage: (stage: Stage, text: string) => string;
 
   /** Attach tool-action tag to the latest agent message in the stage */
   annotateLastAgentMessage: (stage: Stage, actionTag: AgentMessageActionTag) => void;
@@ -159,6 +159,8 @@ export const useChatStore = create<ChatState & ChatActions>((set) => ({
     set((state) => ({
       messages: [...state.messages, message],
     }));
+
+    return message.id;
   },
 
   annotateLastAgentMessage: (stage, actionTag) => {

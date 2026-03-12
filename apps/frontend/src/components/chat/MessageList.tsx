@@ -9,6 +9,7 @@ interface MessageListProps {
   messages: ChatMessage[];
   activeSpec: UISpec | null;
   isAgentTyping?: boolean;
+  speakingMessageId?: string | null;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
   onNext?: () => void;
@@ -24,6 +25,7 @@ export function MessageList({
   messages,
   activeSpec,
   isAgentTyping = false,
+  speakingMessageId = null,
   onSelect,
   onToggle,
   onNext,
@@ -86,12 +88,17 @@ export function MessageList({
               previous && previous.type === 'agent' && isToolLinkedAgentMessage(index - 1)
                 ? previous.text
                 : undefined;
+            const linkedAssistantSpeaking =
+              previous && previous.type === 'agent' && isToolLinkedAgentMessage(index - 1)
+                ? previous.id === speakingMessageId
+                : false;
             return (
               <SystemMessage
                 key={message.id}
                 message={message}
                 isActive={isActive}
                 linkedAssistantText={linkedAssistantText}
+                linkedAssistantSpeaking={linkedAssistantSpeaking}
                 activeSpec={isActive ? activeSpec : null}
                 onSelect={onSelect}
                 onToggle={onToggle}
@@ -111,7 +118,13 @@ export function MessageList({
             return null;
           }
 
-          return <AgentMessage key={message.id} message={message} />;
+          return (
+            <AgentMessage
+              key={message.id}
+              message={message}
+              speaking={message.id === speakingMessageId}
+            />
+          );
         })}
 
         {isAgentTyping && (

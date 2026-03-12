@@ -36,7 +36,13 @@ import {
 import { MessageList, FullTuningSplitView, ChatInput } from '../components/chat';
 import { ScenarioBriefing } from '../components/scenario/ScenarioBriefing';
 import { StageRenderer } from '../renderer';
-import { useToolHandler, useAgentBridge, useStudyInteractionLogger } from '../hooks';
+import {
+  useToolHandler,
+  useAgentBridge,
+  useStudyInteractionLogger,
+  useVoiceInput,
+  useVoiceOutput,
+} from '../hooks';
 import { agentTools, type ToolDefinition } from '../agent/tools';
 import { getStudyModeConfig, type StudyModeId } from './studyOptions';
 import type { Movie, Theater, Showing, Booking } from '../types';
@@ -50,10 +56,8 @@ interface StageContext {
 }
 
 type ViewMode = 'chat' | 'carousel';
-type Theme = 'dark' | 'light';
+type SupportedSttLanguage = 'en' | 'ko';
 interface ChatPageProps {
-  theme: Theme;
-  onThemeToggle: () => void;
   studyModePreset?: StudyModeId;
   studySession?: StudySessionState | null;
 }
@@ -85,7 +89,6 @@ const baselineAutoAdvanceStages = new Set<Stage>(['movie', 'theater', 'date', 't
 const AGENT_BRIDGE_ENABLED_STORAGE_KEY = 'tuning-movie-agent-bridge-enabled';
 const PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY = 'tuning-movie-planner-cp-memory-limit';
 const GUI_ADAPTATION_ENABLED_STORAGE_KEY = 'tuning-movie-gui-adaptation-enabled';
-const SHOW_STUDY_CONTROL_BUTTONS = !import.meta.env.PROD;
 
 function readStorageValue(key: string): string | null {
   if (typeof window === 'undefined') return null;
@@ -118,6 +121,58 @@ function readStoredNonNegativeInt(key: string, fallback: number): number {
   const parsed = Number.parseInt(stored, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(0, parsed);
+}
+
+function getPreferredSttLanguage(): SupportedSttLanguage {
+  if (typeof navigator === 'undefined') return 'en';
+  const locales = [navigator.language, ...(navigator.languages ?? [])];
+  return locales.some(
+    (locale) => typeof locale === 'string' && locale.toLowerCase().startsWith('ko')
+  )
+    ? 'ko'
+    : 'en';
+}
+
+function getVoiceStatusLabel(params: {
+  voiceModeEnabled: boolean;
+  voiceInputSupported: boolean;
+  voiceInputStatus: string;
+  voiceOutputStatus: string;
+  hasLiveAgentSession: boolean;
+}): string | null {
+  const {
+    voiceModeEnabled,
+    voiceInputSupported,
+    voiceInputStatus,
+    voiceOutputStatus,
+    hasLiveAgentSession,
+  } = params;
+
+  if (!voiceModeEnabled) return null;
+  if (!voiceInputSupported) return 'Voice mode is unavailable in this browser.';
+  if (voiceOutputStatus === 'synthesizing') return 'Generating the agent voice...';
+  if (voiceOutputStatus === 'playing') return 'Speaking the agent reply...';
+
+  switch (voiceInputStatus) {
+    case 'requesting-permission':
+      return 'Requesting microphone access...';
+    case 'capturing':
+      return 'Listening to your turn...';
+    case 'transcribing':
+      return 'Transcribing your speech...';
+    case 'suspended':
+      return hasLiveAgentSession
+        ? 'Waiting for the agent to finish...'
+        : 'Waiting for the agent session...';
+    case 'listening':
+      return hasLiveAgentSession ? 'Listening automatically...' : 'Waiting for the agent session...';
+    case 'error':
+      return 'Voice mode hit an error.';
+    case 'unsupported':
+      return 'Voice mode is unavailable in this browser.';
+    default:
+      return hasLiveAgentSession ? 'Voice mode is ready.' : 'Waiting for the agent session...';
+  }
 }
 
 function canUseNextTool(spec: UISpec): boolean {
@@ -299,8 +354,6 @@ function restoreStageSnapshot<T extends DataItem>(
 }
 
 export function ChatPage({
-  theme,
-  onThemeToggle,
   studyModePreset,
   studySession,
 }: ChatPageProps) {
@@ -335,6 +388,7 @@ export function ChatPage({
   const [guiAdaptationEnabled, setGuiAdaptationEnabled] = useState<boolean>(() =>
     readStoredBoolean(GUI_ADAPTATION_ENABLED_STORAGE_KEY, true)
   );
+  const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
   const [carouselOffset, setCarouselOffset] = useState(0);
   const [carouselOpacity, setCarouselOpacity] = useState(1);
   const [chatWidthPx, setChatWidthPx] = useState(DEFAULT_CHAT_WIDTH_PX);
@@ -344,6 +398,7 @@ export function ChatPage({
   );
   const [isResizingScenarioPanelWidth, setIsResizingScenarioPanelWidth] = useState(false);
   const [awaitingAgentResponse, setAwaitingAgentResponse] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [downloadingLog, setDownloadingLog] = useState(false);
 
   const initialized = useRef(false);
@@ -354,15 +409,14 @@ export function ChatPage({
   const scenarioPanelResizeSessionRef = useRef<{ startX: number; startWidth: number } | null>(
     null
   );
-  const pendingAgentToggleResetReasonRef = useRef<string | null>(null);
   const agentStatusSupportedRef = useRef(false);
   const studyModeConfig = useMemo(
     () => (studyModePreset ? getStudyModeConfig(studyModePreset) : null),
     [studyModePreset]
   );
-  const sessionLocked = Boolean(studySession);
   const isBaselineMode = studyModePreset === 'baseline';
   const isFullTuningSplit = studyModePreset === 'full-tuning';
+  const sttLanguage = useMemo(() => getPreferredSttLanguage(), []);
   const { logEvent: logStudyEvent, logEventNow: logStudyEventNow } = useStudyInteractionLogger({
     studySession,
     messages,
@@ -651,13 +705,15 @@ export function ChatPage({
     writeStorageValue(GUI_ADAPTATION_ENABLED_STORAGE_KEY, String(guiAdaptationEnabled));
   }, [guiAdaptationEnabled]);
 
-  const handleGuiAdaptationToggle = useCallback(() => {
-    const nextEnabled = !guiAdaptationEnabled;
-    setGuiAdaptationEnabled(nextEnabled);
-    api.setGuiAdaptationConfig(nextEnabled).catch(() => {
-      setGuiAdaptationEnabled(!nextEnabled);
+  const handleVoiceModeToggle = useCallback(() => {
+    setVoiceModeEnabled((current) => {
+      const nextEnabled = !current;
+      logStudyEvent('chat.voice_mode.toggled', {
+        enabled: nextEnabled,
+      });
+      return nextEnabled;
     });
-  }, [guiAdaptationEnabled]);
+  }, [logStudyEvent]);
 
   useEffect(() => {
     const handleWindowResize = () => {
@@ -995,20 +1051,6 @@ export function ChatPage({
     setUiSpec(activeSpec);
   }, [activeSpec, addSystemMessage, setUiSpec]);
 
-  useToolHandler({
-    spec: activeSpec,
-    setSpec: handleSetSpec,
-    onNext: handleNext,
-    onBack: handleBack,
-    onStartOver: handleStartOver,
-    onRepeatStep: handleRepeatStep,
-    onPostMessage: (text: string) => {
-      const stage = activeSpec?.stage ?? currentStage;
-      addAgentMessage(stage, text);
-    },
-    multiSelect: currentStage === 'seat',
-  });
-
   const handleSessionReset = useCallback(() => {
     resetChat();
     setBooking(null);
@@ -1049,11 +1091,29 @@ export function ChatPage({
     return result;
   }, [onToolApply, isBaselineMode, handleNext]);
 
+  const {
+    status: voiceOutputStatus,
+    error: voiceOutputError,
+    isSpeaking: isVoiceOutputActive,
+    speak: speakAgentMessage,
+    stop: stopAgentSpeech,
+  } = useVoiceOutput({
+    enabled: voiceModeEnabled && agentBridgeEnabled,
+    synthesizeSpeech: (text: string, signal?: AbortSignal) => api.synthesizeSpeech(text, signal),
+    onLogEvent: logStudyEvent,
+    onActiveItemChange: (item) => {
+      setSpeakingMessageId(item?.id ?? null);
+    },
+  });
+
   const handleAgentMessage = useCallback((text: string) => {
+    const normalizedText = text.trim();
+    if (!normalizedText) return;
     setAwaitingAgentResponse(false);
     const stage = activeSpec?.stage ?? currentStage;
-    addAgentMessage(stage, text);
-  }, [activeSpec, currentStage, addAgentMessage]);
+    const messageId = addAgentMessage(stage, normalizedText);
+    void speakAgentMessage({ id: messageId, text: normalizedText });
+  }, [activeSpec, currentStage, addAgentMessage, speakAgentMessage]);
 
   const {
     sendUserMessageToAgent,
@@ -1081,24 +1141,78 @@ export function ChatPage({
     agentStatusSupportedRef.current = agentStatusSupported;
   }, [agentStatusSupported]);
 
+  const submitChatInput = useCallback(
+    (text: string, source: 'text' | 'voice' = 'text') => {
+      const trimmed = text.trim();
+      if (!trimmed || !agentBridgeEnabled) return;
+
+      stopAgentSpeech();
+      logStudyEvent('chat.user_input.submitted', {
+        stage: currentStage,
+        text: trimmed,
+        source,
+      });
+      addUserMessage(currentStage, 'input', trimmed);
+      setAwaitingAgentResponse(true);
+      sendUserMessageToAgent(trimmed, currentStage);
+    },
+    [
+      addUserMessage,
+      agentBridgeEnabled,
+      currentStage,
+      logStudyEvent,
+      sendUserMessageToAgent,
+      stopAgentSpeech,
+    ]
+  );
+
+  const handleChatInputSubmit = useCallback(
+    (text: string) => {
+      submitChatInput(text, 'text');
+    },
+    [submitChatInput]
+  );
+
+  const handlePostedAgentMessage = useCallback((text: string) => {
+    const normalizedText = text.trim();
+    if (!normalizedText) return;
+
+    const stage = activeSpec?.stage ?? currentStage;
+    const messageId = addAgentMessage(stage, normalizedText);
+    void speakAgentMessage({ id: messageId, text: normalizedText });
+  }, [activeSpec, currentStage, addAgentMessage, speakAgentMessage]);
+
+  useToolHandler({
+    spec: activeSpec,
+    setSpec: handleSetSpec,
+    onNext: handleNext,
+    onBack: handleBack,
+    onStartOver: handleStartOver,
+    onRepeatStep: handleRepeatStep,
+    onPostMessage: handlePostedAgentMessage,
+    multiSelect: currentStage === 'seat',
+  });
+
   const handleManualReset = useCallback(() => {
     if (loading) return;
     const confirmed = window.confirm(
       'Reset this task and clear the current chat and booking progress?'
     );
     if (!confirmed) return;
+    stopAgentSpeech();
     logStudyEvent('study.control.reset_requested', {
       source: 'participant',
     });
     sendSessionResetToAgent('host-manual-reset');
     handleSessionReset();
-  }, [handleSessionReset, loading, logStudyEvent, sendSessionResetToAgent]);
+  }, [handleSessionReset, loading, logStudyEvent, sendSessionResetToAgent, stopAgentSpeech]);
 
   const handleFinishStudy = useCallback(async () => {
     if (loading) return;
     const confirmed = window.confirm('Finish this task and go to the end screen?');
     if (!confirmed) return;
 
+    stopAgentSpeech();
     await logStudyEventNow('study.control.finish_requested', {
       source: 'participant',
     });
@@ -1124,20 +1238,8 @@ export function ChatPage({
     resetChat,
     sendSessionResetToAgent,
     setUiSpec,
+    stopAgentSpeech,
   ]);
-
-  const handleAgentBridgeToggle = useCallback(() => {
-    const nextEnabled = !agentBridgeEnabled;
-    if (agentBridgeEnabled) {
-      pendingAgentToggleResetReasonRef.current = null;
-      sendSessionResetToAgent('host-agent-toggle-off');
-    } else {
-      pendingAgentToggleResetReasonRef.current = 'host-agent-toggle-on';
-    }
-
-    setAgentBridgeEnabled(nextEnabled);
-    handleSessionReset();
-  }, [agentBridgeEnabled, handleSessionReset, sendSessionResetToAgent]);
 
   useEffect(() => {
     if (!studyModePreset || !studyModeConfig) return;
@@ -1150,20 +1252,6 @@ export function ChatPage({
 
     api.setGuiAdaptationConfig(studyModeConfig.guiAdaptationEnabled).catch(() => {});
   }, [studyModePreset, studyModeConfig]);
-
-  const handleChatInputSubmit = useCallback(
-    (text: string) => {
-      if (!agentBridgeEnabled) return;
-      logStudyEvent('chat.user_input.submitted', {
-        stage: currentStage,
-        text,
-      });
-      addUserMessage(currentStage, 'input', text);
-      setAwaitingAgentResponse(true);
-      sendUserMessageToAgent(text, currentStage);
-    },
-    [addUserMessage, agentBridgeEnabled, currentStage, logStudyEvent, sendUserMessageToAgent]
-  );
 
   const currentStep = STAGE_ORDER.indexOf(currentStage) + 1;
   const previousStage = getPrevStage(currentStage);
@@ -1192,23 +1280,6 @@ export function ChatPage({
       setAwaitingAgentResponse(false);
     }
   }, [agentActivityPhase, agentStatusSupported, hasLiveAgentSession]);
-
-  useEffect(() => {
-    const pendingReason = pendingAgentToggleResetReasonRef.current;
-    if (!pendingReason) return;
-    if (!agentBridgeEnabled || !isAgentBridgeConnected || !isAgentBridgeJoined || !hasConnectedAgent) {
-      return;
-    }
-
-    sendSessionResetToAgent(pendingReason);
-    pendingAgentToggleResetReasonRef.current = null;
-  }, [
-    agentBridgeEnabled,
-    hasConnectedAgent,
-    isAgentBridgeConnected,
-    isAgentBridgeJoined,
-    sendSessionResetToAgent,
-  ]);
 
   useEffect(() => {
     const scope = interactionScopeRef.current as (HTMLDivElement & { inert?: boolean }) | null;
@@ -1241,6 +1312,36 @@ export function ChatPage({
       : !hasConnectedAgent
       ? 'Waiting for an external agent to connect...'
       : 'Send a message to the external agent...';
+  const {
+    supported: voiceInputSupported,
+    status: voiceInputStatus,
+    error: voiceInputError,
+  } = useVoiceInput({
+    enabled: voiceModeEnabled && agentBridgeEnabled,
+    suspended: !hasLiveAgentSession || inputDisabled || isVoiceOutputActive,
+    transcribeAudio: async (audio: Blob) => {
+      const result = await api.transcribeSpeech(audio, sttLanguage);
+      return result.text;
+    },
+    onTranscript: (text: string) => {
+      submitChatInput(text, 'voice');
+    },
+    onLogEvent: logStudyEvent,
+  });
+  const voiceStatusLabel = getVoiceStatusLabel({
+    voiceModeEnabled,
+    voiceInputSupported,
+    voiceInputStatus,
+    voiceOutputStatus,
+    hasLiveAgentSession,
+  });
+  const voiceError = voiceModeEnabled ? (voiceInputError ?? voiceOutputError) : null;
+  const voiceModeButtonDisabled = !voiceInputSupported;
+  const voiceModeStatusLabel = voiceModeEnabled ? 'ON' : 'OFF';
+  const effectiveChatInputPlaceholder =
+    voiceModeEnabled && hasLiveAgentSession
+      ? 'Voice mode is on. Speak naturally or type here...'
+      : chatInputPlaceholder;
 
   const stageSpecMap = useMemo(() => {
     const map = new Map<Stage, UISpec>();
@@ -1366,87 +1467,44 @@ export function ChatPage({
           <div className="mx-auto flex w-full items-center justify-end gap-2 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
             <button
               type="button"
-              onClick={onThemeToggle}
-              className={`px-3 py-1 text-xs rounded border transition-colors ${
-                theme === 'dark'
-                  ? 'border-amber-300/60 bg-amber-100/10 text-amber-200 hover:border-amber-200 hover:text-amber-100'
-                  : 'border-sky-500/45 bg-sky-500/10 text-sky-700 hover:border-sky-500 hover:text-sky-800'
+              onClick={handleVoiceModeToggle}
+              disabled={voiceModeButtonDisabled}
+              title={
+                voiceModeButtonDisabled
+                  ? 'Voice mode is unavailable in this browser.'
+                  : voiceModeEnabled && !hasLiveAgentSession
+                  ? 'Voice mode is enabled and will start when the live agent session is ready.'
+                  : voiceModeEnabled
+                  ? 'Voice mode is enabled.'
+                  : 'Voice mode is disabled.'
+              }
+              className={`flex items-center gap-2 px-3 py-1 text-xs rounded border ${
+                voiceModeButtonDisabled
+                  ? 'cursor-not-allowed border-info-border/50 text-info-label/55 opacity-70'
+                  : voiceModeEnabled
+                  ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
+                  : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
               }`}
             >
-              {theme === 'dark' ? 'Bright Mode' : 'Dark Mode'}
+              <span>Voice Mode</span>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-[0.16em] ${
+                  voiceModeEnabled
+                    ? 'border-info-border bg-info-bg text-info-text'
+                    : 'border-dark-border bg-dark-light text-fg-muted'
+                }`}
+              >
+                {voiceModeStatusLabel}
+              </span>
             </button>
-            {SHOW_STUDY_CONTROL_BUTTONS && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleAgentBridgeToggle}
-                  disabled={sessionLocked}
-                  className={`px-3 py-1 text-xs rounded border ${
-                    agentBridgeEnabled
-                      ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
-                      : 'border-primary/40 text-primary/80 hover:border-primary hover:text-primary'
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  Agent {agentBridgeEnabled ? 'ON' : 'OFF'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGuiAdaptationToggle}
-                  disabled={sessionLocked}
-                  className={`px-3 py-1 text-xs rounded border ${
-                    guiAdaptationEnabled
-                      ? 'border-info-border text-info-label hover:border-info-label hover:text-info-text'
-                      : 'border-info-border/60 text-info-label/70 hover:border-info-border hover:text-info-label'
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  GUI Adaptation {guiAdaptationEnabled ? 'ON' : 'OFF'}
-                </button>
-                <label
-                  className={`flex h-[26px] items-center gap-2 rounded border px-3 text-xs ${
-                    agentBridgeEnabled
-                      ? 'border-info-border text-info-label'
-                      : 'border-info-border/50 text-info-label/60'
-                  }`}
-                >
-                  <span>CP Memory</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={plannerCpMemoryLimit}
-                    disabled={!agentBridgeEnabled || sessionLocked}
-                    onChange={(event) => {
-                      const parsed = Number.parseInt(event.target.value, 10);
-                      if (!Number.isFinite(parsed)) {
-                        setPlannerCpMemoryLimit(0);
-                        return;
-                      }
-                      setPlannerCpMemoryLimit(Math.max(0, parsed));
-                    }}
-                    className="h-5 w-16 rounded border border-info-border bg-dark px-2 text-xs text-info-text disabled:cursor-not-allowed disabled:opacity-60"
-                    title="0 disables CP memory injection. N injects the latest N memory items per list."
-                  />
-                </label>
-                {agentBridgeEnabled && !isBaselineMode && (
-                  <div className="rounded border border-info-border px-3 py-1 text-xs text-info-label">
-                    gpt-5.2
-                  </div>
-                )}
-                {agentBridgeEnabled && isBaselineMode && (
-                  <div className="rounded border border-info-border px-3 py-1 text-xs text-info-label">
-                    Baseline uses OpenAI
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleManualReset}
-                  disabled={loading}
-                  className="px-3 py-1 text-xs rounded border border-dark-border text-fg hover:text-fg-strong hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Reset
-                </button>
-              </>
-            )}
+            <button
+              type="button"
+              onClick={handleManualReset}
+              disabled={loading}
+              className="px-3 py-1 text-xs rounded border border-dark-border text-fg hover:text-fg-strong hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Reset
+            </button>
             <button
               type="button"
               onClick={handleDownloadLog}
@@ -1487,9 +1545,13 @@ export function ChatPage({
             messages={messages}
             activeSpec={activeSpec}
             isAgentTyping={isAgentTyping}
+            speakingMessageId={speakingMessageId}
             inputDisabled={inputDisabled}
-            inputPlaceholder={chatInputPlaceholder}
+            inputPlaceholder={effectiveChatInputPlaceholder}
             onSubmitInput={agentBridgeEnabled ? handleChatInputSubmit : undefined}
+            voiceModeEnabled={voiceModeEnabled}
+            voiceStatusLabel={voiceStatusLabel}
+            voiceError={voiceError}
             onSelect={handleSelect}
             onToggle={handleToggle}
             onNext={handleNext}
@@ -1502,6 +1564,7 @@ export function ChatPage({
             messages={messages}
             activeSpec={activeSpec}
             isAgentTyping={isAgentTyping}
+            speakingMessageId={speakingMessageId}
             onSelect={handleSelect}
             onToggle={handleToggle}
             onNext={handleNext}
@@ -1651,9 +1714,12 @@ export function ChatPage({
             chatWidthPx={chatWidthPx}
             disabled={inputDisabled}
             onSubmit={handleChatInputSubmit}
+            voiceModeEnabled={voiceModeEnabled}
+            voiceStatusLabel={voiceStatusLabel}
+            voiceError={voiceError}
             placeholder={
               viewMode === 'chat'
-                ? chatInputPlaceholder
+                ? effectiveChatInputPlaceholder
                 : 'Carousel mode: input is available here as well'
             }
           />

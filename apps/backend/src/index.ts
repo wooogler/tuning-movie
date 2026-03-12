@@ -11,6 +11,7 @@ import { seatRoutes } from './routes/seats';
 import { bookingRoutes } from './routes/bookings';
 import { agentRelayRoutes } from './routes/agentRelay';
 import { agentConfigRoutes } from './routes/agentConfig';
+import { speechRoutes } from './routes/speech';
 import { studyRoutes } from './routes/study';
 import { studyContextPlugin } from './plugins/studyContext';
 import { stopAllSessionAgents } from './study/agentSupervisor';
@@ -37,6 +38,7 @@ const start = async () => {
     await fastify.register(bookingRoutes);
     await fastify.register(agentRelayRoutes);
     await fastify.register(agentConfigRoutes);
+    await fastify.register(speechRoutes);
 
     // Health check
     fastify.get('/health', async () => {

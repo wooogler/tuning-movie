@@ -151,11 +151,13 @@ export const interactionTools: ToolDefinition[] = [
   },
   {
     name: 'postMessage',
-    description: 'Post an agent message to the chat timeline',
+    description:
+      'Post a very short agent message to the chat timeline. Assume it may be spoken aloud. Do not restate labels, rankings, or details that are already visible in the GUI unless the user explicitly asked to hear them.',
     parameters: {
       text: {
         type: 'string',
-        description: 'Message content to display',
+        description:
+          'Very short message content to display. Prefer a brief coordination cue over a narration of what is already visible on screen.',
       },
     },
   },

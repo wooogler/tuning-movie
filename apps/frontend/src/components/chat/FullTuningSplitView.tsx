@@ -26,9 +26,13 @@ interface FullTuningSplitViewProps {
   messages: ChatMessage[];
   activeSpec: UISpec | null;
   isAgentTyping?: boolean;
+  speakingMessageId?: string | null;
   inputDisabled?: boolean;
   inputPlaceholder?: string;
   onSubmitInput?: (text: string) => void;
+  voiceModeEnabled?: boolean;
+  voiceStatusLabel?: string | null;
+  voiceError?: string | null;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
   onNext?: () => void;
@@ -43,6 +47,7 @@ interface GuiSnapshot {
   spec: UISpec;
   annotation?: SystemMessageAnnotation;
   linkedAssistantText?: string;
+  linkedAssistantMessageId?: string;
   linkedActionTag?: AgentMessageActionTag;
   isLatest: boolean;
 }
@@ -72,6 +77,7 @@ const SNAPSHOT_SYNC_BOTTOM_THRESHOLD_PX = 48;
 const SNAPSHOT_SYNC_ANCHOR_BOTTOM_OFFSET_PX = 96;
 const TIMELINE_SYNC_FLASH_MS = 950;
 const GUI_STAGE_TRANSITION_MS = 420;
+const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)';
 
 type GuiTransitionDirection = 'forward' | 'backward';
 
@@ -178,13 +184,98 @@ function buildMarkerLabel(snapshot: GuiSnapshot): string {
   return snapshot.spec.title;
 }
 
+function getCollapsedConversationStatus(params: {
+  voiceModeEnabled: boolean;
+  voiceStatusLabel: string | null;
+  voiceError: string | null;
+  inputDisabled: boolean;
+}) {
+  const { voiceModeEnabled, voiceStatusLabel, voiceError, inputDisabled } = params;
+
+  if (voiceError) {
+    return {
+      badge: 'Error',
+      text: voiceError,
+      compactText: 'Voice error',
+      badgeClass: 'border-rose-500/60 bg-rose-500/12 text-fg',
+    };
+  }
+
+  const normalizedVoiceStatus = voiceStatusLabel?.toLowerCase() ?? '';
+
+  if (voiceModeEnabled) {
+    if (
+      normalizedVoiceStatus.includes('speaking the agent reply') ||
+      normalizedVoiceStatus.includes('generating the agent voice')
+    ) {
+      return {
+        badge: 'Speaking',
+        text: voiceStatusLabel ?? 'The agent reply is still playing.',
+        compactText: 'Reply playing',
+        badgeClass: 'border-info-border bg-info-bg/70 text-fg',
+      };
+    }
+
+    if (normalizedVoiceStatus.includes('transcribing')) {
+      return {
+        badge: 'Working',
+        text: voiceStatusLabel ?? 'Processing what you just said.',
+        compactText: 'Processing speech',
+        badgeClass: 'border-dark-border bg-dark-light text-fg',
+      };
+    }
+
+    if (
+      normalizedVoiceStatus.includes('listening automatically') ||
+      normalizedVoiceStatus.includes('listening to your turn') ||
+      normalizedVoiceStatus.includes('voice mode is ready')
+    ) {
+      return {
+        badge: 'Speak',
+        text: 'You can speak now.',
+        compactText: 'Speak now',
+        badgeClass: 'border-rose-500/60 bg-rose-500/12 text-fg',
+      };
+    }
+
+    return {
+      badge: 'Voice',
+      text:
+        voiceStatusLabel ??
+        (inputDisabled ? 'Waiting for the agent to be ready.' : 'Voice mode is on.'),
+      compactText: inputDisabled ? 'Waiting...' : 'Voice mode on',
+      badgeClass: 'border-dark-border bg-dark-light text-fg',
+    };
+  }
+
+  if (inputDisabled) {
+    return {
+      badge: 'Waiting',
+      text: 'Conversation is unavailable right now.',
+      compactText: 'Not ready',
+      badgeClass: 'border-dark-border bg-dark-light text-fg-muted',
+    };
+  }
+
+  return {
+    badge: 'Type',
+    text: 'Expand the conversation to type a message.',
+    compactText: 'Open to type',
+    badgeClass: 'border-dark-border bg-dark-light text-fg',
+  };
+}
+
 export function FullTuningSplitView({
   messages,
   activeSpec,
   isAgentTyping = false,
+  speakingMessageId = null,
   inputDisabled = true,
   inputPlaceholder = 'Type a message...',
   onSubmitInput,
+  voiceModeEnabled = false,
+  voiceStatusLabel = null,
+  voiceError = null,
   onSelect,
   onToggle,
   onNext,
@@ -198,6 +289,12 @@ export function FullTuningSplitView({
   const activeSnapshotIndexRef = useRef<number>(-1);
   const transitionTimeoutRef = useRef<number | null>(null);
   const syncHighlightTimeoutRef = useRef<number | null>(null);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(() =>
+    typeof window !== 'undefined'
+      ? window.matchMedia(DESKTOP_MEDIA_QUERY).matches
+      : false
+  );
+  const [conversationCollapsed, setConversationCollapsed] = useState(false);
 
   const { snapshots, timelineRows, latestSnapshotIndex, firstRowIdBySnapshotIndex } = useMemo(() => {
     const nextSnapshots: GuiSnapshot[] = [];
@@ -223,6 +320,7 @@ export function FullTuningSplitView({
         spec: message.spec,
         annotation: message.annotation,
         linkedAssistantText: linkedAgentMessage?.text,
+        linkedAssistantMessageId: linkedAgentMessage?.id,
         linkedActionTag: linkedAgentMessage?.actionTag,
         isLatest: false,
       });
@@ -311,6 +409,21 @@ export function FullTuningSplitView({
   );
   const [timelineTopInsetPx, setTimelineTopInsetPx] = useState(0);
   const latestTimelineRow = timelineRows[timelineRows.length - 1] ?? null;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsDesktopLayout(event.matches);
+    };
+
+    setIsDesktopLayout(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
 
   useEffect(() => {
     setActiveSnapshotIndex((current) => {
@@ -430,6 +543,31 @@ export function FullTuningSplitView({
     container.scrollTop = container.scrollHeight;
   }, [latestTimelineRow?.id]);
 
+  useLayoutEffect(() => {
+    if (conversationCollapsed) return;
+    const container = timelineContainerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+    syncActiveSnapshotToScroll();
+  }, [conversationCollapsed, syncActiveSnapshotToScroll]);
+
+  const conversationContentClass = conversationCollapsed ? 'hidden' : 'flex';
+  const collapsedConversationStatus = getCollapsedConversationStatus({
+    voiceModeEnabled,
+    voiceStatusLabel,
+    voiceError,
+    inputDisabled,
+  });
+  const isDesktopConversationCollapsed = isDesktopLayout && conversationCollapsed;
+  const isMobileConversationCollapsed = conversationCollapsed && !isDesktopLayout;
+  const containerClass = isDesktopLayout
+    ? conversationCollapsed
+      ? 'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 gap-4'
+      : 'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4'
+    : conversationCollapsed
+    ? 'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-4'
+    : 'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4';
+
   const scrollToSnapshot = useCallback(
     (snapshotIndex: number) => {
       const container = timelineContainerRef.current;
@@ -519,7 +657,7 @@ export function FullTuningSplitView({
 
   return (
     <div className="flex-1 overflow-hidden px-4 py-4">
-      <div className="mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:grid-rows-1">
+      <div className={containerClass}>
         <section className="relative min-h-0 overflow-hidden rounded-2xl border border-dark-border bg-dark p-4">
           <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full border border-dark-border bg-dark-light px-3 py-1 text-xs font-medium text-fg">
             {latestSnapshotIndex >= 0 ? `${activeSnapshotIndex + 1} / ${latestSnapshotIndex + 1}` : '0 / 0'}
@@ -534,7 +672,7 @@ export function FullTuningSplitView({
 
             <div className="min-h-[320px] flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 sm:min-h-[360px] sm:px-4">
               {activeSnapshot ? (
-                <div className="relative flex min-h-full w-full max-w-2xl items-center justify-center py-1">
+                <div className="relative mx-auto flex min-h-full w-full max-w-2xl items-center justify-center py-1">
                   {transitionState?.outgoing ? (
                     <div
                       className={`absolute inset-0 flex items-center justify-center py-1 gui-stage-panel ${
@@ -543,12 +681,13 @@ export function FullTuningSplitView({
                           : 'gui-stage-slide-out-down'
                       }`}
                     >
-                      <GuiSnapshotCard
-                        snapshot={transitionState.outgoing}
-                        interactive={false}
-                        agentActive={false}
-                      />
-                    </div>
+                    <GuiSnapshotCard
+                      snapshot={transitionState.outgoing}
+                      interactive={false}
+                      agentActive={false}
+                      speaking={false}
+                    />
+                  </div>
                   ) : null}
 
                   <div
@@ -564,6 +703,7 @@ export function FullTuningSplitView({
                       snapshot={activeSnapshot}
                       interactive={activeSnapshot.isLatest}
                       agentActive={Boolean(isAgentTyping && activeSnapshot.isLatest)}
+                      speaking={activeSnapshot.linkedAssistantMessageId === speakingMessageId}
                       onSelect={onSelect}
                       onToggle={onToggle}
                       onNext={onNext}
@@ -584,61 +724,130 @@ export function FullTuningSplitView({
               onClick={() => scrollToSnapshot(activeSnapshotIndex + 1)}
             />
           </div>
-        </section>
 
-        <section className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-2xl border border-dark-border bg-dark">
-          <div
-            ref={timelineContainerRef}
-            onScroll={syncActiveSnapshotToScroll}
-            className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4"
-            style={{ overflowAnchor: 'none' }}
-          >
-            <div
-              className="mx-auto flex min-h-full w-full max-w-5xl flex-col justify-end pb-4"
-              style={{ paddingTop: `${timelineTopInsetPx}px` }}
+          {isDesktopConversationCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setConversationCollapsed(false)}
+              className="absolute bottom-5 right-5 z-20 flex w-64 max-w-[calc(100%-2.5rem)] flex-col gap-3 rounded-3xl border border-dark-border/80 bg-dark/95 px-4 py-4 text-left shadow-[0_18px_42px_rgba(15,23,42,0.22)] backdrop-blur-sm transition-colors hover:border-primary/40"
+              aria-expanded={false}
+              aria-controls="full-tuning-conversation-panel"
             >
-              {timelineRows.map((row) => (
-                <div
-                  key={row.id}
-                  ref={(node) => {
-                    if (node) {
-                      rowRefs.current.set(row.id, node);
-                    } else {
-                      rowRefs.current.delete(row.id);
-                    }
-                  }}
-                >
-                  {row.type === 'agent' ? (
-                    <AgentMessage message={row.message} highlighted={row.id === flashSyncRowId} />
-                  ) : null}
-                  {row.type === 'user' ? (
-                    <UserMessage message={row.message} highlighted={row.id === flashSyncRowId} />
-                  ) : null}
-                  {row.type === 'marker' ? (
-                    <TimelineMarkerRow row={row} highlighted={row.id === flashSyncRowId} />
-                  ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
+                  Chat
                 </div>
-              ))}
-
-              {isAgentTyping ? <TypingIndicator /> : null}
-
-              {timelineRows.length === 0 && !isAgentTyping ? (
-                <div className="py-12 text-center text-fg-faint">Loading conversation...</div>
-              ) : null}
-            </div>
-          </div>
-
-          {onSubmitInput ? (
-            <div className="shrink-0 border-t border-dark-border">
-              <ChatInput
-                chatWidthPx={null}
-                disabled={inputDisabled}
-                placeholder={inputPlaceholder}
-                onSubmit={onSubmitInput}
-              />
-            </div>
+                <div
+                  className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${collapsedConversationStatus.badgeClass}`}
+                >
+                  {collapsedConversationStatus.badge}
+                </div>
+              </div>
+              <div className="text-sm leading-5 text-fg-muted">
+                {collapsedConversationStatus.compactText}
+              </div>
+              <div className="flex items-center justify-between border-t border-dark-border/70 pt-3 text-[11px] font-medium uppercase tracking-[0.18em] text-fg-muted">
+                <span>Open chat</span>
+                <span className="rounded-full border border-dark-border bg-dark-light px-2.5 py-1">
+                  Open
+                </span>
+              </div>
+            </button>
           ) : null}
         </section>
+
+        {!isDesktopConversationCollapsed ? (
+          <section className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-2xl border border-dark-border bg-dark">
+              <button
+                type="button"
+                onClick={() => setConversationCollapsed((current) => !current)}
+                className="flex items-center justify-between gap-4 border-b border-dark-border px-4 py-3 text-left"
+                aria-expanded={!conversationCollapsed}
+                aria-controls="full-tuning-conversation-panel"
+              >
+                <div className={isMobileConversationCollapsed ? 'min-w-0 flex items-center gap-3' : 'min-w-0'}>
+                  <div className={`font-semibold text-fg-strong ${isMobileConversationCollapsed ? 'shrink-0 text-base' : 'text-sm'}`}>
+                    Conversation
+                  </div>
+                  {conversationCollapsed ? (
+                    <div className="flex min-w-0 items-center gap-2 text-xs text-fg-muted">
+                      <span
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] ${collapsedConversationStatus.badgeClass}`}
+                      >
+                        {collapsedConversationStatus.badge}
+                      </span>
+                      <span className="truncate">{collapsedConversationStatus.compactText}</span>
+                    </div>
+                  ) : isAgentTyping ? (
+                    <div className="text-xs text-fg-muted">Agent is typing...</div>
+                  ) : null}
+                </div>
+                <span className="text-xs font-medium uppercase tracking-[0.16em] text-fg-muted">
+                  {conversationCollapsed ? 'Show' : 'Hide'}
+                </span>
+              </button>
+
+              <div
+                id="full-tuning-conversation-panel"
+                ref={timelineContainerRef}
+                onScroll={syncActiveSnapshotToScroll}
+                className={`${conversationContentClass} min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-4`}
+                style={{ overflowAnchor: 'none' }}
+              >
+                <div
+                  className="mx-auto flex min-h-full w-full max-w-5xl flex-col justify-end pb-4"
+                  style={{ paddingTop: `${timelineTopInsetPx}px` }}
+                >
+                  {timelineRows.map((row) => (
+                    <div
+                      key={row.id}
+                      ref={(node) => {
+                        if (node) {
+                          rowRefs.current.set(row.id, node);
+                        } else {
+                          rowRefs.current.delete(row.id);
+                        }
+                      }}
+                    >
+                      {row.type === 'agent' ? (
+                        <AgentMessage
+                          message={row.message}
+                          highlighted={row.id === flashSyncRowId}
+                          speaking={row.message.id === speakingMessageId}
+                        />
+                      ) : null}
+                      {row.type === 'user' ? (
+                        <UserMessage message={row.message} highlighted={row.id === flashSyncRowId} />
+                      ) : null}
+                      {row.type === 'marker' ? (
+                        <TimelineMarkerRow row={row} highlighted={row.id === flashSyncRowId} />
+                      ) : null}
+                    </div>
+                  ))}
+
+                  {isAgentTyping ? <TypingIndicator /> : null}
+
+                  {timelineRows.length === 0 && !isAgentTyping ? (
+                    <div className="py-12 text-center text-fg-faint">Loading conversation...</div>
+                  ) : null}
+                </div>
+              </div>
+
+              {onSubmitInput && !conversationCollapsed ? (
+                <div className="shrink-0 border-t border-dark-border">
+                  <ChatInput
+                    chatWidthPx={null}
+                    disabled={inputDisabled}
+                    placeholder={inputPlaceholder}
+                    onSubmit={onSubmitInput}
+                    voiceModeEnabled={voiceModeEnabled}
+                    voiceStatusLabel={voiceStatusLabel}
+                    voiceError={voiceError}
+                  />
+                </div>
+              ) : null}
+          </section>
+        ) : null}
       </div>
     </div>
   );
@@ -648,6 +857,7 @@ function GuiSnapshotCard({
   snapshot,
   interactive,
   agentActive = false,
+  speaking = false,
   onSelect,
   onToggle,
   onNext,
@@ -658,6 +868,7 @@ function GuiSnapshotCard({
   snapshot: GuiSnapshot;
   interactive: boolean;
   agentActive?: boolean;
+  speaking?: boolean;
   onSelect?: (id: string) => void;
   onToggle?: (id: string) => void;
   onNext?: () => void;
@@ -668,16 +879,18 @@ function GuiSnapshotCard({
   const statusBadgeClass = snapshot.isLatest
     ? 'border-info-border bg-info-bg/70 text-info-text'
     : 'border-dark-border bg-dark-light text-fg-muted';
+  const frameClass = speaking
+    ? 'border-rose-500/70 shadow-[0_0_0_3px_rgba(244,63,94,0.18)]'
+    : agentActive
+    ? 'border-info-border shadow-[0_0_0_2px_rgba(96,165,250,0.22)]'
+    : 'border-dark-border';
+  const contextClass = 'mt-2 text-base font-medium leading-7 text-info-text';
 
   return (
     <div className="w-[400px] max-w-full">
       <SelectionBreadcrumb spec={snapshot.spec} subdued={!interactive} />
       <div
-        className={`rounded-2xl border bg-dark p-4 transition-colors ${
-          agentActive
-            ? 'border-info-border shadow-[0_0_0_2px_rgba(96,165,250,0.22)]'
-            : 'border-dark-border'
-        }`}
+        className={`rounded-2xl border bg-dark p-4 transition-colors ${frameClass}`}
       >
         <div className="mb-4 flex items-start gap-3">
           <div
@@ -717,7 +930,7 @@ function GuiSnapshotCard({
                 </span>
               </div>
             </div>
-            <div className="mt-2 text-base font-medium leading-7 text-info-text">
+            <div className={contextClass}>
               {renderMessageText(getSnapshotContextText(snapshot))}
             </div>
           </div>

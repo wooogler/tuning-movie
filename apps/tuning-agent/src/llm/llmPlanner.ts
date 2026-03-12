@@ -159,6 +159,9 @@ const CORE_SYSTEM_PROMPT =
   '- Prefer concrete progress when intent is clear, but do not turn an unresolved comparison into an autonomous choice.\n' +
   '- An explicit comparison preference may justify sorting or surfacing information, but it does not by itself authorize selecting the current top-ranked option while multiple visible options remain.\n' +
   '- When multiple options remain or the next step would be assumption-heavy, prefer one non-committal GUI modification if it can make the user\'s stated criterion easier to see or apply without assuming a choice; otherwise use respond for a concise clarification.\n' +
+  '- Treat assistantMessage as a brief spoken cue, not a narration track.\n' +
+  '- When the GUI already shows the relevant labels, rankings, values, or updated state, do not repeat those details in assistantMessage.\n' +
+  '- Let the GUI carry visible detail. Use assistantMessage only for the smallest coordination cue or next-step hint that is still useful aloud.\n' +
   '- Use navigation or commitment actions only after clear user-originated confirmation, or when exactly one visible enabled option remains under the user\'s explicit criteria.\n' +
   '- Do not infer unstated optimization goals or tie-breakers such as highest-rated, cheapest, nearest, earliest, latest, shortest, or best default.\n' +
   '- Choose exactly one next step for this turn.';
@@ -174,10 +177,12 @@ const OPENAI_TOOL_CALLING_RULES =
   'Tool-calling rules:\n' +
   '- Use exactly one provided function on every turn.\n' +
   '- If no GUI tool should be used now, call "respond".\n' +
-  '- Put a short user-facing explanation in "assistantMessage".\n' +
+  '- Put a very short user-facing explanation in "assistantMessage". Prefer one short sentence or short clause.\n' +
   '- Put a concise rationale in "reason".\n' +
-  '- For GUI tool calls, assistantMessage should describe the action and should not ask for permission.\n' +
-  '- For respond, keep assistantMessage to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata or introduce a new comparison dimension.\n' +
+  '- For GUI tool calls, assistantMessage should briefly describe the action and should not ask for permission.\n' +
+  '- After a GUI tool call, do not restate option names, rankings, prices, times, seat labels, counts, or other details that are now visible on screen unless the user explicitly asked to hear them.\n' +
+  '- For GUI tool calls, prefer short cues like "I narrowed the list.", "I sorted the options.", "I highlighted the closest matches.", or "Take a look at the updated options." when that is sufficient.\n' +
+  '- For respond, keep assistantMessage to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata, do not introduce a new comparison dimension, and do not read back GUI details that are already obvious on screen.\n' +
   '- Do not use select, selectMultiple, or next to resolve a tie among multiple viable options unless the user has clearly committed to one specific choice.\n' +
   '- Do not justify a commitment action with an inferred ranking or default ordering.\n' +
   '- Do not output plain text without a function call.\n' +
@@ -322,7 +327,8 @@ function toOpenAiTools(availableTools: ToolSchemaItem[]): OpenAiFunctionTool[] {
 
     properties[TOOL_META_ASSISTANT_MESSAGE_KEY] = {
       type: 'string',
-      description: 'One short user-facing message describing the step.',
+      description:
+        'One very short user-facing message describing the step. Assume it may be spoken aloud. Do not restate details that are already visible in the GUI after the action.',
     };
     properties[TOOL_META_REASON_KEY] = {
       type: 'string',
@@ -346,14 +352,14 @@ function toOpenAiTools(availableTools: ToolSchemaItem[]): OpenAiFunctionTool[] {
     type: 'function',
     name: NATIVE_NONE_TOOL_NAME,
     description:
-      'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information.',
+      'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information, without re-narrating GUI details that are already on screen.',
     parameters: {
       type: 'object',
       properties: {
         [TOOL_META_ASSISTANT_MESSAGE_KEY]: {
           type: 'string',
           description:
-            'A concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata or introduce a new comparison dimension.',
+            'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata, introduce a new comparison dimension, or read back GUI details that are already visible.',
         },
         [TOOL_META_REASON_KEY]: {
           type: 'string',
