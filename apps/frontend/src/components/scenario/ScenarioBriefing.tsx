@@ -210,7 +210,7 @@ export function ScenarioBriefing({
         <summary className="cursor-pointer text-sm font-semibold text-fg-strong">
           Scenario briefing
         </summary>
-        <div className="mt-3">
+        <div className="mt-3 max-h-[60vh] overflow-y-auto overscroll-contain pr-1">
           <ScenarioBriefingBody
             title={title}
             story={story}
