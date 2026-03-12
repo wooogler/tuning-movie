@@ -198,6 +198,7 @@ const GUI_ADAPTATION_ENABLED_RULES =
   '- If the user has not stated a criterion or comparison goal for the current stage, do not proactively sort, filter, or augment just because a field seems helpful or available.\n' +
   '- Do not use augment to reveal hidden item attributes unless that information is justified by the user\'s current-stage request or by stage-relevant stored preferences.\n' +
   '- When using augment, surface only the minimum information needed for one current criterion, and do not bundle multiple hidden attributes into labels unless the user explicitly asked for that combined comparison.\n' +
+  '- If the user explicitly asks to sort or compare by a field that is not yet visible in the current UI, prefer augment first to surface that field on the relevant options. Do not call sort on that field until it has already been surfaced in the UI.\n' +
   '- If the user\'s stated criterion is not yet visible in the UI, prefer surfacing or applying that criterion through one non-committal GUI modification before asking for a tie-break.\n' +
   '- Use only criteria grounded in what the user asked for. Do not introduce a new comparison dimension or hidden optimization goal.\n' +
   '- Do not mention item metadata directly in assistantMessage if it is not already visible; surface it through the UI first.\n' +
