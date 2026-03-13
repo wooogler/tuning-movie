@@ -26,6 +26,7 @@ interface FullTuningSplitViewProps {
   messages: ChatMessage[];
   activeSpec: UISpec | null;
   isAgentTyping?: boolean;
+  interactionLocked?: boolean;
   speakingMessageId?: string | null;
   inputDisabled?: boolean;
   inputPlaceholder?: string;
@@ -77,7 +78,6 @@ const SNAPSHOT_SYNC_BOTTOM_THRESHOLD_PX = 48;
 const SNAPSHOT_SYNC_ANCHOR_BOTTOM_OFFSET_PX = 96;
 const TIMELINE_SYNC_FLASH_MS = 950;
 const GUI_STAGE_TRANSITION_MS = 420;
-const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)';
 
 type GuiTransitionDirection = 'forward' | 'backward';
 
@@ -269,6 +269,7 @@ export function FullTuningSplitView({
   messages,
   activeSpec,
   isAgentTyping = false,
+  interactionLocked = false,
   speakingMessageId = null,
   inputDisabled = true,
   inputPlaceholder = 'Type a message...',
@@ -289,11 +290,6 @@ export function FullTuningSplitView({
   const activeSnapshotIndexRef = useRef<number>(-1);
   const transitionTimeoutRef = useRef<number | null>(null);
   const syncHighlightTimeoutRef = useRef<number | null>(null);
-  const [isDesktopLayout, setIsDesktopLayout] = useState(() =>
-    typeof window !== 'undefined'
-      ? window.matchMedia(DESKTOP_MEDIA_QUERY).matches
-      : false
-  );
   const [conversationCollapsed, setConversationCollapsed] = useState(() => voiceModeEnabled);
 
   const { snapshots, timelineRows, latestSnapshotIndex, firstRowIdBySnapshotIndex } = useMemo(() => {
@@ -411,21 +407,6 @@ export function FullTuningSplitView({
   const latestTimelineRow = timelineRows[timelineRows.length - 1] ?? null;
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
-    const handleChange = (event: MediaQueryListEvent) => {
-      setIsDesktopLayout(event.matches);
-    };
-
-    setIsDesktopLayout(mediaQuery.matches);
-    mediaQuery.addEventListener('change', handleChange);
-    return () => {
-      mediaQuery.removeEventListener('change', handleChange);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!voiceModeEnabled) return;
     setConversationCollapsed(true);
   }, [voiceModeEnabled]);
@@ -444,7 +425,7 @@ export function FullTuningSplitView({
       if (current && timelineRows.some((row) => row.id === current)) return current;
       return timelineRows[timelineRows.length - 1]?.id ?? null;
     });
-  }, [timelineRows]);
+  }, [timelineRows, conversationCollapsed]);
 
   useEffect(() => {
     if (!activeSyncRowId) {
@@ -470,25 +451,44 @@ export function FullTuningSplitView({
     };
   }, [activeSyncRowId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = timelineContainerRef.current;
     if (!container) return;
 
+    const getFirstRowNode = () => {
+      const firstRowId = timelineRows[0]?.id;
+      return firstRowId ? rowRefs.current.get(firstRowId) ?? null : null;
+    };
+
     const updateTopInset = () => {
-      setTimelineTopInsetPx(Math.max(0, getSyncAnchorOffsetFromTop(container.clientHeight) - 24));
+      const firstRowNode = getFirstRowNode();
+      const syncAnchorOffset = getSyncAnchorOffsetFromTop(container.clientHeight);
+      const firstRowAnchorOffset = firstRowNode
+        ? getTimelineRowAnchorOffset(firstRowNode.offsetHeight)
+        : 24;
+      setTimelineTopInsetPx(Math.max(0, syncAnchorOffset - firstRowAnchorOffset));
     };
 
     updateTopInset();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
 
     const observer = new ResizeObserver(() => {
       updateTopInset();
     });
     observer.observe(container);
 
+    const firstRowNode = getFirstRowNode();
+    if (firstRowNode) {
+      observer.observe(firstRowNode);
+    }
+
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [timelineRows]);
 
   const syncActiveSnapshotToScroll = useCallback(() => {
     const container = timelineContainerRef.current;
@@ -556,22 +556,14 @@ export function FullTuningSplitView({
     syncActiveSnapshotToScroll();
   }, [conversationCollapsed, syncActiveSnapshotToScroll]);
 
-  const conversationContentClass = conversationCollapsed ? 'hidden' : 'flex';
   const collapsedConversationStatus = getCollapsedConversationStatus({
     voiceModeEnabled,
     voiceStatusLabel,
     voiceError,
     inputDisabled,
   });
-  const isDesktopConversationCollapsed = isDesktopLayout && conversationCollapsed;
-  const isMobileConversationCollapsed = conversationCollapsed && !isDesktopLayout;
-  const containerClass = isDesktopLayout
-    ? conversationCollapsed
-      ? 'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 gap-4'
-      : 'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4'
-    : conversationCollapsed
-    ? 'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_auto] gap-4'
-    : 'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4';
+  const containerClass =
+    'mx-auto grid h-full w-full max-w-6xl min-h-0 grid-cols-1 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:grid-rows-1';
 
   const scrollToSnapshot = useCallback(
     (snapshotIndex: number) => {
@@ -661,7 +653,7 @@ export function FullTuningSplitView({
   }, [activeSnapshot, activeSnapshotIndex]);
 
   return (
-    <div className="flex-1 overflow-hidden px-4 py-4">
+    <div className="min-h-0 flex-1 overflow-hidden px-4 py-4">
       <div className={containerClass}>
         <section className="relative min-h-0 overflow-hidden rounded-2xl border border-dark-border bg-dark p-4">
           <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2 rounded-full border border-dark-border bg-dark-light px-3 py-1 text-xs font-medium text-fg">
@@ -675,7 +667,7 @@ export function FullTuningSplitView({
               onClick={() => scrollToSnapshot(activeSnapshotIndex - 1)}
             />
 
-            <div className="min-h-[320px] flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 sm:min-h-[360px] sm:px-4">
+            <div className="min-h-[320px] flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-2 py-2 sm:min-h-[360px] sm:px-4">
               {activeSnapshot ? (
                 <div className="relative mx-auto flex min-h-full w-full max-w-2xl items-center justify-center py-1">
                   {transitionState?.outgoing ? (
@@ -706,7 +698,7 @@ export function FullTuningSplitView({
                   >
                     <GuiSnapshotCard
                       snapshot={activeSnapshot}
-                      interactive={activeSnapshot.isLatest}
+                      interactive={activeSnapshot.isLatest && !interactionLocked}
                       agentActive={Boolean(isAgentTyping && activeSnapshot.isLatest)}
                       speaking={activeSnapshot.linkedAssistantMessageId === speakingMessageId}
                       onSelect={onSelect}
@@ -730,39 +722,9 @@ export function FullTuningSplitView({
             />
           </div>
 
-          {isDesktopConversationCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setConversationCollapsed(false)}
-              className="absolute bottom-5 right-5 z-20 flex w-64 max-w-[calc(100%-2.5rem)] flex-col gap-3 rounded-3xl border border-dark-border/80 bg-dark/95 px-4 py-4 text-left shadow-[0_18px_42px_rgba(15,23,42,0.22)] backdrop-blur-sm transition-colors hover:border-primary/40"
-              aria-expanded={false}
-              aria-controls="full-tuning-conversation-panel"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-fg-muted">
-                  Chat
-                </div>
-                <div
-                  className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${collapsedConversationStatus.badgeClass}`}
-                >
-                  {collapsedConversationStatus.badge}
-                </div>
-              </div>
-              <div className="text-sm leading-5 text-fg-muted">
-                {collapsedConversationStatus.compactText}
-              </div>
-              <div className="flex items-center justify-between border-t border-dark-border/70 pt-3 text-[11px] font-medium uppercase tracking-[0.18em] text-fg-muted">
-                <span>Open chat</span>
-                <span className="rounded-full border border-dark-border bg-dark-light px-2.5 py-1">
-                  Open
-                </span>
-              </div>
-            </button>
-          ) : null}
         </section>
 
-        {!isDesktopConversationCollapsed ? (
-          <section className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-2xl border border-dark-border bg-dark">
+        <section className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-2xl border border-dark-border bg-dark">
               <button
                 type="button"
                 onClick={() => setConversationCollapsed((current) => !current)}
@@ -770,8 +732,8 @@ export function FullTuningSplitView({
                 aria-expanded={!conversationCollapsed}
                 aria-controls="full-tuning-conversation-panel"
               >
-                <div className={isMobileConversationCollapsed ? 'min-w-0 flex items-center gap-3' : 'min-w-0'}>
-                  <div className={`font-semibold text-fg-strong ${isMobileConversationCollapsed ? 'shrink-0 text-base' : 'text-sm'}`}>
+                <div className={conversationCollapsed ? 'min-w-0 flex items-center gap-3' : 'min-w-0'}>
+                  <div className={`font-semibold text-fg-strong ${conversationCollapsed ? 'shrink-0 text-base' : 'text-sm'}`}>
                     Conversation
                   </div>
                   {conversationCollapsed ? (
@@ -796,7 +758,11 @@ export function FullTuningSplitView({
                 id="full-tuning-conversation-panel"
                 ref={timelineContainerRef}
                 onScroll={syncActiveSnapshotToScroll}
-                className={`${conversationContentClass} min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 pt-4`}
+                className={
+                  conversationCollapsed
+                    ? 'hidden'
+                    : 'min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-4'
+                }
                 style={{ overflowAnchor: 'none' }}
               >
                 <div
@@ -851,8 +817,7 @@ export function FullTuningSplitView({
                   />
                 </div>
               ) : null}
-          </section>
-        ) : null}
+        </section>
       </div>
     </div>
   );

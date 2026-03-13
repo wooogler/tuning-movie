@@ -1279,11 +1279,17 @@ export function ChatPage({
   useEffect(() => {
     const scope = interactionScopeRef.current as (HTMLDivElement & { inert?: boolean }) | null;
     if (!scope) return;
+    if (usesSplitInterface) {
+      scope.inert = false;
+      return () => {
+        scope.inert = false;
+      };
+    }
     scope.inert = interactionLocked;
     return () => {
       scope.inert = false;
     };
-  }, [interactionLocked]);
+  }, [interactionLocked, usesSplitInterface]);
 
   useEffect(() => {
     if (!interactionLocked || typeof document === 'undefined') return;
@@ -1426,7 +1432,7 @@ export function ChatPage({
 
   return (
     <div className="relative h-screen bg-dark">
-      <div ref={interactionScopeRef} className="flex h-full">
+      <div ref={interactionScopeRef} className="flex h-full min-h-0">
       {showScenarioBriefing && (
         <aside
           className="relative hidden shrink-0 border-r border-dark-border bg-dark-light lg:block"
@@ -1457,7 +1463,7 @@ export function ChatPage({
         </aside>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+	      <div className="flex min-w-0 min-h-0 flex-1 flex-col">
         <header className="shrink-0 border-b border-dark-border bg-dark px-4 py-3">
           <div className="mx-auto flex w-full items-center justify-end gap-2 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
             <button
@@ -1540,6 +1546,7 @@ export function ChatPage({
             messages={messages}
             activeSpec={activeSpec}
             isAgentTyping={isAgentTyping}
+            interactionLocked={interactionLocked}
             speakingMessageId={speakingMessageId}
             inputDisabled={inputDisabled}
             inputPlaceholder={effectiveChatInputPlaceholder}

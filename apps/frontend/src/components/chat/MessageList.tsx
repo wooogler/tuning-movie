@@ -41,11 +41,6 @@ export function MessageList({
   showTurnSnapshots = false,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const isUserSnapshotMessage = (message: ChatMessage): boolean =>
-    showTurnSnapshots &&
-    message.type === 'user' &&
-    message.action === 'input' &&
-    Boolean(messageSnapshots[message.id]);
   const isNavigationAgentMessage = (message: ChatMessage): boolean =>
     message.type === 'agent' &&
     (message.actionTag?.toolName === 'next' ||
@@ -82,7 +77,7 @@ export function MessageList({
     if (message.type === 'system') {
       return message.id;
     }
-    if (isUserSnapshotMessage(message) || isAgentSnapshotMessage(message, index)) {
+    if (isAgentSnapshotMessage(message, index)) {
       return message.id;
     }
     return latestId;
@@ -142,24 +137,7 @@ export function MessageList({
           }
 
           if (message.type === 'user') {
-            const snapshotSpec = isUserSnapshotMessage(message)
-              ? (messageSnapshots[message.id] ?? null)
-              : null;
-            return (
-              <UserMessage
-                key={message.id}
-                message={message}
-                snapshotSpec={snapshotSpec}
-                snapshotIsActive={message.id === latestGuiMessageId}
-                snapshotActiveSpec={message.id === latestGuiMessageId ? activeSpec : null}
-                onSnapshotSelect={onSelect}
-                onSnapshotToggle={onToggle}
-                onSnapshotNext={onNext}
-                onSnapshotBack={onBack}
-                onSnapshotStartOver={onStartOver}
-                onSnapshotConfirm={onConfirm}
-              />
-            );
+            return <UserMessage key={message.id} message={message} />;
           }
 
           if (isToolLinkedAgentMessage(index)) {

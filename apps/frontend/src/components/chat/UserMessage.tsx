@@ -1,33 +1,13 @@
 import type { UserMessage as UserMessageType } from '../../store/chatStore';
-import type { UISpec } from '../../spec';
-import { MessageStageSnapshot } from './MessageStageSnapshot';
 
 interface UserMessageProps {
   message: UserMessageType;
   highlighted?: boolean;
-  snapshotSpec?: UISpec | null;
-  snapshotIsActive?: boolean;
-  snapshotActiveSpec?: UISpec | null;
-  onSnapshotSelect?: (id: string) => void;
-  onSnapshotToggle?: (id: string) => void;
-  onSnapshotNext?: () => void;
-  onSnapshotBack?: () => void;
-  onSnapshotStartOver?: () => void;
-  onSnapshotConfirm?: () => void;
 }
 
 export function UserMessage({
   message,
   highlighted = false,
-  snapshotSpec = null,
-  snapshotIsActive = false,
-  snapshotActiveSpec = null,
-  onSnapshotSelect,
-  onSnapshotToggle,
-  onSnapshotNext,
-  onSnapshotBack,
-  onSnapshotStartOver,
-  onSnapshotConfirm,
 }: UserMessageProps) {
   const isBack = message.action === 'back';
   const isInput = message.action === 'input';
@@ -77,22 +57,6 @@ export function UserMessage({
           </svg>
         </div>
       </div>
-
-      {snapshotSpec ? (
-        <div className="mt-3 ml-11 max-w-[444px] min-w-0">
-          <MessageStageSnapshot
-            spec={snapshotSpec}
-            isActive={snapshotIsActive}
-            activeSpec={snapshotActiveSpec}
-            onSelect={onSnapshotSelect}
-            onToggle={onSnapshotToggle}
-            onNext={onSnapshotNext}
-            onBack={onSnapshotBack}
-            onStartOver={onSnapshotStartOver}
-            onConfirm={onSnapshotConfirm}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
