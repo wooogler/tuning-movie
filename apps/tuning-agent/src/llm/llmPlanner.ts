@@ -184,7 +184,7 @@ const OPENAI_TOOL_CALLING_RULES =
   '- Never include internal item ids in assistantMessage; use human-readable labels only.';
 
 const GUI_ADAPTATION_ENABLED_RULES =
-  'GUI adaptation rules when modification tools are enabled:\n' +
+  'Response rules for interfaces that can modify the GUI:\n' +
   '- Treat assistantMessage as a brief spoken cue, not a narration track.\n' +
   '- When the GUI already shows the relevant labels, rankings, values, or updated state, do not repeat those details in assistantMessage.\n' +
   '- Let the GUI carry visible detail. Use assistantMessage only for the smallest coordination cue or next-step hint that is still useful aloud.\n' +
@@ -206,10 +206,11 @@ const GUI_ADAPTATION_ENABLED_RULES =
   '- Do not use sort to create a best default, do not use highlight when it adds no distinction, and let repeated filter calls accumulate additional conditions instead of replacing earlier filters.';
 
 const GUI_ADAPTATION_DISABLED_RULES =
-  'Message rules when GUI adaptation is disabled:\n' +
+  'Response rules for this interface:\n' +
   '- Do not rely on the GUI to newly surface, filter, sort, or highlight the relevant options for the user.\n' +
   '- Keep assistantMessage under the same brevity standard as other modes: give the smallest helpful clarification or direct answer grounded in the current UI state.\n' +
   '- Ground the reply in the current UI state, but avoid literally saying "visible", "shown", or "on screen" unless clarifying scope is necessary.\n' +
+  '- If the user has not stated a comparison goal or decision criterion for the current stage, do not proactively introduce comparison axes such as distance, amenities, price, rating, or time. In that case, name the current options plainly or ask what matters most for this stage.\n' +
   '- Do not mention non-visible item metadata, invent new comparison dimensions, or turn a tie into a recommendation the user did not ask for.';
 
 export function getPlannerSystemPrompt(): string {
@@ -328,14 +329,14 @@ function getRespondToolDescription(guiAdaptationEnabled: boolean): string {
   if (guiAdaptationEnabled) {
     return 'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information, without re-narrating GUI details that are already on screen.';
   }
-  return 'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer grounded in the current UI state. Avoid literally saying "visible", "shown", or "on screen" unless scope clarification is necessary.';
+  return 'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer grounded in the current UI state. If the user has not given a current-stage criterion, do not proactively compare by distance, amenities, price, rating, time, or similar axes; instead name the options plainly or ask what matters most. Avoid literally saying "visible", "shown", or "on screen" unless scope clarification is necessary.';
 }
 
 function getRespondAssistantMessageDescription(guiAdaptationEnabled: boolean): string {
   if (guiAdaptationEnabled) {
     return 'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata, introduce a new comparison dimension, or read back GUI details that are already visible.';
   }
-  return 'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer grounded in the current UI state. Avoid literally saying "visible", "shown", or "on screen" unless scope clarification is necessary. Do not mention non-visible item metadata or invent a new comparison dimension.';
+  return 'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer grounded in the current UI state. If the user has not given a current-stage criterion, do not proactively compare by distance, amenities, price, rating, time, or similar axes; instead name the options plainly or ask what matters most. Avoid literally saying "visible", "shown", or "on screen" unless scope clarification is necessary. Do not mention non-visible item metadata or invent a new comparison dimension.';
 }
 
 function toOpenAiTools(

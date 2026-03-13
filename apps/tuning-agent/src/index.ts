@@ -397,6 +397,11 @@ function resolvePlannerCpMemoryLimit(payload: Record<string, unknown>, fallback:
   return fallback;
 }
 
+function isPlannerCpMemoryEnabled(plannerCpMemoryLimit: number | null | undefined): boolean {
+  if (!Number.isFinite(plannerCpMemoryLimit)) return false;
+  return Math.floor(plannerCpMemoryLimit ?? 0) > 0;
+}
+
 function toSnapshotPayload(value: unknown): SnapshotStatePayload {
   const payload = asRecord(value);
   return {
@@ -1114,6 +1119,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       const current = memory.getContext();
       if (!current) return;
       const next = applyStateUpdated(current, toStateUpdatedPayload(envelope.payload));
+      const cpMemoryEnabled = isPlannerCpMemoryEnabled(next.plannerCpMemoryLimit);
       const stageChanged = next.stage !== current.stage;
       const nextUiFingerprint = buildUiFingerprint(next.uiSpec);
       const uiFingerprintChanged =
@@ -1124,7 +1130,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
 
-      if (!isBaselineMode && isFirstSnapshotSeen && uiFingerprintChanged) {
+      if (!isBaselineMode && cpMemoryEnabled && isFirstSnapshotSeen && uiFingerprintChanged) {
         await runActiveConflictDerivationFromUiChange(
           next,
           'state.updated:ui-changed',
@@ -1135,7 +1141,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
 
       if (userTurnAwaitingStateUpdate) {
         userTurnAwaitingStateUpdate = false;
-        if (!isBaselineMode && userPreferenceExtractionInFlight) {
+        if (!isBaselineMode && cpMemoryEnabled && userPreferenceExtractionInFlight) {
           monitor.pushEvent('planner.waiting_preference_extraction', {
             trigger: 'state.updated:user-message',
           });
@@ -1171,6 +1177,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       if (!userMessage.text.trim()) return;
       userConversationStarted = true;
       const next = applyUserMessage(current, userMessage);
+      const cpMemoryEnabled = isPlannerCpMemoryEnabled(next.plannerCpMemoryLimit);
       upsertContext(next);
       monitor.updateContext(memory.getContext());
       monitor.updateState({ pendingUserMessages: 0 });
@@ -1180,7 +1187,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       monitor.pushEvent('planner.waiting_state_updated_after_user_message', {
         stage: userMessage.stage ?? null,
       });
-      if (isBaselineMode) {
+      if (isBaselineMode || !cpMemoryEnabled) {
         return;
       }
       const extractionPromise = runPreferenceExtractionFromUserMessage(next, userMessage.text);

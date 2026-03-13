@@ -346,10 +346,13 @@ function buildWorkflowContext(
 }
 
 function buildPlannerHistory(
-  context: PerceivedContext
+  context: PerceivedContext,
+  cpMemoryEnabled: boolean
 ): unknown[] {
-  // Compact raw timeline entries and keep a recent+anchored subset for planner context.
-  const rawHistory = context.messageHistoryTail.slice(-RAW_SCAN_WINDOW);
+  // When CP memory is off, let the planner rely on the full compacted timeline instead.
+  const rawHistory = cpMemoryEnabled
+    ? context.messageHistoryTail.slice(-RAW_SCAN_WINDOW)
+    : context.messageHistoryTail.slice();
   let latestSystemRawIndex = -1;
 
   for (let i = rawHistory.length - 1; i >= 0; i -= 1) {
@@ -395,6 +398,10 @@ function buildPlannerHistory(
   }
 
   if (compacted.length === 0) return [];
+
+  if (!cpMemoryEnabled) {
+    return compacted.map((entry) => entry.value);
+  }
 
   const selectedByIndex = new Map<number, CompactedHistoryEntry>();
   for (const entry of compacted.slice(-RECENT_WINDOW)) {
@@ -565,15 +572,15 @@ export async function planNextAction(
   try {
     const plannerTools = getPlannerToolSchema(context.toolSchema);
     const plannerCpMemoryLimit = Math.max(0, Math.floor(context.plannerCpMemoryLimit ?? 0));
+    const cpMemoryEnabled = plannerCpMemoryLimit > 0;
     const plannerMemory = buildPlannerMemory(
       filterPlannerPreferencesByStage(memory.getPreferences(), stage),
       memory.getActiveConflicts(),
       memory.getDeadEnds(),
       plannerCpMemoryLimit
     );
-    const cpMemoryEnabled = plannerMemory !== null;
     const plannerInput = {
-      history: buildPlannerHistory(context),
+      history: buildPlannerHistory(context, cpMemoryEnabled),
       availableTools: plannerTools,
       workflow: buildWorkflowContext(
         context,
