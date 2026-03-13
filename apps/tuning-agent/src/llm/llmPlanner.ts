@@ -158,10 +158,7 @@ const CORE_SYSTEM_PROMPT =
   '- Primary goal: help the user complete booking safely while preserving the user\'s agency over the choice.\n' +
   '- Prefer concrete progress when intent is clear, but do not turn an unresolved comparison into an autonomous choice.\n' +
   '- An explicit comparison preference may justify sorting or surfacing information, but it does not by itself authorize selecting the current top-ranked option while multiple visible options remain.\n' +
-  '- When multiple options remain or the next step would be assumption-heavy, prefer one non-committal GUI modification if it can make the user\'s stated criterion easier to see or apply without assuming a choice; otherwise use respond for a concise clarification.\n' +
-  '- Treat assistantMessage as a brief spoken cue, not a narration track.\n' +
-  '- When the GUI already shows the relevant labels, rankings, values, or updated state, do not repeat those details in assistantMessage.\n' +
-  '- Let the GUI carry visible detail. Use assistantMessage only for the smallest coordination cue or next-step hint that is still useful aloud.\n' +
+  '- When multiple options remain or the next step would be assumption-heavy, prefer one non-committal GUI modification if it can make the user\'s stated criterion easier to see or apply without assuming a choice; otherwise use respond for a helpful clarification or direct answer grounded in visible information.\n' +
   '- Use navigation or commitment actions only after clear user-originated confirmation, or when exactly one visible enabled option remains under the user\'s explicit criteria.\n' +
   '- Do not infer unstated optimization goals or tie-breakers such as highest-rated, cheapest, nearest, earliest, latest, shortest, or best default.\n' +
   '- Choose exactly one next step for this turn.';
@@ -177,12 +174,10 @@ const OPENAI_TOOL_CALLING_RULES =
   'Tool-calling rules:\n' +
   '- Use exactly one provided function on every turn.\n' +
   '- If no GUI tool should be used now, call "respond".\n' +
-  '- Put a very short user-facing explanation in "assistantMessage". Prefer one short sentence or short clause.\n' +
+  '- Put a user-facing explanation in "assistantMessage".\n' +
   '- Put a concise rationale in "reason".\n' +
   '- For GUI tool calls, assistantMessage should briefly describe the action and should not ask for permission.\n' +
-  '- After a GUI tool call, do not restate option names, rankings, prices, times, seat labels, counts, or other details that are now visible on screen unless the user explicitly asked to hear them.\n' +
-  '- For GUI tool calls, prefer short cues like "I narrowed the list.", "I sorted the options.", "I highlighted the closest matches.", or "Take a look at the updated options." when that is sufficient.\n' +
-  '- For respond, keep assistantMessage to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata, do not introduce a new comparison dimension, and do not read back GUI details that are already obvious on screen.\n' +
+  '- For respond, base assistantMessage only on currently visible information or stage-relevant stored preferences. Do not mention non-visible item metadata, do not introduce a new comparison dimension, and do not invent facts.\n' +
   '- Do not use select, selectMultiple, or next to resolve a tie among multiple viable options unless the user has clearly committed to one specific choice.\n' +
   '- Do not justify a commitment action with an inferred ranking or default ordering.\n' +
   '- Do not output plain text without a function call.\n' +
@@ -190,6 +185,12 @@ const OPENAI_TOOL_CALLING_RULES =
 
 const GUI_ADAPTATION_ENABLED_RULES =
   'GUI adaptation rules when modification tools are enabled:\n' +
+  '- Treat assistantMessage as a brief spoken cue, not a narration track.\n' +
+  '- When the GUI already shows the relevant labels, rankings, values, or updated state, do not repeat those details in assistantMessage.\n' +
+  '- Let the GUI carry visible detail. Use assistantMessage only for the smallest coordination cue or next-step hint that is still useful aloud.\n' +
+  '- After a GUI tool call, do not restate option names, rankings, prices, times, seat labels, counts, or other details that are now visible on screen unless the user explicitly asked to hear them.\n' +
+  '- For GUI tool calls, prefer short cues like "I narrowed the list.", "I sorted the options.", "I highlighted the closest matches.", or "Take a look at the updated options." when that is sufficient.\n' +
+  '- For respond, keep assistantMessage to the smallest helpful clarification or direct answer based only on currently visible information. Do not read back GUI details that are already obvious on screen.\n' +
   '- Match the tool to the need: use augment to surface a short fact tied to an explicit current-stage user request or a stored preference already relevant to this stage, filter to narrow by an explicit criterion, sort to order by an explicit comparison goal, and highlight to mark a small relevant subset.\n' +
   '- For filter or sort, prefer the structured item field that directly represents the user\'s criterion or comparison goal. Use "value" only when operating on the visible label text itself, and do not invent field names that are not present on the current items.\n' +
   '- Do not call filter if it would leave zero visible options. When a criterion appears to eliminate everything, ask a concise clarification or choose a less restrictive non-committal step instead.\n' +
@@ -203,6 +204,15 @@ const GUI_ADAPTATION_ENABLED_RULES =
   '- Use only criteria grounded in what the user asked for. Do not introduce a new comparison dimension or hidden optimization goal.\n' +
   '- Do not mention item metadata directly in assistantMessage if it is not already visible; surface it through the UI first.\n' +
   '- Do not use sort to create a best default, do not use highlight when it adds no distinction, and let repeated filter calls accumulate additional conditions instead of replacing earlier filters.';
+
+const GUI_ADAPTATION_DISABLED_RULES =
+  'Message rules when GUI adaptation is disabled:\n' +
+  '- Do not rely on the GUI to newly surface, filter, sort, or highlight the relevant options for the user.\n' +
+  '- Use assistantMessage to carry the detail that the GUI would otherwise communicate.\n' +
+  '- When the user asks for matching options under a visible criterion, name the relevant visible options and briefly state why they match instead of only saying that matching options exist.\n' +
+  '- It is okay to mention human-readable option names and short criterion-relevant facts that are already visible in the current UI.\n' +
+  '- Prefer one to three short sentences when needed to summarize visible candidates, compare a small set, or explain what remains unresolved.\n' +
+  '- Do not mention non-visible item metadata, invent new comparison dimensions, or turn a tie into a recommendation the user did not ask for.';
 
 export function getPlannerSystemPrompt(): string {
   return [CORE_SYSTEM_PROMPT, OPENAI_TOOL_CALLING_RULES].join('\n');
@@ -221,6 +231,8 @@ function buildSystemPrompt(workflow: PlannerWorkflow): string {
   }
   if (workflow.guiAdaptationEnabled !== false) {
     sections.push(GUI_ADAPTATION_ENABLED_RULES);
+  } else {
+    sections.push(GUI_ADAPTATION_DISABLED_RULES);
   }
   return sections.join('\n');
 }
@@ -307,7 +319,31 @@ function getToolParametersRecord(tool: ToolSchemaItem): Record<string, unknown> 
   return {};
 }
 
-function toOpenAiTools(availableTools: ToolSchemaItem[]): OpenAiFunctionTool[] {
+function getToolAssistantMessageDescription(guiAdaptationEnabled: boolean): string {
+  if (guiAdaptationEnabled) {
+    return 'One very short user-facing message describing the step. Assume it may be spoken aloud. Do not restate details that are already visible in the GUI after the action.';
+  }
+  return 'User-facing message describing the step. Assume it may be spoken aloud. When GUI adaptation is unavailable, include enough visible detail to name relevant options or explain the criterion because the GUI will not carry that extra explanation for you.';
+}
+
+function getRespondToolDescription(guiAdaptationEnabled: boolean): string {
+  if (guiAdaptationEnabled) {
+    return 'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information, without re-narrating GUI details that are already on screen.';
+  }
+  return 'Respond to the user without executing any GUI tool. Base the reply on currently visible information. When GUI adaptation is unavailable, use enough detail to name matching visible options or briefly explain why they fit.';
+}
+
+function getRespondAssistantMessageDescription(guiAdaptationEnabled: boolean): string {
+  if (guiAdaptationEnabled) {
+    return 'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata, introduce a new comparison dimension, or read back GUI details that are already visible.';
+  }
+  return 'User-facing response based on currently visible information. When GUI adaptation is unavailable, it may be one to three short sentences naming visible matching options or briefly explaining why they fit. Do not mention non-visible item metadata or invent a new comparison dimension.';
+}
+
+function toOpenAiTools(
+  availableTools: ToolSchemaItem[],
+  guiAdaptationEnabled: boolean
+): OpenAiFunctionTool[] {
   const tools: OpenAiFunctionTool[] = [];
 
   for (const tool of availableTools) {
@@ -328,8 +364,7 @@ function toOpenAiTools(availableTools: ToolSchemaItem[]): OpenAiFunctionTool[] {
 
     properties[TOOL_META_ASSISTANT_MESSAGE_KEY] = {
       type: 'string',
-      description:
-        'One very short user-facing message describing the step. Assume it may be spoken aloud. Do not restate details that are already visible in the GUI after the action.',
+      description: getToolAssistantMessageDescription(guiAdaptationEnabled),
     };
     properties[TOOL_META_REASON_KEY] = {
       type: 'string',
@@ -352,15 +387,13 @@ function toOpenAiTools(availableTools: ToolSchemaItem[]): OpenAiFunctionTool[] {
   tools.push({
     type: 'function',
     name: NATIVE_NONE_TOOL_NAME,
-    description:
-      'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information, without re-narrating GUI details that are already on screen.',
+    description: getRespondToolDescription(guiAdaptationEnabled),
     parameters: {
       type: 'object',
       properties: {
         [TOOL_META_ASSISTANT_MESSAGE_KEY]: {
           type: 'string',
-          description:
-            'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata, introduce a new comparison dimension, or read back GUI details that are already visible.',
+          description: getRespondAssistantMessageDescription(guiAdaptationEnabled),
         },
         [TOOL_META_REASON_KEY]: {
           type: 'string',
@@ -507,7 +540,8 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
   const temperature = resolveOpenAITemperature();
-  const openAiTools = toOpenAiTools(input.availableTools);
+  const guiAdaptationEnabled = input.workflow.guiAdaptationEnabled !== false;
+  const openAiTools = toOpenAiTools(input.availableTools, guiAdaptationEnabled);
   const nativePlannerInput = {
     history: input.history,
     workflow: input.workflow,

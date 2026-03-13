@@ -5,6 +5,7 @@ export type StudyDb = typeof defaultDb;
 export type StudyModeId =
   | 'baseline'
   | 'basic-tuning'
+  | 'new-baseline'
   | 'adaptive-tuning'
   | 'full-tuning';
 

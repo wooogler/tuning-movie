@@ -415,7 +415,8 @@ export function ChatPage({
     [studyModePreset]
   );
   const isBaselineMode = studyModePreset === 'baseline';
-  const isFullTuningSplit = studyModePreset === 'full-tuning';
+  const usesSplitInterface =
+    studyModePreset === 'full-tuning' || studyModePreset === 'new-baseline';
   const sttLanguage = useMemo(() => getPreferredSttLanguage(), []);
   const { logEvent: logStudyEvent, logEventNow: logStudyEventNow } = useStudyInteractionLogger({
     studySession,
@@ -1540,7 +1541,7 @@ export function ChatPage({
           </div>
         )}
 
-        {isFullTuningSplit ? (
+        {usesSplitInterface ? (
           <FullTuningSplitView
             messages={messages}
             activeSpec={activeSpec}
@@ -1709,7 +1710,7 @@ export function ChatPage({
           </div>
         )}
 
-        {agentBridgeEnabled && !isFullTuningSplit && (
+        {agentBridgeEnabled && !usesSplitInterface && (
           <ChatInput
             chatWidthPx={chatWidthPx}
             disabled={inputDisabled}

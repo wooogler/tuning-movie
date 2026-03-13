@@ -11,6 +11,11 @@ const MODE_CONFIG: Record<StudyModeId, StudyModeConfig> = {
     guiAdaptationEnabled: false,
     cpMemoryWindow: 0,
   },
+  'new-baseline': {
+    agentEnabled: true,
+    guiAdaptationEnabled: false,
+    cpMemoryWindow: 0,
+  },
   'adaptive-tuning': {
     agentEnabled: true,
     guiAdaptationEnabled: true,

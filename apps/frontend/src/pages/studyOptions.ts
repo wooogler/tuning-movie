@@ -26,6 +26,16 @@ export const STUDY_MODE_OPTIONS = [
     },
   },
   {
+    id: 'new-baseline',
+    label: 'New Baseline',
+    description: 'Agent ON, GUI Adaptation OFF, CP memory OFF, split GUI/CUI interface.',
+    config: {
+      agentEnabled: true,
+      guiAdaptationEnabled: false,
+      cpMemoryWindow: 0,
+    },
+  },
+  {
     id: 'adaptive-tuning',
     label: 'Adaptive TUNING',
     description: 'Agent ON, GUI Adaptation ON, CP memory OFF.',
