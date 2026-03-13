@@ -250,9 +250,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     }),
-  transcribeSpeech: async (audio: Blob, language: 'en' | 'ko') => {
+  transcribeSpeech: async (audio: Blob, language: 'en') => {
     const audioBase64 = await blobToBase64(audio);
-    return fetchApi<{ text: string; language: 'en' | 'ko' }>('/speech/transcribe', {
+    return fetchApi<{ text: string; language: 'en' }>('/speech/transcribe', {
       method: 'POST',
       body: JSON.stringify({
         audioBase64,

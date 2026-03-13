@@ -14,7 +14,7 @@ interface UseVoiceInputOptions {
   enabled: boolean;
   suspended?: boolean;
   transcribeAudio: (audio: Blob) => Promise<string>;
-  onTranscript: (text: string) => void;
+  onTranscript: (payload: { text: string; durationMs: number }) => void;
   onLogEvent?: (type: string, payload: unknown) => void;
 }
 
@@ -332,7 +332,10 @@ export function useVoiceInput({
           textLength: normalizedTranscript.length,
         });
         if (normalizedTranscript) {
-          onTranscriptRef.current(normalizedTranscript);
+          onTranscriptRef.current({
+            text: normalizedTranscript,
+            durationMs,
+          });
         }
       } catch (transcriptionError) {
         const message = toErrorMessage(transcriptionError);

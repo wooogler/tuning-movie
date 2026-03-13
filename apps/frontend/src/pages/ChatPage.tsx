@@ -56,7 +56,7 @@ interface StageContext {
 }
 
 type ViewMode = 'chat' | 'carousel';
-type SupportedSttLanguage = 'en' | 'ko';
+type SupportedSttLanguage = 'en';
 interface ChatPageProps {
   studyModePreset?: StudyModeId;
   studySession?: StudySessionState | null;
@@ -77,6 +77,9 @@ const DEFAULT_SCENARIO_PANEL_WIDTH_PX = 620;
 const MIN_SCENARIO_PANEL_WIDTH_PX = 280;
 const MAX_SCENARIO_PANEL_WIDTH_PX = 620;
 const MIN_MAIN_CONTENT_WIDTH_PX = 700;
+const SHORT_VOICE_INPUT_MAX_DURATION_MS = 850;
+const SHORT_VOICE_INPUT_MAX_CHARS = 2;
+const MEANINGFUL_SHORT_VOICE_TOKENS = new Set(['no', 'ok']);
 const guiAdaptationToolsByStage: Record<Stage, readonly string[]> = {
   movie: ['filter', 'sort', 'highlight', 'augment', 'clearModification'],
   theater: ['filter', 'sort', 'highlight', 'augment', 'clearModification'],
@@ -123,14 +126,59 @@ function readStoredNonNegativeInt(key: string, fallback: number): number {
   return Math.max(0, parsed);
 }
 
-function getPreferredSttLanguage(): SupportedSttLanguage {
-  if (typeof navigator === 'undefined') return 'en';
-  const locales = [navigator.language, ...(navigator.languages ?? [])];
-  return locales.some(
-    (locale) => typeof locale === 'string' && locale.toLowerCase().startsWith('ko')
-  )
-    ? 'ko'
-    : 'en';
+function normalizeVoiceTranscriptToken(token: string): string {
+  return token
+    .toLowerCase()
+    .replace(/^[^a-z0-9\u3131-\u318e\uac00-\ud7a3]+|[^a-z0-9\u3131-\u318e\uac00-\ud7a3]+$/gi, '')
+    .trim();
+}
+
+function isLikelyFillerToken(token: string): boolean {
+  if (!token) return false;
+
+  return (
+    /^u+h+$/.test(token) ||
+    /^u+m+$/.test(token) ||
+    /^e+r+m+$/.test(token) ||
+    /^h+m+$/.test(token) ||
+    /^m+m+$/.test(token) ||
+    /^a+h+$/.test(token)
+  );
+}
+
+function containsHangul(text: string): boolean {
+  return /[\u3131-\u318e\uac00-\ud7a3]/.test(text);
+}
+
+function getNormalizedVoiceTranscriptTokens(text: string): string[] {
+  return text
+    .split(/\s+/)
+    .map(normalizeVoiceTranscriptToken)
+    .filter(Boolean);
+}
+
+function getIgnoredVoiceTranscriptReason(
+  text: string,
+  durationMs: number
+): 'non_english' | 'filler_only' | 'too_short' | null {
+  if (containsHangul(text)) return 'non_english';
+
+  const normalizedTokens = getNormalizedVoiceTranscriptTokens(text);
+  if (normalizedTokens.length === 0) return 'too_short';
+  if (normalizedTokens.every((token) => isLikelyFillerToken(token))) {
+    return 'filler_only';
+  }
+
+  if (
+    durationMs <= SHORT_VOICE_INPUT_MAX_DURATION_MS &&
+    normalizedTokens.length === 1 &&
+    normalizedTokens[0].length <= SHORT_VOICE_INPUT_MAX_CHARS &&
+    !MEANINGFUL_SHORT_VOICE_TOKENS.has(normalizedTokens[0])
+  ) {
+    return 'too_short';
+  }
+
+  return null;
 }
 
 function getVoiceStatusLabel(params: {
@@ -411,7 +459,7 @@ export function ChatPage({
   const showBasicTuningTurnSnapshots = studyModePreset === 'basic-tuning';
   const usesSplitInterface =
     studyModePreset === 'full-tuning' || studyModePreset === 'new-baseline';
-  const sttLanguage = useMemo(() => getPreferredSttLanguage(), []);
+  const sttLanguage: SupportedSttLanguage = 'en';
   const { logEvent: logStudyEvent, logEventNow: logStudyEventNow } = useStudyInteractionLogger({
     studySession,
     messages,
@@ -1324,8 +1372,22 @@ export function ChatPage({
       const result = await api.transcribeSpeech(audio, sttLanguage);
       return result.text;
     },
-    onTranscript: (text: string) => {
-      submitChatInput(text, 'voice');
+    onTranscript: ({ text, durationMs }) => {
+      const normalizedTranscript = text.trim();
+      if (!normalizedTranscript) return;
+
+      const ignoredReason = getIgnoredVoiceTranscriptReason(normalizedTranscript, durationMs);
+      if (ignoredReason) {
+        logStudyEvent('chat.voice_input.ignored', {
+          language: sttLanguage,
+          durationMs,
+          reason: ignoredReason,
+          text: normalizedTranscript,
+        });
+        return;
+      }
+
+      submitChatInput(normalizedTranscript, 'voice');
     },
     onLogEvent: logStudyEvent,
   });

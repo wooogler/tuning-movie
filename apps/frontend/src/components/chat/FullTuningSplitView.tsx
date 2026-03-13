@@ -290,7 +290,7 @@ export function FullTuningSplitView({
   const activeSnapshotIndexRef = useRef<number>(-1);
   const transitionTimeoutRef = useRef<number | null>(null);
   const syncHighlightTimeoutRef = useRef<number | null>(null);
-  const [conversationCollapsed, setConversationCollapsed] = useState(() => voiceModeEnabled);
+  const [conversationCollapsed, setConversationCollapsed] = useState(false);
 
   const { snapshots, timelineRows, latestSnapshotIndex, firstRowIdBySnapshotIndex } = useMemo(() => {
     const nextSnapshots: GuiSnapshot[] = [];
@@ -405,11 +405,6 @@ export function FullTuningSplitView({
   );
   const [timelineTopInsetPx, setTimelineTopInsetPx] = useState(0);
   const latestTimelineRow = timelineRows[timelineRows.length - 1] ?? null;
-
-  useEffect(() => {
-    if (!voiceModeEnabled) return;
-    setConversationCollapsed(true);
-  }, [voiceModeEnabled]);
 
   useEffect(() => {
     setActiveSnapshotIndex((current) => {

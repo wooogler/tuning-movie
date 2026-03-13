@@ -11,7 +11,7 @@ const DEFAULT_TTS_SPEED = (() => {
   if (!Number.isFinite(parsed)) return 1.5;
   return Math.min(4, Math.max(0.25, parsed));
 })();
-const SUPPORTED_STT_LANGUAGES = new Set(['en', 'ko']);
+const SUPPORTED_STT_LANGUAGES = new Set(['en']);
 
 function getOpenAiApiKey(): string | null {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -24,11 +24,11 @@ function trimToNull(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function normalizeSttLanguage(value: unknown): 'en' | 'ko' | null {
+function normalizeSttLanguage(value: unknown): 'en' | null {
   const trimmed = trimToNull(value)?.toLowerCase();
   if (!trimmed) return null;
   if (SUPPORTED_STT_LANGUAGES.has(trimmed)) {
-    return trimmed as 'en' | 'ko';
+    return trimmed as 'en';
   }
   return null;
 }
@@ -117,7 +117,7 @@ export async function speechRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'audioBase64 is required' });
     }
     if (!language) {
-      return reply.code(400).send({ error: 'language must be one of: en, ko' });
+      return reply.code(400).send({ error: 'language must be: en' });
     }
 
     let audioBuffer: Buffer;
