@@ -92,7 +92,8 @@ const PREFERENCE_SYSTEM_PROMPT =
   '- Remove obsolete preferences by omitting them from the returned list.\n' +
   '- Ignore trivial acknowledgements, assistant suggestions, and system state that the user did not ask for.\n' +
   '- Do not store procedural, exploratory, or temporary action requests as preferences.\n' +
-  '- Do not convert branch-local instructions into durable preferences. Examples: "check 4pm", "try this one", "go back", "clear that filter", "show another option", "check seats".\n' +
+  '- Do not convert branch-local instructions into durable preferences. Examples: "check Movie A", "check Theater B", "check 4pm", "try this one", "go back", "clear that filter", "show another option", "check seats".\n' +
+  '- Treat requests to check, try, inspect, or look at one current option as procedural exploration unless the user also states a reusable preference or enduring rule.\n' +
   '- Distinguish durable preferences from turn-local commitments. When the user is choosing among currently visible options to complete the current step, treat that as a local commitment unless they clearly express a reusable rule or enduring desire.\n' +
   '- Do not store current-step selections as preferences when the user is simply picking one visible option or confirming a choice for this branch. This applies across stages (for example selecting a movie, theater, date, time, or seats from the current UI).\n' +
   '- Short replies that accept one currently offered option are usually temporary selections, not durable preferences. Examples: "1:30 pm is good", "that one works", "let\'s do the second one", "book these seats".\n' +
