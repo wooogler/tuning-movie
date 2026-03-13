@@ -8,6 +8,7 @@ import { AgentMessage } from './AgentMessage';
 interface MessageListProps {
   messages: ChatMessage[];
   activeSpec: UISpec | null;
+  messageSnapshots?: Record<string, UISpec>;
   isAgentTyping?: boolean;
   speakingMessageId?: string | null;
   onSelect?: (id: string) => void;
@@ -19,11 +20,13 @@ interface MessageListProps {
   chatWidthPx?: number;
   isResizingWidth?: boolean;
   onResizeStart?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  showTurnSnapshots?: boolean;
 }
 
 export function MessageList({
   messages,
   activeSpec,
+  messageSnapshots = {},
   isAgentTyping = false,
   speakingMessageId = null,
   onSelect,
@@ -35,8 +38,25 @@ export function MessageList({
   chatWidthPx = 768,
   isResizingWidth = false,
   onResizeStart,
+  showTurnSnapshots = false,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isUserSnapshotMessage = (message: ChatMessage): boolean =>
+    showTurnSnapshots &&
+    message.type === 'user' &&
+    message.action === 'input' &&
+    Boolean(messageSnapshots[message.id]);
+  const isNavigationAgentMessage = (message: ChatMessage): boolean =>
+    message.type === 'agent' &&
+    (message.actionTag?.toolName === 'next' ||
+      message.actionTag?.toolName === 'prev' ||
+      message.actionTag?.toolName === 'startOver');
+  const isAgentSnapshotMessage = (message: ChatMessage, index: number): boolean =>
+    showTurnSnapshots &&
+    message.type === 'agent' &&
+    !isToolLinkedAgentMessage(index) &&
+    !isNavigationAgentMessage(message) &&
+    Boolean(messageSnapshots[message.id]);
 
   const isToolLinkedAgentMessage = (index: number): boolean => {
     const current = messages[index];
@@ -58,6 +78,15 @@ export function MessageList({
     (lastIdx, msg, idx) => (msg.type === 'system' ? idx : lastIdx),
     -1
   );
+  const latestGuiMessageId = messages.reduce<string | null>((latestId, message, index) => {
+    if (message.type === 'system') {
+      return message.id;
+    }
+    if (isUserSnapshotMessage(message) || isAgentSnapshotMessage(message, index)) {
+      return message.id;
+    }
+    return latestId;
+  }, null);
 
   return (
     <div className="flex-1 overflow-y-auto px-4">
@@ -82,7 +111,9 @@ export function MessageList({
         )}
         {messages.map((message, index) => {
           if (message.type === 'system') {
-            const isActive = index === lastSystemIndex;
+            const isActive = latestGuiMessageId
+              ? message.id === latestGuiMessageId
+              : index === lastSystemIndex;
             const previous = index > 0 ? messages[index - 1] : null;
             const linkedAssistantText =
               previous && previous.type === 'agent' && isToolLinkedAgentMessage(index - 1)
@@ -111,7 +142,24 @@ export function MessageList({
           }
 
           if (message.type === 'user') {
-            return <UserMessage key={message.id} message={message} />;
+            const snapshotSpec = isUserSnapshotMessage(message)
+              ? (messageSnapshots[message.id] ?? null)
+              : null;
+            return (
+              <UserMessage
+                key={message.id}
+                message={message}
+                snapshotSpec={snapshotSpec}
+                snapshotIsActive={message.id === latestGuiMessageId}
+                snapshotActiveSpec={message.id === latestGuiMessageId ? activeSpec : null}
+                onSnapshotSelect={onSelect}
+                onSnapshotToggle={onToggle}
+                onSnapshotNext={onNext}
+                onSnapshotBack={onBack}
+                onSnapshotStartOver={onStartOver}
+                onSnapshotConfirm={onConfirm}
+              />
+            );
           }
 
           if (isToolLinkedAgentMessage(index)) {
@@ -123,6 +171,19 @@ export function MessageList({
               key={message.id}
               message={message}
               speaking={message.id === speakingMessageId}
+              snapshotSpec={
+                isAgentSnapshotMessage(message, index)
+                  ? (messageSnapshots[message.id] ?? null)
+                  : null
+              }
+              snapshotIsActive={message.id === latestGuiMessageId}
+              snapshotActiveSpec={message.id === latestGuiMessageId ? activeSpec : null}
+              onSnapshotSelect={onSelect}
+              onSnapshotToggle={onToggle}
+              onSnapshotNext={onNext}
+              onSnapshotBack={onBack}
+              onSnapshotStartOver={onStartOver}
+              onSnapshotConfirm={onConfirm}
             />
           );
         })}

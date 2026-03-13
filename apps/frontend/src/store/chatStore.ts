@@ -50,6 +50,8 @@ export type ChatMessage = SystemMessage | UserMessage | AgentMessage;
 
 interface ChatState {
   messages: ChatMessage[];
+  messageSnapshots: Record<string, UISpec>;
+  stageSnapshots: Partial<Record<Stage, UISpec>>;
   currentStage: Stage;
   activeSpec: UISpec | null;
 }
@@ -59,10 +61,15 @@ interface ChatActions {
   addSystemMessage: (stage: Stage, spec: UISpec, annotation?: SystemMessageAnnotation) => void;
 
   /** Add user message (selection/back/input) */
-  addUserMessage: (stage: Stage, action: 'select' | 'back' | 'input', label: string) => void;
+  addUserMessage: (
+    stage: Stage,
+    action: 'select' | 'back' | 'input',
+    label: string,
+    specSnapshot?: UISpec | null
+  ) => void;
 
   /** Add agent explanation message */
-  addAgentMessage: (stage: Stage, text: string) => string;
+  addAgentMessage: (stage: Stage, text: string, specSnapshot?: UISpec | null) => string;
 
   /** Attach tool-action tag to the latest agent message in the stage */
   annotateLastAgentMessage: (stage: Stage, actionTag: AgentMessageActionTag) => void;
@@ -108,31 +115,46 @@ export function getPrevStage(current: Stage): Stage | null {
 
 const initialState: ChatState = {
   messages: [],
+  messageSnapshots: {},
+  stageSnapshots: {},
   currentStage: 'movie',
   activeSpec: null,
 };
+
+function cloneSpecSnapshot(spec: UISpec | null | undefined): UISpec | undefined {
+  if (!spec) return undefined;
+  if (typeof globalThis.structuredClone === 'function') {
+    return globalThis.structuredClone(spec) as UISpec;
+  }
+  return JSON.parse(JSON.stringify(spec)) as UISpec;
+}
 
 export const useChatStore = create<ChatState & ChatActions>((set) => ({
   ...initialState,
 
   addSystemMessage: (stage, spec, annotation) => {
+    const frozenSpec = cloneSpecSnapshot(spec) ?? spec;
     const message: SystemMessage = {
       id: `sys-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type: 'system',
       timestamp: Date.now(),
       stage,
-      spec,
+      spec: frozenSpec,
       annotation,
     };
 
     set((state) => ({
       messages: [...state.messages, message],
+      stageSnapshots: {
+        ...state.stageSnapshots,
+        [stage]: cloneSpecSnapshot(spec) ?? spec,
+      },
       currentStage: stage,
       activeSpec: spec,
     }));
   },
 
-  addUserMessage: (stage, action, label) => {
+  addUserMessage: (stage, action, label, specSnapshot) => {
     const message: UserMessage = {
       id: `usr-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type: 'user',
@@ -141,13 +163,17 @@ export const useChatStore = create<ChatState & ChatActions>((set) => ({
       action,
       label,
     };
+    const clonedSnapshot = cloneSpecSnapshot(specSnapshot);
 
     set((state) => ({
       messages: [...state.messages, message],
+      messageSnapshots: clonedSnapshot
+        ? { ...state.messageSnapshots, [message.id]: clonedSnapshot }
+        : state.messageSnapshots,
     }));
   },
 
-  addAgentMessage: (stage, text) => {
+  addAgentMessage: (stage, text, specSnapshot) => {
     const message: AgentMessage = {
       id: `agt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type: 'agent',
@@ -155,9 +181,13 @@ export const useChatStore = create<ChatState & ChatActions>((set) => ({
       stage,
       text,
     };
+    const clonedSnapshot = cloneSpecSnapshot(specSnapshot);
 
     set((state) => ({
       messages: [...state.messages, message],
+      messageSnapshots: clonedSnapshot
+        ? { ...state.messageSnapshots, [message.id]: clonedSnapshot }
+        : state.messageSnapshots,
     }));
 
     return message.id;
@@ -179,15 +209,14 @@ export const useChatStore = create<ChatState & ChatActions>((set) => ({
 
   updateActiveSpec: (spec) => {
     set((state) => {
-      // Also update the last system message's spec for consistency
-      const messages = [...state.messages];
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].type === 'system') {
-          messages[i] = { ...messages[i], spec } as SystemMessage;
-          break;
-        }
-      }
-      return { messages, activeSpec: spec };
+      const stage = spec.stage;
+      return {
+        activeSpec: spec,
+        stageSnapshots: {
+          ...state.stageSnapshots,
+          [stage]: cloneSpecSnapshot(spec) ?? spec,
+        },
+      };
     });
   },
 

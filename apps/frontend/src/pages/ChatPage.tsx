@@ -306,16 +306,8 @@ function getStageContextKey(stage: Stage, booking: BookingContext): string {
 }
 
 function getLatestStageSnapshot(stage: Stage): UISpec | null {
-  const { messages } = useChatStore.getState();
-
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message.type === 'system' && message.stage === stage) {
-      return message.spec;
-    }
-  }
-
-  return null;
+  const { stageSnapshots } = useChatStore.getState();
+  return stageSnapshots[stage] ?? null;
 }
 
 function restoreStageSnapshot<T extends DataItem>(
@@ -366,6 +358,7 @@ export function ChatPage({
   const addUserMessage = useChatStore((s) => s.addUserMessage);
   const addAgentMessage = useChatStore((s) => s.addAgentMessage);
   const annotateLastAgentMessage = useChatStore((s) => s.annotateLastAgentMessage);
+  const messageSnapshots = useChatStore((s) => s.messageSnapshots);
   const updateActiveSpec = useChatStore((s) => s.updateActiveSpec);
   const resetChat = useChatStore((s) => s.reset);
 
@@ -415,6 +408,7 @@ export function ChatPage({
     [studyModePreset]
   );
   const isBaselineMode = studyModePreset === 'baseline';
+  const showBasicTuningTurnSnapshots = studyModePreset === 'basic-tuning';
   const usesSplitInterface =
     studyModePreset === 'full-tuning' || studyModePreset === 'new-baseline';
   const sttLanguage = useMemo(() => getPreferredSttLanguage(), []);
@@ -826,7 +820,7 @@ export function ChatPage({
 
       setBooking(result.booking);
       if (!context) {
-        addUserMessage('confirm', 'select', 'Booking Confirmed!');
+        addUserMessage('confirm', 'select', 'Booking Confirmed!', activeSpec);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Booking failed');
@@ -930,7 +924,7 @@ export function ChatPage({
     }
 
     if (!context) {
-      addUserMessage(stage, 'select', selectionLabel);
+      addUserMessage(stage, 'select', selectionLabel, spec);
     }
 
     const nextStage = getNextStage(stage);
@@ -971,7 +965,7 @@ export function ChatPage({
     if (!prevStage) return;
 
     if (!context) {
-      addUserMessage(currentStage, 'back', 'Back');
+      addUserMessage(currentStage, 'back', 'Back', activeSpec);
     }
 
     const currentBooking = getBookingContext(activeSpec);
@@ -1024,7 +1018,7 @@ export function ChatPage({
     if (!activeSpec) return;
 
     if (!context) {
-      addUserMessage(currentStage, 'back', 'Start over');
+      addUserMessage(currentStage, 'back', 'Start over', activeSpec);
     }
 
     const source: 'agent' | 'devtools' =
@@ -1112,7 +1106,7 @@ export function ChatPage({
     if (!normalizedText) return;
     setAwaitingAgentResponse(false);
     const stage = activeSpec?.stage ?? currentStage;
-    const messageId = addAgentMessage(stage, normalizedText);
+    const messageId = addAgentMessage(stage, normalizedText, activeSpec);
     void speakAgentMessage({ id: messageId, text: normalizedText });
   }, [activeSpec, currentStage, addAgentMessage, speakAgentMessage]);
 
@@ -1153,7 +1147,7 @@ export function ChatPage({
         text: trimmed,
         source,
       });
-      addUserMessage(currentStage, 'input', trimmed);
+      addUserMessage(currentStage, 'input', trimmed, activeSpec);
       setAwaitingAgentResponse(true);
       sendUserMessageToAgent(trimmed, currentStage);
     },
@@ -1179,7 +1173,7 @@ export function ChatPage({
     if (!normalizedText) return;
 
     const stage = activeSpec?.stage ?? currentStage;
-    const messageId = addAgentMessage(stage, normalizedText);
+    const messageId = addAgentMessage(stage, normalizedText, activeSpec);
     void speakAgentMessage({ id: messageId, text: normalizedText });
   }, [activeSpec, currentStage, addAgentMessage, speakAgentMessage]);
 
@@ -1564,6 +1558,7 @@ export function ChatPage({
           <MessageList
             messages={messages}
             activeSpec={activeSpec}
+            messageSnapshots={messageSnapshots}
             isAgentTyping={isAgentTyping}
             speakingMessageId={speakingMessageId}
             onSelect={handleSelect}
@@ -1575,6 +1570,7 @@ export function ChatPage({
             chatWidthPx={chatWidthPx}
             isResizingWidth={isResizingChatWidth}
             onResizeStart={handleChatWidthResizeStart}
+            showTurnSnapshots={showBasicTuningTurnSnapshots}
           />
         ) : (
           <div className="flex-1 overflow-y-auto px-4 py-4">

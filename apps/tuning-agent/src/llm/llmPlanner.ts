@@ -209,9 +209,10 @@ const GUI_ADAPTATION_DISABLED_RULES =
   'Message rules when GUI adaptation is disabled:\n' +
   '- Do not rely on the GUI to newly surface, filter, sort, or highlight the relevant options for the user.\n' +
   '- Use assistantMessage to carry the detail that the GUI would otherwise communicate.\n' +
-  '- When the user asks for matching options under a visible criterion, name the relevant visible options and briefly state why they match instead of only saying that matching options exist.\n' +
-  '- It is okay to mention human-readable option names and short criterion-relevant facts that are already visible in the current UI.\n' +
-  '- Prefer one to three short sentences when needed to summarize visible candidates, compare a small set, or explain what remains unresolved.\n' +
+  '- When the user asks for matching options under a criterion already supported by the current UI state, name the relevant options and briefly state why they match instead of only saying that matching options exist.\n' +
+  '- It is okay to mention human-readable option names and short criterion-relevant facts already present in the current UI state.\n' +
+  '- Prefer one to three short sentences when needed to summarize the current candidates, compare a small set, or explain what remains unresolved.\n' +
+  '- Ground the reply in the current UI state, but avoid literally saying "visible", "shown", or "on screen" unless clarifying scope is necessary.\n' +
   '- Do not mention non-visible item metadata, invent new comparison dimensions, or turn a tie into a recommendation the user did not ask for.';
 
 export function getPlannerSystemPrompt(): string {
@@ -323,21 +324,21 @@ function getToolAssistantMessageDescription(guiAdaptationEnabled: boolean): stri
   if (guiAdaptationEnabled) {
     return 'One very short user-facing message describing the step. Assume it may be spoken aloud. Do not restate details that are already visible in the GUI after the action.';
   }
-  return 'User-facing message describing the step. Assume it may be spoken aloud. When GUI adaptation is unavailable, include enough visible detail to name relevant options or explain the criterion because the GUI will not carry that extra explanation for you.';
+  return 'User-facing message describing the step. Assume it may be spoken aloud. When GUI adaptation is unavailable, include enough detail to name relevant options or explain the criterion because the GUI will not carry that extra explanation for you. Avoid literally saying "visible", "shown", or "on screen" unless scope clarification is necessary.';
 }
 
 function getRespondToolDescription(guiAdaptationEnabled: boolean): string {
   if (guiAdaptationEnabled) {
     return 'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information, without re-narrating GUI details that are already on screen.';
   }
-  return 'Respond to the user without executing any GUI tool. Base the reply on currently visible information. When GUI adaptation is unavailable, use enough detail to name matching visible options or briefly explain why they fit.';
+  return 'Respond to the user without executing any GUI tool. Base the reply on the current UI state. When GUI adaptation is unavailable, use enough detail to name matching options or briefly explain why they fit. Avoid literally saying "visible", "shown", or "on screen" unless scope clarification is necessary.';
 }
 
 function getRespondAssistantMessageDescription(guiAdaptationEnabled: boolean): string {
   if (guiAdaptationEnabled) {
     return 'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata, introduce a new comparison dimension, or read back GUI details that are already visible.';
   }
-  return 'User-facing response based on currently visible information. When GUI adaptation is unavailable, it may be one to three short sentences naming visible matching options or briefly explaining why they fit. Do not mention non-visible item metadata or invent a new comparison dimension.';
+  return 'User-facing response based on the current UI state. When GUI adaptation is unavailable, it may be one to three short sentences naming matching options or briefly explaining why they fit. Avoid literally saying "visible", "shown", or "on screen" unless scope clarification is necessary. Do not mention non-visible item metadata or invent a new comparison dimension.';
 }
 
 function toOpenAiTools(

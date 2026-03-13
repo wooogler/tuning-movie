@@ -1,16 +1,36 @@
 import type { AgentMessage as AgentMessageType } from '../../store/chatStore';
+import type { UISpec } from '../../spec';
 import { renderMessageText } from './renderMessageText';
+import { MessageStageSnapshot } from './MessageStageSnapshot';
 
 interface AgentMessageProps {
   message: AgentMessageType;
   highlighted?: boolean;
   speaking?: boolean;
+  snapshotSpec?: UISpec | null;
+  snapshotIsActive?: boolean;
+  snapshotActiveSpec?: UISpec | null;
+  onSnapshotSelect?: (id: string) => void;
+  onSnapshotToggle?: (id: string) => void;
+  onSnapshotNext?: () => void;
+  onSnapshotBack?: () => void;
+  onSnapshotStartOver?: () => void;
+  onSnapshotConfirm?: () => void;
 }
 
 export function AgentMessage({
   message,
   highlighted = false,
   speaking = false,
+  snapshotSpec = null,
+  snapshotIsActive = false,
+  snapshotActiveSpec = null,
+  onSnapshotSelect,
+  onSnapshotToggle,
+  onSnapshotNext,
+  onSnapshotBack,
+  onSnapshotStartOver,
+  onSnapshotConfirm,
 }: AgentMessageProps) {
   const actionTag = message.actionTag;
   const containerClass = highlighted
@@ -38,25 +58,42 @@ export function AgentMessage({
         </svg>
       </div>
 
-      <div
-        className={`max-w-[80%] min-w-0 rounded-3xl px-3 py-2 transition-colors duration-700 ${containerClass}`}
-      >
-        <div className="text-sm text-info-label mb-1 flex items-center gap-2">
-          <span>Agent</span>
-          {actionTag ? (
-            <span
-              className="text-[11px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-info-border text-info-text bg-info-bg"
-              title={actionTag.reason}
-            >
-              {actionTag.toolName}
-            </span>
-          ) : null}
-        </div>
+      <div className="flex-1 min-w-0">
         <div
-          className={`rounded-2xl rounded-tl-sm px-4 py-2 text-base font-medium whitespace-pre-wrap break-words ${bubbleClass}`}
+          className={`max-w-[80%] min-w-0 rounded-3xl py-2 transition-colors duration-700 ${containerClass}`}
         >
-          {renderMessageText(message.text)}
+          <div className="text-sm text-info-label mb-1 flex items-center gap-2">
+            <span>Agent</span>
+            {actionTag ? (
+              <span
+                className="text-[11px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-info-border text-info-text bg-info-bg"
+                title={actionTag.reason}
+              >
+                {actionTag.toolName}
+              </span>
+            ) : null}
+          </div>
+          <div
+            className={`rounded-2xl rounded-tl-sm px-4 py-2 text-base font-medium whitespace-pre-wrap break-words ${bubbleClass}`}
+          >
+            {renderMessageText(message.text)}
+          </div>
         </div>
+        {snapshotSpec ? (
+          <div className="mt-3">
+            <MessageStageSnapshot
+              spec={snapshotSpec}
+              isActive={snapshotIsActive}
+              activeSpec={snapshotActiveSpec}
+              onSelect={onSnapshotSelect}
+              onToggle={onSnapshotToggle}
+              onNext={onSnapshotNext}
+              onBack={onSnapshotBack}
+              onStartOver={onSnapshotStartOver}
+              onConfirm={onSnapshotConfirm}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

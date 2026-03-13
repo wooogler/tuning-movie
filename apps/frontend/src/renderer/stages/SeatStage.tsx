@@ -96,7 +96,7 @@ export function SeatStage({
                       title={`${seat.label} • ${formatUsd(seat.price)} • ${seat.type}`}
                       style={{ gridColumn: `${seat.number} / span 1` }}
                       className={`
-                        aspect-square min-w-0 w-full rounded-t-md text-[10px] transition-all sm:rounded-t-lg sm:text-xs
+                        relative aspect-square min-w-0 w-full overflow-hidden rounded-t-md text-[10px] transition-all sm:rounded-t-lg sm:text-xs
                         ${
                           isOccupied
                             ? 'cursor-not-allowed bg-dark-border text-fg-faint font-normal'
@@ -110,6 +110,9 @@ export function SeatStage({
                       `}
                     >
                       {seat.number}
+                      {isOccupied ? (
+                        <span className="pointer-events-none absolute left-[18%] right-[18%] top-1/2 h-px -translate-y-1/2 bg-fg-faint/70" />
+                      ) : null}
                     </button>
                   );
                 })}
@@ -134,7 +137,9 @@ export function SeatStage({
           <span>Selected</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-t bg-dark-border" />
+          <div className="relative h-4 w-4 rounded-t bg-dark-border">
+            <span className="absolute left-[18%] right-[18%] top-1/2 h-px -translate-y-1/2 bg-fg-faint/70" />
+          </div>
           <span>Occupied</span>
         </div>
       </div>
