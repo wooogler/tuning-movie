@@ -1397,7 +1397,6 @@ export function ChatPage({
   const scenarioStory = studySession?.scenario.story ?? '';
   const scenarioPreferenceTypes = studySession?.scenario.narratorPreferenceTypes ?? [];
   const showScenarioBriefing = scenarioStory.length > 0 || scenarioPreferenceTypes.length > 0;
-  const showDownloadLogButton = !import.meta.env.PROD;
   const canDownloadLog = Boolean(studySession?.interactionLogFile);
 
   const handleDownloadLog = useCallback(async () => {
@@ -1506,21 +1505,19 @@ export function ChatPage({
             >
               Reset
             </button>
-            {showDownloadLogButton ? (
-              <button
-                type="button"
-                onClick={handleDownloadLog}
-                disabled={!canDownloadLog || downloadingLog}
-                title={
-                  canDownloadLog
-                    ? 'Download the current JSONL interaction log'
-                    : 'Interaction log is unavailable for this session'
-                }
-                className="px-3 py-1 text-xs rounded border border-dark-border text-fg hover:text-fg-strong hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {downloadingLog ? 'Downloading...' : 'Download Log'}
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={handleDownloadLog}
+              disabled={!canDownloadLog || downloadingLog}
+              title={
+                canDownloadLog
+                  ? 'Download the current JSONL interaction log'
+                  : 'Interaction log is unavailable for this session'
+              }
+              className="px-3 py-1 text-xs rounded border border-dark-border text-fg hover:text-fg-strong hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {downloadingLog ? 'Downloading...' : 'Download Log'}
+            </button>
             <button
               type="button"
               onClick={handleFinishStudy}

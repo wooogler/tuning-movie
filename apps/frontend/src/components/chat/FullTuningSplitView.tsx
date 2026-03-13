@@ -294,7 +294,7 @@ export function FullTuningSplitView({
       ? window.matchMedia(DESKTOP_MEDIA_QUERY).matches
       : false
   );
-  const [conversationCollapsed, setConversationCollapsed] = useState(false);
+  const [conversationCollapsed, setConversationCollapsed] = useState(() => voiceModeEnabled);
 
   const { snapshots, timelineRows, latestSnapshotIndex, firstRowIdBySnapshotIndex } = useMemo(() => {
     const nextSnapshots: GuiSnapshot[] = [];
@@ -424,6 +424,11 @@ export function FullTuningSplitView({
       mediaQuery.removeEventListener('change', handleChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!voiceModeEnabled) return;
+    setConversationCollapsed(true);
+  }, [voiceModeEnabled]);
 
   useEffect(() => {
     setActiveSnapshotIndex((current) => {
