@@ -6,7 +6,7 @@ import { agentTools, toolCategories } from '../agent/tools';
 import type { ToolDefinition } from '../agent/tools';
 import type { UISpec } from '../spec';
 
-type Tab = 'booking' | 'backend' | 'spec';
+type Tab = 'workflow' | 'backend' | 'spec';
 
 export function DevTools() {
   const { backendData, uiSpec, onToolApply } = useDevTools();
@@ -56,10 +56,10 @@ export function DevTools() {
       {/* Tabs */}
       <div className="flex bg-dark-border overflow-x-auto">
         <TabButton
-          active={activeTab === 'booking'}
-          onClick={() => setActiveTab('booking')}
+          active={activeTab === 'workflow'}
+          onClick={() => setActiveTab('workflow')}
         >
-          Booking
+          Workflow
         </TabButton>
         <TabButton
           active={activeTab === 'backend'}
@@ -74,12 +74,14 @@ export function DevTools() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-auto p-4 min-h-0">
-        {activeTab === 'booking' && (
+        {activeTab === 'workflow' && (
           <JsonViewer
             data={
-              uiSpec?.state.booking
-                ? { stage: uiSpec.stage, booking: uiSpec.state.booking }
-                : { message: 'No booking context' }
+              uiSpec?.state.workflow
+                ? { stage: uiSpec.stage, workflow: uiSpec.state.workflow }
+                : uiSpec?.state.booking
+                ? { stage: uiSpec.stage, workflow: uiSpec.state.booking }
+                : { message: 'No workflow context' }
             }
           />
         )}

@@ -23,6 +23,12 @@ function copyRecord(value: Record<string, unknown>): Record<string, unknown> {
   return { ...value };
 }
 
+function findWorkflowRecord(spec: Record<string, unknown>): Record<string, unknown> | null {
+  const state = isRecord(spec.state) ? spec.state : null;
+  if (!state) return null;
+  return isRecord(state.workflow) ? state.workflow : isRecord(state.booking) ? state.booking : null;
+}
+
 function fallbackSelectedRecord(selected: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!selected) return null;
   const id = readTrimmedString(selected.id);
@@ -89,6 +95,22 @@ function findSelectedItemsFromSpec(spec: Record<string, unknown>): Record<string
   return resolved;
 }
 
+function copyWorkflowSelectionRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? copyRecord(value) : null;
+}
+
+function copyWorkflowDate(value: unknown): Record<string, unknown> | string | null {
+  if (isRecord(value)) return copyRecord(value);
+  return readTrimmedString(value);
+}
+
+function copyWorkflowSeats(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => (isRecord(entry) ? copyRecord(entry) : null))
+    .filter((entry): entry is Record<string, unknown> => entry !== null);
+}
+
 function stageIndex(stage: WorkflowStage): number {
   return WORKFLOW_STAGE_ORDER.indexOf(stage);
 }
@@ -140,6 +162,29 @@ export function buildWorkflowSelectionState(params: {
 }): Record<string, unknown> | null {
   const state: Record<string, unknown> = {};
   const currentStageRank = stageIndex(params.currentStage);
+  const currentSpec = isRecord(params.uiSpec) ? params.uiSpec : null;
+
+  if (currentSpec) {
+    const workflow = findWorkflowRecord(currentSpec);
+    if (workflow) {
+      const movie = copyWorkflowSelectionRecord(workflow.movie);
+      if (movie) state.movie = movie;
+
+      const theater = copyWorkflowSelectionRecord(workflow.theater);
+      if (theater) state.theater = theater;
+
+      const date = copyWorkflowDate(workflow.date);
+      if (date) state.date = date;
+
+      const showing = copyWorkflowSelectionRecord(workflow.showing);
+      if (showing) state.showing = showing;
+
+      const seats = copyWorkflowSeats(
+        Array.isArray(workflow.seats) ? workflow.seats : workflow.selectedSeats
+      );
+      if (seats.length > 0) state.seats = seats;
+    }
+  }
 
   for (const rawEntry of params.messageHistory) {
     const entry = isRecord(rawEntry) ? rawEntry : null;
@@ -164,7 +209,6 @@ export function buildWorkflowSelectionState(params: {
     assignWorkflowSelection(state, stage, selectedItem);
   }
 
-  const currentSpec = isRecord(params.uiSpec) ? params.uiSpec : null;
   if (currentSpec) {
     if (params.currentStage === 'seat') {
       const currentSeats = findSelectedItemsFromSpec(currentSpec);

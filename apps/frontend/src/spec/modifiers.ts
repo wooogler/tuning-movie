@@ -112,7 +112,7 @@ export function computeDisplayItems<T extends DataItem>(
     const displayItem: DisplayItem = { id: item.id, value };
 
     // Disabled 상태
-    if ('status' in item && item.status === 'occupied') {
+    if ('status' in item && typeof item.status === 'string' && item.status !== 'available') {
       displayItem.isDisabled = true;
     }
 

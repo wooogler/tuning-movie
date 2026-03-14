@@ -50,6 +50,9 @@ export interface MovieItem extends DataItem {
   genre: string[];
   rating: string;
   duration: string;
+  ageRating: string;
+  synopsis: string;
+  releaseDate: string;
 }
 
 export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
@@ -59,6 +62,9 @@ export function generateMovieSpec(movies: Movie[]): UISpec<MovieItem> {
     genre: m.genre,
     rating: m.rating,
     duration: m.duration,
+    ageRating: m.ageRating,
+    synopsis: m.synopsis,
+    releaseDate: m.releaseDate,
   }));
 
   return createSpec({
@@ -82,6 +88,7 @@ export interface TheaterItem extends DataItem {
   id: string;
   name: string;
   location: string;
+  screenCount: number;
   distanceMiles: number;
   amenities: string[];
 }
@@ -94,6 +101,7 @@ export function generateTheaterSpec(
     id: t.id,
     name: t.name,
     location: t.location,
+    screenCount: t.screenCount,
     distanceMiles: t.distanceMiles,
     amenities: t.amenities,
   }));
@@ -184,8 +192,15 @@ export function createDateItems(
 
 export interface TimeItem extends DataItem {
   id: string;
+  movieId: string;
+  theaterId: string;
+  screenNumber: number;
+  date: string;
   time: string;
+  displayTime: string;
   format: 'Standard' | 'IMAX' | '3D';
+  availableSeats: number;
+  totalSeats: number;
 }
 
 export function generateTimeSpec(
@@ -196,8 +211,15 @@ export function generateTimeSpec(
 ): UISpec<TimeItem> {
   const items: TimeItem[] = showings.map((s) => ({
     id: s.id,
-    time: formatTime12Hour(s.time),
+    movieId: s.movieId,
+    theaterId: s.theaterId,
+    screenNumber: s.screenNumber,
+    date: s.date,
+    time: s.time,
+    displayTime: formatTime12Hour(s.time),
     format: s.format,
+    availableSeats: s.availableSeats,
+    totalSeats: s.totalSeats,
   }));
 
   return createSpec({
@@ -207,7 +229,7 @@ export function generateTimeSpec(
     items,
     modification: {},
     display: {
-      valueField: 'time',
+      valueField: 'displayTime',
       component: 'buttonGroup',
     },
     meta: { movieId, theaterId, date },
@@ -220,24 +242,26 @@ export function generateTimeSpec(
 
 export interface SeatItem extends DataItem {
   id: string;
+  showingId: string;
   row: string;
   number: number;
   label: string;
   type: 'standard' | 'premium' | 'couple';
   price: number;
-  status: 'available' | 'occupied';
+  status: 'available' | 'occupied' | 'selected';
 }
 
 export function generateSeatSpec(seats: Seat[]): UISpec<SeatItem> {
   const items: SeatItem[] = seats
     .map((s) => ({
       id: s.id,
+      showingId: s.showingId,
       row: s.row,
       number: s.number,
       label: `${s.row}${s.number} - ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(s.price)}`,
       type: s.type,
       price: s.price,
-      status: s.status === 'available' ? 'available' : 'occupied',
+      status: s.status,
     }));
 
   return createSpec({

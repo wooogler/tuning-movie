@@ -168,7 +168,7 @@ const CORE_SYSTEM_PROMPT =
 const CP_MEMORY_PROMPT_RULES =
   '- Use workflow.memory.preferences as structured user intent, and treat preferences as active guidance only when their relevantStages include workflow.currentStage unless the user explicitly restated them for the current step.\n' +
   '- Use workflow.memory.activeConflicts as the current blockers for the active branch.\n' +
-  '- Use workflow.memory.deadEnds as advisory history about branches that previously failed after backtracking.\n' +
+  '- Use workflow.memory.deadEnds to eliminate branches that previously failed after backtracking. Treat a dead-end scope as unavailable unless the user explicitly asks to revisit it. When applying preferences and dead-ends together narrows the viable set to a single option, select it directly instead of asking for clarification.\n' +
   '- Prefer workflow.memory.activeConflicts over workflow.memory.deadEnds when they disagree.\n' +
   '- workflow.memory.summaries contains concise natural-language projections of the structured memory for quick scanning.';
 

@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import type { BookingContext, UISpec } from '../../spec';
+import type { UISpec, WorkflowSelectionState } from '../../spec';
 import { formatTime12Hour } from '../../utils/displayFormats';
 
 interface SelectionBreadcrumbProps {
@@ -59,31 +59,72 @@ function getMetaSeats(meta: Record<string, unknown> | null): string[] {
     .filter((seat): seat is string => Boolean(seat));
 }
 
-function getBooking(spec: UISpec): BookingContext {
-  return spec.state.booking ?? {};
+type LegacyWorkflowSelectionState = WorkflowSelectionState & {
+  date?: WorkflowSelectionState['date'] | string;
+  selectedSeats?: WorkflowSelectionState['seats'];
+};
+
+function normalizeLegacyWorkflow(legacyWorkflow: LegacyWorkflowSelectionState): WorkflowSelectionState {
+  const normalizedDate =
+    typeof legacyWorkflow.date === 'string'
+      ? { id: legacyWorkflow.date, date: legacyWorkflow.date }
+      : legacyWorkflow.date;
+
+  const normalizedSeats = (legacyWorkflow.seats ?? legacyWorkflow.selectedSeats ?? [])
+    .map((seat) => {
+      if (!isRecord(seat)) return null;
+      const id = readString(seat.id);
+      if (!id) return null;
+      const label = readString(seat.label) ?? readString(seat.value);
+
+      return {
+        id,
+        ...(label ? { label } : {}),
+      };
+    })
+    .filter((seat): seat is NonNullable<WorkflowSelectionState['seats']>[number] => Boolean(seat));
+
+  return {
+    ...legacyWorkflow,
+    ...(normalizedDate ? { date: normalizedDate } : {}),
+    ...(normalizedSeats.length > 0 ? { seats: normalizedSeats } : {}),
+  };
 }
 
-function getMovieValue(booking: BookingContext, meta: Record<string, unknown> | null) {
-  return booking.movie?.title ?? getMetaMovieTitle(meta);
+function getWorkflow(spec: UISpec): WorkflowSelectionState {
+  if (spec.state.workflow) {
+    return spec.state.workflow;
+  }
+
+  const legacyWorkflow = spec.state.booking as LegacyWorkflowSelectionState | undefined;
+  if (!legacyWorkflow) {
+    return {};
+  }
+
+  return normalizeLegacyWorkflow(legacyWorkflow);
 }
 
-function getTheaterValue(booking: BookingContext, meta: Record<string, unknown> | null) {
-  return booking.theater?.name ?? getMetaTheaterName(meta);
+function getMovieValue(workflow: WorkflowSelectionState, meta: Record<string, unknown> | null) {
+  return workflow.movie?.title ?? getMetaMovieTitle(meta);
 }
 
-function getDateValue(booking: BookingContext, meta: Record<string, unknown> | null) {
-  const rawDate = booking.date ?? readString(meta?.date);
+function getTheaterValue(workflow: WorkflowSelectionState, meta: Record<string, unknown> | null) {
+  return workflow.theater?.name ?? getMetaTheaterName(meta);
+}
+
+function getDateValue(workflow: WorkflowSelectionState, meta: Record<string, unknown> | null) {
+  const rawDate = workflow.date?.date ?? workflow.date?.id ?? readString(meta?.date);
   return rawDate ? formatShortDate(rawDate) : undefined;
 }
 
-function getTimeValue(booking: BookingContext, meta: Record<string, unknown> | null) {
-  const rawTime = booking.showing?.time ?? readString(meta?.time);
+function getTimeValue(workflow: WorkflowSelectionState, meta: Record<string, unknown> | null) {
+  const rawTime = workflow.showing?.displayTime ?? workflow.showing?.time ?? readString(meta?.time);
   return rawTime ? formatCompactTime(rawTime) : undefined;
 }
 
-function getSeatValues(booking: BookingContext, meta: Record<string, unknown> | null) {
-  const values = (booking.selectedSeats ?? [])
-    .map((seat) => formatSeatLabel(seat.value))
+function getSeatValues(workflow: WorkflowSelectionState, meta: Record<string, unknown> | null) {
+  const values = (workflow.seats ?? [])
+    .map((seat) => formatSeatLabel(typeof seat.label === 'string' ? seat.label : seat.id))
     .filter(Boolean);
 
   if (values.length > 0) return values;
@@ -91,31 +132,31 @@ function getSeatValues(booking: BookingContext, meta: Record<string, unknown> | 
 }
 
 function buildSegments(spec: UISpec): BreadcrumbSegment[] {
-  const booking = getBooking(spec);
+  const workflow = getWorkflow(spec);
   const meta = getMetaRecord(spec);
   const segments: BreadcrumbSegment[] = [];
 
-  const movie = getMovieValue(booking, meta);
+  const movie = getMovieValue(workflow, meta);
   if (movie) {
     segments.push({ key: 'movie', label: 'Movie', value: movie });
   }
 
-  const theater = getTheaterValue(booking, meta);
+  const theater = getTheaterValue(workflow, meta);
   if (theater) {
     segments.push({ key: 'theater', label: 'Theater', value: theater });
   }
 
-  const date = getDateValue(booking, meta);
+  const date = getDateValue(workflow, meta);
   if (date) {
     segments.push({ key: 'date', label: 'Date', value: date });
   }
 
-  const time = getTimeValue(booking, meta);
+  const time = getTimeValue(workflow, meta);
   if (time) {
     segments.push({ key: 'time', label: 'ShowTime', value: time });
   }
 
-  const seatValues = getSeatValues(booking, meta);
+  const seatValues = getSeatValues(workflow, meta);
   if (seatValues.length > 0) {
     segments.push({ key: 'seat', label: 'Seat', value: seatValues.join(', ') });
   }

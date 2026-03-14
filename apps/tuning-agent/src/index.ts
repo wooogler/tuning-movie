@@ -331,45 +331,57 @@ function buildExtractionUiFlow(context: PerceivedContext): Record<string, unknow
 
   const uiSpecRecord = asRecord(context.uiSpec);
   const state = asRecord(uiSpecRecord.state);
-  const booking = asRecord(state.booking);
-  const bookingSummary: Record<string, unknown> = {};
+  const workflow =
+    (typeof state.workflow === 'object' && state.workflow !== null && !Array.isArray(state.workflow)
+      ? (state.workflow as Record<string, unknown>)
+      : null) ??
+    (typeof state.booking === 'object' && state.booking !== null && !Array.isArray(state.booking)
+      ? (state.booking as Record<string, unknown>)
+      : null) ??
+    {};
+  const workflowSummary: Record<string, unknown> = {};
 
-  const movie = asRecord(booking.movie);
+  const movie = asRecord(workflow?.movie);
   const movieId = readNonEmptyString(movie.id);
   const movieTitle = readNonEmptyString(movie.title);
   if (movieId || movieTitle) {
-    bookingSummary.movie = {
+    workflowSummary.movie = {
       ...(movieId ? { id: movieId } : {}),
       ...(movieTitle ? { title: movieTitle } : {}),
     };
   }
 
-  const theater = asRecord(booking.theater);
+  const theater = asRecord(workflow?.theater);
   const theaterId = readNonEmptyString(theater.id);
   const theaterName = readNonEmptyString(theater.name);
   if (theaterId || theaterName) {
-    bookingSummary.theater = {
+    workflowSummary.theater = {
       ...(theaterId ? { id: theaterId } : {}),
       ...(theaterName ? { name: theaterName } : {}),
     };
   }
 
-  const date = readNonEmptyString(booking.date);
-  if (date) bookingSummary.date = date;
+  const dateRecord = asRecord(workflow?.date);
+  const date = readNonEmptyString(dateRecord?.date) ?? readNonEmptyString(dateRecord?.id);
+  if (date) workflowSummary.date = date;
 
-  const showing = asRecord(booking.showing);
+  const showing = asRecord(workflow?.showing);
   const showingId = readNonEmptyString(showing.id);
   const showingTime = readNonEmptyString(showing.time);
   if (showingId || showingTime) {
-    bookingSummary.showing = {
+    workflowSummary.showing = {
       ...(showingId ? { id: showingId } : {}),
       ...(showingTime ? { time: showingTime } : {}),
     };
   }
 
-  const selectedSeats = Array.isArray(booking.selectedSeats) ? booking.selectedSeats : [];
+  const selectedSeats = Array.isArray(workflow?.seats)
+    ? workflow.seats
+    : Array.isArray(workflow?.selectedSeats)
+    ? workflow.selectedSeats
+    : [];
   if (selectedSeats.length > 0) {
-    bookingSummary.selectedSeatsCount = selectedSeats.length;
+    workflowSummary.seatsCount = selectedSeats.length;
   }
 
   return {
@@ -377,7 +389,7 @@ function buildExtractionUiFlow(context: PerceivedContext): Record<string, unknow
     currentStage,
     previousStage,
     nextStage,
-    ...(Object.keys(bookingSummary).length > 0 ? { booking: bookingSummary } : {}),
+    ...(Object.keys(workflowSummary).length > 0 ? { workflow: workflowSummary } : {}),
   };
 }
 
@@ -826,13 +838,8 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     });
     return;
   }
-  if (!userConversationStarted && trigger !== 'state.updated:user-message') {
-    monitor.pushEvent('planner.blocked_until_user_message', {
-      trigger,
-      stage: context.stage,
-    });
-    return;
-  }
+  // NOTE: userConversationStarted gate removed to allow llmPlanner
+  // to act proactively from the first stage (e.g. greeting on snapshot).
 
   planningInFlight = true;
   monitor.updateContext(context);

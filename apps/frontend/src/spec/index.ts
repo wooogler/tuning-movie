@@ -25,6 +25,7 @@ export type {
   UISpec,
   DataItem,
   DisplayItem,
+  WorkflowSelectionState,
   BookingContext,
   DisplayConfig,
   StateModel,

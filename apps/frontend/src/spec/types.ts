@@ -40,13 +40,70 @@ export interface DisplayItem {
   isDisabled?: boolean;
 }
 
-export interface BookingContext {
-  movie?: { id: string; title: string };
-  theater?: { id: string; name: string };
-  date?: string;
-  showing?: { id: string; time: string };
-  selectedSeats?: DisplayItem[];
+export interface WorkflowMovieSelection {
+  id: string;
+  title: string;
+  genre?: string[];
+  rating?: string;
+  duration?: string;
+  ageRating?: string;
+  synopsis?: string;
+  releaseDate?: string;
 }
+
+export interface WorkflowTheaterSelection {
+  id: string;
+  name: string;
+  location?: string;
+  screenCount?: number;
+  distanceMiles?: number;
+  amenities?: string[];
+}
+
+export interface WorkflowDateSelection {
+  id: string;
+  date: string;
+  displayText?: string;
+  dayOfWeek?: string;
+  available?: boolean;
+}
+
+export interface WorkflowShowingSelection {
+  id: string;
+  time: string;
+  movieId?: string;
+  theaterId?: string;
+  screenNumber?: number;
+  date?: string;
+  displayTime?: string;
+  format?: 'Standard' | 'IMAX' | '3D';
+  availableSeats?: number;
+  totalSeats?: number;
+}
+
+export interface WorkflowSeatSelection {
+  id: string;
+  showingId?: string;
+  row?: string;
+  number?: number;
+  label?: string;
+  type?: 'standard' | 'premium' | 'couple';
+  price?: number;
+  status?: 'available' | 'occupied' | 'selected';
+}
+
+export interface WorkflowSelectionState {
+  movie?: WorkflowMovieSelection;
+  theater?: WorkflowTheaterSelection;
+  date?: WorkflowDateSelection;
+  showing?: WorkflowShowingSelection;
+  seats?: WorkflowSeatSelection[];
+}
+
+/**
+ * @deprecated Use WorkflowSelectionState instead.
+ */
+export type BookingContext = WorkflowSelectionState;
 
 // =============================================================================
 // UI Spec
@@ -126,7 +183,12 @@ export interface StateModel {
   /** 하이라이트된 아이템들 */
   highlighted?: DisplayItem[];
 
-  /** 예약 컨텍스트 (단일 source of truth) */
+  /** 단계별 누적 선택 컨텍스트 (단일 source of truth) */
+  workflow?: WorkflowSelectionState;
+
+  /**
+   * @deprecated Use state.workflow instead.
+   */
   booking?: BookingContext;
 }
 

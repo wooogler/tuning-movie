@@ -28,10 +28,10 @@ import {
   selectItems,
   toggleItem,
   type ConfirmMeta,
-  type BookingContext,
   type DataItem,
   type UISpec,
   type Stage,
+  type WorkflowSelectionState,
 } from '../spec';
 import { MessageList, FullTuningSplitView, ChatInput } from '../components/chat';
 import { ScenarioBriefing } from '../components/scenario/ScenarioBriefing';
@@ -51,7 +51,7 @@ import { getFixedCurrentDate } from '../utils/studyDate';
 import type { StudySessionState } from '../study/sessionStorage';
 
 interface StageContext {
-  booking?: BookingContext;
+  workflow?: WorkflowSelectionState;
   restoreSnapshot?: boolean;
 }
 
@@ -283,71 +283,127 @@ function buildToolSchemaForStage(
   return agentTools.filter((tool) => allowed.has(tool.name));
 }
 
-function getBookingContext(spec: UISpec | null): BookingContext {
-  return spec?.state.booking ?? {};
+type LegacyWorkflowSelectionState = WorkflowSelectionState & {
+  date?: WorkflowSelectionState['date'] | string;
+  selectedSeats?: WorkflowSelectionState['seats'];
+};
+
+function normalizeLegacyWorkflow(legacyWorkflow: LegacyWorkflowSelectionState): WorkflowSelectionState {
+  const normalizedDate =
+    typeof legacyWorkflow.date === 'string'
+      ? { id: legacyWorkflow.date, date: legacyWorkflow.date }
+      : legacyWorkflow.date;
+
+  const normalizedSeats = (legacyWorkflow.seats ?? legacyWorkflow.selectedSeats ?? [])
+    .map((seat) => {
+      if (!seat || typeof seat !== 'object') return null;
+      const seatRecord = seat as unknown as {
+        id?: unknown;
+        label?: unknown;
+        value?: unknown;
+      };
+      const seatId = typeof seatRecord.id === 'string' ? seatRecord.id.trim() : '';
+      if (!seatId) return null;
+      const seatLabel =
+        typeof seatRecord.label === 'string' && seatRecord.label.trim()
+          ? seatRecord.label.trim()
+          : typeof seatRecord.value === 'string' && seatRecord.value.trim()
+          ? seatRecord.value.trim()
+          : undefined;
+
+      return {
+        id: seatId,
+        ...(seatLabel ? { label: seatLabel } : {}),
+      };
+    })
+    .filter((seat): seat is NonNullable<WorkflowSelectionState['seats']>[number] => Boolean(seat));
+
+  return {
+    ...legacyWorkflow,
+    ...(normalizedDate ? { date: normalizedDate } : {}),
+    ...(normalizedSeats.length > 0 ? { seats: normalizedSeats } : {}),
+  };
 }
 
-function withBookingContext<T>(spec: UISpec<T>, booking: BookingContext): UISpec<T> {
+function getWorkflowContext(spec: UISpec | null): WorkflowSelectionState {
+  if (spec?.state.workflow) {
+    return spec.state.workflow;
+  }
+
+  const legacyWorkflow = spec?.state.booking as LegacyWorkflowSelectionState | undefined;
+  if (!legacyWorkflow) {
+    return {};
+  }
+
+  return normalizeLegacyWorkflow(legacyWorkflow);
+}
+
+function withWorkflowContext<T>(spec: UISpec<T>, workflow: WorkflowSelectionState): UISpec<T> {
+  const restState = { ...spec.state };
+  delete restState.booking;
   return {
     ...spec,
     state: {
-      ...spec.state,
-      booking,
+      ...restState,
+      workflow,
     },
   };
 }
 
-function projectBookingForStage(stage: Stage, booking: BookingContext): BookingContext {
+function projectWorkflowForStage(
+  stage: Stage,
+  workflow: WorkflowSelectionState
+): WorkflowSelectionState {
   switch (stage) {
     case 'movie':
       return {};
     case 'theater':
-      return { movie: booking.movie };
+      return { movie: workflow.movie };
     case 'date':
       return {
-        movie: booking.movie,
-        theater: booking.theater,
+        movie: workflow.movie,
+        theater: workflow.theater,
       };
     case 'time':
       return {
-        movie: booking.movie,
-        theater: booking.theater,
-        date: booking.date,
+        movie: workflow.movie,
+        theater: workflow.theater,
+        date: workflow.date,
       };
     case 'seat':
       return {
-        movie: booking.movie,
-        theater: booking.theater,
-        date: booking.date,
-        showing: booking.showing,
+        movie: workflow.movie,
+        theater: workflow.theater,
+        date: workflow.date,
+        showing: workflow.showing,
       };
     case 'confirm':
       return {
-        movie: booking.movie,
-        theater: booking.theater,
-        date: booking.date,
-        showing: booking.showing,
-        selectedSeats: booking.selectedSeats,
+        movie: workflow.movie,
+        theater: workflow.theater,
+        date: workflow.date,
+        showing: workflow.showing,
+        seats: workflow.seats,
       };
     default:
       return {};
   }
 }
 
-function getStageContextKey(stage: Stage, booking: BookingContext): string {
+function getStageContextKey(stage: Stage, workflow: WorkflowSelectionState): string {
   switch (stage) {
     case 'movie':
       return 'movie';
     case 'theater':
-      return `movie:${booking.movie?.id ?? ''}`;
+      return `movie:${workflow.movie?.id ?? ''}`;
     case 'date':
-      return `movie:${booking.movie?.id ?? ''}|theater:${booking.theater?.id ?? ''}`;
+      return `movie:${workflow.movie?.id ?? ''}|theater:${workflow.theater?.id ?? ''}`;
     case 'time':
-      return `movie:${booking.movie?.id ?? ''}|theater:${booking.theater?.id ?? ''}|date:${booking.date ?? ''}`;
+      return `movie:${workflow.movie?.id ?? ''}|theater:${workflow.theater?.id ?? ''}|date:${getWorkflowDateValue(workflow) ?? ''}`;
     case 'seat':
-      return `movie:${booking.movie?.id ?? ''}|theater:${booking.theater?.id ?? ''}|date:${booking.date ?? ''}|showing:${booking.showing?.id ?? ''}`;
+      return `movie:${workflow.movie?.id ?? ''}|theater:${workflow.theater?.id ?? ''}|date:${getWorkflowDateValue(workflow) ?? ''}|showing:${workflow.showing?.id ?? ''}`;
     case 'confirm':
-      return `movie:${booking.movie?.id ?? ''}|theater:${booking.theater?.id ?? ''}|date:${booking.date ?? ''}|showing:${booking.showing?.id ?? ''}|seats:${(booking.selectedSeats ?? []).map((seat) => seat.id).join(',')}`;
+      return `movie:${workflow.movie?.id ?? ''}|theater:${workflow.theater?.id ?? ''}|date:${getWorkflowDateValue(workflow) ?? ''}|showing:${workflow.showing?.id ?? ''}|seats:${(workflow.seats ?? []).map((seat) => seat.id).join(',')}`;
     default:
       return '';
   }
@@ -358,20 +414,45 @@ function getLatestStageSnapshot(stage: Stage): UISpec | null {
   return stageSnapshots[stage] ?? null;
 }
 
+function findItemById<T extends DataItem>(items: T[], itemId: string | undefined): T | null {
+  if (!itemId) return null;
+  return items.find((item) => item.id === itemId) ?? null;
+}
+
+function resolveSelectedItemFromSpec<T extends DataItem>(spec: UISpec<T>): T | null {
+  const selectedId = spec.state.selected?.id;
+  return findItemById(spec.items, selectedId);
+}
+
+function resolveSelectedItemsFromSpec<T extends DataItem>(spec: UISpec<T>): T[] {
+  const selectedIds = new Set((spec.state.selectedList ?? []).map((item) => item.id));
+  if (selectedIds.size === 0) return [];
+  return spec.items.filter((item) => selectedIds.has(item.id));
+}
+
+function getWorkflowDateValue(workflow: WorkflowSelectionState): string | null {
+  return workflow.date?.date ?? workflow.date?.id ?? null;
+}
+
+function getWorkflowSeatLabel(seat: NonNullable<WorkflowSelectionState['seats']>[number]): string {
+  const label = typeof seat.label === 'string' ? seat.label.trim() : '';
+  return label || seat.id;
+}
+
 function restoreStageSnapshot<T extends DataItem>(
   baseSpec: UISpec<T>,
   stage: Stage,
-  booking: BookingContext,
+  workflow: WorkflowSelectionState,
   snapshot: UISpec | null
 ): UISpec<T> {
-  let spec = withBookingContext(baseSpec, booking);
+  let spec = withWorkflowContext(baseSpec, workflow);
 
   if (!snapshot || snapshot.stage !== stage) {
     return spec;
   }
 
-  const snapshotBooking = getBookingContext(snapshot);
-  if (getStageContextKey(stage, snapshotBooking) !== getStageContextKey(stage, booking)) {
+  const snapshotWorkflow = getWorkflowContext(snapshot);
+  if (getStageContextKey(stage, snapshotWorkflow) !== getStageContextKey(stage, workflow)) {
     return spec;
   }
 
@@ -571,17 +652,17 @@ export function ChatPage({
       setLoading(true);
       setError(null);
 
-      const bookingCtx = ctx.booking ?? getBookingContext(activeSpec);
+      const workflowCtx = ctx.workflow ?? getWorkflowContext(activeSpec);
       const shouldRestoreSnapshot = ctx.restoreSnapshot !== false;
       const buildStageSpec = <T extends DataItem>(
         nextStage: Stage,
         baseSpec: UISpec<T>,
-        booking: BookingContext
+        workflow: WorkflowSelectionState
       ) =>
         restoreStageSnapshot(
           baseSpec,
           nextStage,
-          booking,
+          workflow,
           shouldRestoreSnapshot ? getLatestStageSnapshot(nextStage) : null
         );
 
@@ -598,17 +679,17 @@ export function ChatPage({
           }
 
           case 'theater': {
-            if (!bookingCtx.movie) {
+            if (!workflowCtx.movie) {
               setError('No movie selected');
               return;
             }
-            const data = await api.getTheatersByMovie(bookingCtx.movie.id);
+            const data = await api.getTheatersByMovie(workflowCtx.movie.id);
             setTheaters(data.theaters);
             setBackendData({ theaters: data.theaters });
             const spec = buildStageSpec(
               'theater',
-              generateTheaterSpec(data.theaters, bookingCtx.movie.id),
-              bookingCtx
+              generateTheaterSpec(data.theaters, workflowCtx.movie.id),
+              workflowCtx
             );
             addSystemMessage('theater', spec);
             setUiSpec(spec);
@@ -616,17 +697,17 @@ export function ChatPage({
           }
 
           case 'date': {
-            if (!bookingCtx.movie || !bookingCtx.theater) {
+            if (!workflowCtx.movie || !workflowCtx.theater) {
               setError('Missing movie or theater');
               return;
             }
-            const data = await api.getDates(bookingCtx.movie.id, bookingCtx.theater.id);
+            const data = await api.getDates(workflowCtx.movie.id, workflowCtx.theater.id);
             setBackendData({ dates: data.dates });
             const dateItems = createDateItems(getFixedCurrentDate(), 14, data.dates);
             const spec = buildStageSpec(
               'date',
-              generateDateSpec(dateItems, bookingCtx.movie.id, bookingCtx.theater.id),
-              bookingCtx
+              generateDateSpec(dateItems, workflowCtx.movie.id, workflowCtx.theater.id),
+              workflowCtx
             );
             addSystemMessage('date', spec);
             setUiSpec(spec);
@@ -634,14 +715,19 @@ export function ChatPage({
           }
 
           case 'time': {
-            if (!bookingCtx.movie || !bookingCtx.theater || !bookingCtx.date) {
+            if (!workflowCtx.movie || !workflowCtx.theater || !workflowCtx.date) {
               setError('Missing movie, theater, or date');
               return;
             }
+            const workflowDate = getWorkflowDateValue(workflowCtx);
+            if (!workflowDate) {
+              setError('Missing date');
+              return;
+            }
             const data = await api.getTimes(
-              bookingCtx.movie.id,
-              bookingCtx.theater.id,
-              bookingCtx.date
+              workflowCtx.movie.id,
+              workflowCtx.theater.id,
+              workflowDate
             );
             setShowings(data.showings);
             setBackendData({ showings: data.showings });
@@ -649,11 +735,11 @@ export function ChatPage({
               'time',
               generateTimeSpec(
                 data.showings,
-                bookingCtx.movie.id,
-                bookingCtx.theater.id,
-                bookingCtx.date
+                workflowCtx.movie.id,
+                workflowCtx.theater.id,
+                workflowDate
               ),
-              bookingCtx
+              workflowCtx
             );
             addSystemMessage('time', spec);
             setUiSpec(spec);
@@ -662,17 +748,17 @@ export function ChatPage({
 
           case 'seat': {
             if (
-              !bookingCtx.showing ||
-              !bookingCtx.movie ||
-              !bookingCtx.theater ||
-              !bookingCtx.date
+              !workflowCtx.showing ||
+              !workflowCtx.movie ||
+              !workflowCtx.theater ||
+              !workflowCtx.date
             ) {
               setError('Missing showing information');
               return;
             }
-            const data = await api.getSeats(bookingCtx.showing.id);
+            const data = await api.getSeats(workflowCtx.showing.id);
             setBackendData({ seats: data.seats });
-            const spec = buildStageSpec('seat', generateSeatSpec(data.seats), bookingCtx);
+            const spec = buildStageSpec('seat', generateSeatSpec(data.seats), workflowCtx);
             addSystemMessage('seat', spec);
             setUiSpec(spec);
             break;
@@ -680,36 +766,36 @@ export function ChatPage({
 
           case 'confirm': {
             if (
-              !bookingCtx.movie ||
-              !bookingCtx.theater ||
-              !bookingCtx.date ||
-              !bookingCtx.showing
+              !workflowCtx.movie ||
+              !workflowCtx.theater ||
+              !workflowCtx.date ||
+              !workflowCtx.showing
             ) {
               setError('Missing booking information');
               return;
             }
 
-            const selectedSeats = bookingCtx.selectedSeats ?? [];
+            const selectedSeats = workflowCtx.seats ?? [];
             if (selectedSeats.length === 0) {
               setError('Missing seats');
               return;
             }
-            const seatData = await api.getSeats(bookingCtx.showing.id);
+            const seatData = await api.getSeats(workflowCtx.showing.id);
             const selectedSeatSet = new Set(selectedSeats.map((seat) => seat.id));
             const totalPrice = seatData.seats
               .filter((seat) => selectedSeatSet.has(seat.id))
               .reduce((sum, seat) => sum + seat.price, 0);
 
             const meta: ConfirmMeta = {
-              movie: bookingCtx.movie,
-              theater: bookingCtx.theater,
-              date: bookingCtx.date,
-              time: bookingCtx.showing.time,
-              seats: selectedSeats.map((seat) => seat.value),
+              movie: workflowCtx.movie,
+              theater: workflowCtx.theater,
+              date: getWorkflowDateValue(workflowCtx) ?? '',
+              time: workflowCtx.showing.displayTime ?? formatTime12Hour(workflowCtx.showing.time),
+              seats: selectedSeats.map(getWorkflowSeatLabel),
               totalPrice,
             };
 
-            const spec = buildStageSpec('confirm', generateConfirmSpec(meta), bookingCtx);
+            const spec = buildStageSpec('confirm', generateConfirmSpec(meta), workflowCtx);
             addSystemMessage('confirm', spec);
             setUiSpec(spec);
             break;
@@ -727,7 +813,7 @@ export function ChatPage({
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true;
-      loadStageData('movie', { booking: {}, restoreSnapshot: false });
+      loadStageData('movie', { workflow: {}, restoreSnapshot: false });
     }
   }, [loadStageData]);
 
@@ -847,10 +933,10 @@ export function ChatPage({
   const handleConfirm = useCallback(async (context?: ToolApplyContext) => {
     if (!activeSpec) return;
 
-    const bookingCtx = getBookingContext(activeSpec);
-    const selectedSeats = bookingCtx.selectedSeats ?? [];
+    const workflowCtx = getWorkflowContext(activeSpec);
+    const selectedSeats = workflowCtx.seats ?? [];
 
-    if (!bookingCtx.showing || selectedSeats.length === 0) {
+    if (!workflowCtx.showing || selectedSeats.length === 0) {
       setError('Missing booking information');
       return;
     }
@@ -860,7 +946,7 @@ export function ChatPage({
 
     try {
       const result = await api.createBooking({
-        showingId: bookingCtx.showing.id,
+        showingId: workflowCtx.showing.id,
         seats: selectedSeats.map((seat) => seat.id),
         customerName: 'Guest',
         customerEmail: 'guest@example.com',
@@ -883,84 +969,80 @@ export function ChatPage({
 
     const stage = spec.stage ?? currentStage;
     let selectionLabel = '';
-    const currentBooking = getBookingContext(spec);
-    let nextBooking: BookingContext = currentBooking;
+    const currentWorkflow = getWorkflowContext(spec);
+    let nextWorkflow: WorkflowSelectionState = currentWorkflow;
 
     switch (stage) {
       case 'movie': {
-        const selectedId = spec.state.selected?.id;
-        if (!selectedId) return;
-
-        const selectedMovie = movies.find((movie) => movie.id === selectedId);
+        const selectedMovie = resolveSelectedItemFromSpec(spec) as WorkflowSelectionState['movie'] | null;
         if (!selectedMovie) return;
 
         selectionLabel = selectedMovie.title;
-        nextBooking = {
-          movie: { id: selectedMovie.id, title: selectedMovie.title },
-          selectedSeats: [],
+        nextWorkflow = {
+          movie: selectedMovie,
+          seats: [],
         };
         break;
       }
 
       case 'theater': {
-        const selectedId = spec.state.selected?.id;
-        if (!selectedId) return;
-
-        const selectedTheater = theaters.find((theater) => theater.id === selectedId);
+        const selectedTheater = resolveSelectedItemFromSpec(spec) as WorkflowSelectionState['theater'] | null;
         if (!selectedTheater) return;
 
         selectionLabel = selectedTheater.name;
-        nextBooking = {
-          ...currentBooking,
-          theater: { id: selectedTheater.id, name: selectedTheater.name },
+        nextWorkflow = {
+          ...currentWorkflow,
+          theater: selectedTheater,
           date: undefined,
           showing: undefined,
-          selectedSeats: [],
+          seats: [],
         };
         break;
       }
 
       case 'date': {
-        const selectedDate = spec.state.selected?.id;
+        const selectedDate = resolveSelectedItemFromSpec(spec) as WorkflowSelectionState['date'] | null;
         if (!selectedDate) return;
 
-        selectionLabel = selectedDate;
-        nextBooking = {
-          ...currentBooking,
+        selectionLabel =
+          typeof selectedDate.displayText === 'string' && selectedDate.displayText.trim()
+            ? selectedDate.displayText
+            : selectedDate.date;
+        nextWorkflow = {
+          ...currentWorkflow,
           date: selectedDate,
           showing: undefined,
-          selectedSeats: [],
+          seats: [],
         };
         break;
       }
 
       case 'time': {
-        const selectedId = spec.state.selected?.id;
-        if (!selectedId) return;
-
-        const selectedShowing = showings.find((showing) => showing.id === selectedId);
+        const selectedShowing = resolveSelectedItemFromSpec(spec) as WorkflowSelectionState['showing'] | null;
         if (!selectedShowing) return;
 
-        selectionLabel = formatTime12Hour(selectedShowing.time);
-        nextBooking = {
-          ...currentBooking,
-          showing: {
-            id: selectedShowing.id,
-            time: formatTime12Hour(selectedShowing.time),
-          },
-          selectedSeats: [],
+        selectionLabel =
+          spec.state.selected?.value ??
+          selectedShowing.displayTime ??
+          formatTime12Hour(selectedShowing.time);
+        nextWorkflow = {
+          ...currentWorkflow,
+          showing: selectedShowing,
+          seats: [],
         };
         break;
       }
 
       case 'seat': {
-        const selectedSeats = spec.state.selectedList ?? [];
+        const selectedSeats = resolveSelectedItemsFromSpec(spec) as NonNullable<
+          WorkflowSelectionState['seats']
+        >;
         if (selectedSeats.length === 0) return;
 
         selectionLabel = `${selectedSeats.length} seat(s) selected`;
-        nextBooking = {
-          ...currentBooking,
-          selectedSeats,
+        nextWorkflow = {
+          ...currentWorkflow,
+          seats: selectedSeats,
         };
         break;
       }
@@ -991,7 +1073,7 @@ export function ChatPage({
         });
       }
       loadStageData(nextStage, {
-        booking: projectBookingForStage(nextStage, nextBooking),
+        workflow: projectWorkflowForStage(nextStage, nextWorkflow),
       });
     }
   }, [
@@ -1016,7 +1098,7 @@ export function ChatPage({
       addUserMessage(currentStage, 'back', 'Back', activeSpec);
     }
 
-    const currentBooking = getBookingContext(activeSpec);
+    const currentWorkflow = getWorkflowContext(activeSpec);
     const source: 'agent' | 'devtools' = context?.source === 'devtools' ? 'devtools' : 'agent';
     const transitionReason =
       typeof context?.reason === 'string' && context.reason.trim()
@@ -1030,7 +1112,7 @@ export function ChatPage({
       });
     }
     loadStageData(prevStage, {
-      booking: projectBookingForStage(prevStage, currentBooking),
+      workflow: projectWorkflowForStage(prevStage, currentWorkflow),
     });
   }, [activeSpec, currentStage, addUserMessage, annotateLastAgentMessage, loadStageData]);
 
@@ -1085,7 +1167,7 @@ export function ChatPage({
     }
 
     setBooking(null);
-    loadStageData('movie', { booking: {}, restoreSnapshot: false });
+    loadStageData('movie', { workflow: {}, restoreSnapshot: false });
   }, [activeSpec, currentStage, addUserMessage, annotateLastAgentMessage, loadStageData]);
 
   const handleRepeatStep = useCallback(() => {
@@ -1101,12 +1183,12 @@ export function ChatPage({
     setAwaitingAgentResponse(false);
     initialized.current = true;
     if (movies.length > 0) {
-      const spec = withBookingContext(generateMovieSpec(movies), {});
+      const spec = withWorkflowContext(generateMovieSpec(movies), {});
       addSystemMessage('movie', spec);
       setUiSpec(spec);
       return;
     }
-    loadStageData('movie', { booking: {} });
+    loadStageData('movie', { workflow: {} });
   }, [resetChat, movies, addSystemMessage, setUiSpec, loadStageData]);
 
   const agentToolSchema = useMemo(

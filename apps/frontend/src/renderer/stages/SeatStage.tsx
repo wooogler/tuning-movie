@@ -78,7 +78,7 @@ export function SeatStage({
               >
                 {rowSeats.map((seat) => {
                   const isSelected = selectedIds.includes(seat.id);
-                  const isOccupied = seat.status === 'occupied';
+                  const isOccupied = seat.status !== 'available';
                   const isHighlighted = highlightedIds.has(seat.id);
                   const isPremium = seat.type === 'premium';
 
