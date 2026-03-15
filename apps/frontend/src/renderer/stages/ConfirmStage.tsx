@@ -27,37 +27,37 @@ export function ConfirmStage({
 
   return (
     <div className="flex flex-col items-center gap-6">
-      <div className="w-full max-w-md bg-dark-light rounded-xl p-6 space-y-4">
-        {/* Movie */}
-        <div className="flex justify-between">
-          <span className="text-fg-muted">Movie</span>
-          <span className="text-fg-strong font-semibold">{meta.movie.title}</span>
-        </div>
+      <div className="w-full max-w-md bg-dark-light rounded-xl p-6">
+        <table className="w-full border-separate border-spacing-y-3">
+          <tbody>
+            <tr>
+              <td className="text-fg-muted pr-6 align-top whitespace-nowrap">Movie</td>
+              <td className="text-fg-strong font-semibold text-right">{meta.movie.title}</td>
+            </tr>
+            <tr>
+              <td className="text-fg-muted pr-6 align-top whitespace-nowrap">Theater</td>
+              <td className="text-fg-strong text-right">{meta.theater.name}</td>
+            </tr>
+            <tr>
+              <td className="text-fg-muted pr-6 align-top whitespace-nowrap">Date & Time</td>
+              <td className="text-fg-strong text-right">{meta.date} {meta.time}</td>
+            </tr>
+            <tr>
+              <td className="text-fg-muted pr-6 align-top whitespace-nowrap">Seats</td>
+              <td className="text-right">
+                <div className="flex flex-col items-end gap-1">
+                  {meta.seats.map((seat) => (
+                    <span key={seat} className="text-fg-strong">{seat}</span>
+                  ))}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
-        {/* Theater */}
-        <div className="flex justify-between">
-          <span className="text-fg-muted">Theater</span>
-          <span className="text-fg-strong">{meta.theater.name}</span>
-        </div>
+        <hr className="border-dark-border my-4" />
 
-        {/* Date & Time */}
-        <div className="flex justify-between">
-          <span className="text-fg-muted">Date & Time</span>
-          <span className="text-fg-strong">
-            {meta.date} {meta.time}
-          </span>
-        </div>
-
-        {/* Seats */}
-        <div className="flex justify-between">
-          <span className="text-fg-muted">Seats</span>
-          <span className="text-fg-strong">{meta.seats.join(', ')}</span>
-        </div>
-
-        <hr className="border-dark-border" />
-
-        {/* Total */}
-        <div className="flex justify-between text-lg">
+        <div className="flex justify-between items-center text-lg">
           <span className="text-fg-muted font-semibold">Total</span>
           <span className="text-primary font-bold">{formattedTotal}</span>
         </div>

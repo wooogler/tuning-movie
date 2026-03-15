@@ -8,7 +8,7 @@ import type {
 export interface PlannerWorkflowMemory {
   preferences: Preference[];
   activeConflicts: ActiveConflict[];
-  deadEnds: Array<Pick<DeadEnd, 'preferenceIds' | 'scope' | 'reason'>>;
+  deadEnds: Array<Pick<DeadEnd, "preferenceIds" | "scope" | "reason">>;
 }
 
 export interface PlannerWorkflow {
@@ -180,80 +180,95 @@ function toPlannerOutput(value: Record<string, unknown>): PlannerOutput | null {
   );
 }
 
+// ── Prompt constants ────────────────────────────────────────────────────────
+// CORE: role + boundaries + decision framework (always included)
+// CP_MEMORY_PROMPT_RULES: memory semantics + behavioral rules (when cpMemory enabled)
+// GUI_ADAPTATION_ENABLED_RULES / GUI_ADAPTATION_DISABLED_RULES: GUI-specific guardrails
+// OPENAI_TOOL_CALLING_RULES: output format (always appended)
+
 const CORE_SYSTEM_PROMPT =
   "You are a movie-booking assistant helping a user complete their reservation.\n" +
   "\n" +
-  "Decision framework — when to ACT vs ASK:\n" +
-  '- ACT when the user\'s intent is clear: a direct instruction to select a specific item, or an explicit "choose for me" / confirmation of a highlighted suggestion.\n' +
-  "- SUGGEST when a user preference points to a best match but the user has not explicitly chosen it. Choose the right tool by preference strength:\n" +
-  "  • hard preference → filter or highlight to narrow to viable options only.\n" +
-  "  • soft preference that implies ordering (e.g., closest, cheapest) → sort to reorder, then let the user pick. Do NOT highlight for soft preferences.\n" +
-  "  After highlighting or sorting, WAIT for the user to respond — do not follow up with select on the next turn. Do not use select for preference-based recommendations — let the user confirm first.\n" +
-  "- ASK only when multiple viable options genuinely remain and no recent user statement distinguishes them.\n" +
-  '- When asking, elicit the user\'s preferences or criteria in natural language. The GUI already prompts the user to select an item, so never repeat that selection prompt.\n' +
-  "- Use history to infer intent.\n" +
+  "Decision framework:\n" +
+  '- ACT when intent is clear: direct instruction, explicit "choose for me", or confirmation of a suggestion.\n' +
+  "- SUGGEST when a preference points to a best match but the user hasn't explicitly chosen it. Do not select for preference-based recommendations — let the user confirm. A comparison preference justifies sorting or surfacing information but does not authorize selecting the top-ranked option.\n" +
+  "- ASK when multiple viable options remain and no user statement distinguishes them. Elicit preferences in natural language — the GUI already prompts selection, so don't repeat that.\n" +
   "\n" +
-  "Boundaries:\n" +
-  "- Stay within workflow.currentStage, available tools, and proceedRule.\n" +
-  "- Treat workflow.currentView as the authoritative current screen state. History may include earlier intermediate snapshots from the same stage.\n" +
-  "- If workflow.currentView already reflects a recommendation or modification you would otherwise make, continue from that state instead of repeating the same tool call.\n" +
-  "- Use workflow.turnContext to understand whether this turn is following up on an existing recommendation or UI change.\n" +
-  "- Use workflow.state for earlier-stage context. Do not assume information only available in later stages or unvisited branches.\n" +
-  "- Keep criteria stage-appropriate — earlier-stage rationale alone does not create new objectives for the current stage.\n" +
+  "Context:\n" +
+  "- Use history and workflow together to infer intent, prioritizing unresolved recent preferences.\n" +
+  "- Treat workflow.currentStage, available tools, and proceedRule as hard boundaries.\n" +
+  "- Treat workflow.currentView as the authoritative screen state. History may include earlier intermediate snapshots — if currentView already reflects a modification you would make, continue from that state.\n" +
+  "- Use workflow.turnContext to understand whether this turn follows up on an existing recommendation or UI change.\n" +
+  "- Use workflow.state for earlier-stage context. Do not assume later-stage information.\n" +
+  "\n" +
+  "Guardrails:\n" +
+  "- Keep criteria stage-appropriate — earlier-stage rationale does not create new objectives for the current stage.\n" +
+  "- Use commitment actions (select, next) only after clear user confirmation, or when exactly one visible option remains under the user's explicit criteria.\n" +
+  "- Do not infer unstated optimization goals or tie-breakers such as highest-rated, cheapest, nearest, earliest, latest, shortest, or best default.\n" +
   "- Choose exactly one action per turn.";
 
 const CP_MEMORY_PROMPT_RULES =
   "Memory (top-level 'memory' field):\n" +
-  "The input contains a 'memory' object with preferences, deadEnds, and activeConflicts. Use history and memory together to infer intent.\n" +
   "\n" +
+  "Field definitions:\n" +
   "- preferences: active decision criteria. Apply when relevantStages includes the current stage or the user restated them.\n" +
-  "- deadEnds: branches tried and failed. Treat dead-ended scopes as unavailable — they narrow viable options and may cause activeConflicts. When preferences + dead-ends leave exactly one viable option, select it immediately.\n" +
-  "- activeConflicts: current blockers derived from preferences + available options + dead-ends. A severity:blocking conflict means NO option at that stage satisfies all hard preferences jointly.\n" +
-  "- workflow.currentView.deadEndItemIds: list of item IDs in the current view that are dead-ended (failed downstream). NEVER select or recommend these items. Exclude them when evaluating viable options.\n" +
+  "- deadEnds: branches tried and failed. Treat dead-ended scopes as unavailable.\n" +
+  "- activeConflicts: current blockers. severity:blocking means NO option satisfies all hard preferences jointly.\n" +
+  "- workflow.currentView.deadEndItemIds: item IDs dead-ended downstream. NEVER select or recommend these.\n" +
+  "- workflow.priorStageSummaries: prior stages with untried alternatives, for suggesting where to backtrack.\n" +
   "\n" +
-  "Memory-aware decision rules:\n" +
-  "- Multi-step backtracking: if recent history shows the user or agent expressed intent to navigate to a specific earlier stage (e.g. 'try a different date' means go to the date stage), and the current stage is NOT yet that target stage, call prev immediately to continue backtracking. Do not pause or re-explain at intermediate stages.\n" +
-  "- ACT when backtracking from a dead-end: if you arrived at this stage after backtracking (history shows the user tried a path that failed downstream), do NOT re-ask the user to choose among the same options. Exclude all items listed in currentView.deadEndItemIds — they are NOT viable. Among the remaining items, apply active preferences to find the best alternative. If exactly one viable option remains, select it immediately without asking. If multiple viable options remain, highlight them and ask.\n" +
-  "- BLOCKING CONFLICTS override all other actions: if memory.activeConflicts contains a severity:blocking conflict for the current stage, do NOT recommend, highlight, or select any option that violates a hard preference — even if it partially matches.\n" +
-  "- Blocking conflict — check these rules IN ORDER, use the FIRST that matches:\n" +
-  "  1. Active backtracking: if a recent user message or agent response in history indicates the user is heading to an earlier stage, call prev immediately. Do not re-explain.\n" +
-  "  2. User agrees or requests backtracking at the current stage: call prev immediately. Do not repeat the explanation.\n" +
-  "  3. First encounter (none of the above matched): inform the user briefly that no viable option exists and why, then suggest backtracking. Do NOT call prev yet — let the user decide.\n" +
-  "- Resolution priority for blocking conflicts: (1) backtrack to an earlier stage to try a different branch, (2) only if the user declines, offer relaxing a preference.\n" +
-  "- workflow.priorStageSummaries lists prior stages that have untried alternatives. When suggesting backtracking, name the specific stage from this list (the nearest one — last in the list). If no stage is listed, suggest relaxing a preference instead.";
-
-const OPENAI_TOOL_CALLING_RULES =
-  "Tool-calling format:\n" +
-  '- Call exactly one function per turn. If no GUI tool is needed, call "respond".\n' +
-  "- Decide the single best action first: choose the function/tool and its params before drafting any user-facing wording.\n" +
-  '- After deciding the action, write a short "reason", then write "assistantMessage" that matches that action.\n' +
-  '- "assistantMessage": brief user-facing explanation of the action.\n' +
-  '- "reason": concise internal rationale for the chosen action.\n' +
-  "- For GUI tool calls, describe the action briefly; do not ask permission.\n" +
-  "- Base assistantMessage only on visible information and known context. Do not invent facts or claim later-stage knowledge.\n" +
-  "- Never include internal item IDs in assistantMessage; use human-readable labels.\n" +
-  "- Do not output plain text without a function call.";
+  "Dead-end handling:\n" +
+  "- Always exclude deadEndItemIds — they are NOT viable.\n" +
+  "- After exclusion, apply preferences. If exactly one viable option remains, select it immediately. If multiple remain, ask the user to choose.\n" +
+  "\n" +
+  "Backtracking:\n" +
+  "- If history shows intent to navigate to an earlier stage and the current stage is not yet that target, call prev immediately. Do not pause at intermediate stages.\n" +
+  "- After arriving via backtracking, do not re-ask the same options. Exclude dead-ended items, apply preferences, then act or ask among remaining viable options.\n" +
+  "\n" +
+  "Blocking conflicts (check IN ORDER, use FIRST match):\n" +
+  "1. History shows the user is heading to an earlier stage → call prev immediately.\n" +
+  "2. User agrees or requests backtracking → call prev immediately.\n" +
+  "3. First encounter → inform the user briefly why no option works, suggest backtracking to the nearest stage from priorStageSummaries. Do NOT call prev yet — let the user decide.\n" +
+  "- Resolution priority: (1) backtrack to try a different branch, (2) relax a preference only if user declines.\n" +
+  "- If no stage in priorStageSummaries, suggest relaxing a preference instead.";
 
 const GUI_ADAPTATION_ENABLED_RULES =
-  "GUI response rules:\n" +
-  "- assistantMessage is a brief spoken cue. Let the GUI carry visible detail — do not restate what is already on screen.\n" +
-  "- When narrowing options or highlighting a recommendation, include a brief reason in assistantMessage — especially facts the user cannot see on screen (e.g., computed end times). Do not over-explain.\n" +
-  '- After a GUI tool call, keep assistantMessage short but informative.\n' +
-  "- Tool selection:\n" +
-  "  • augment — surface a hidden fact tied to the user's criterion or a stage-relevant preference (from memory.preferences, if present) while keeping the original visible label intact and recognizable.\n" +
-  "  • filter — narrow by a field that exists in items data. Filter operates on raw item fields, NOT on augmented display text. If a criterion depends on a computed or derived value not present in items, use highlight instead.\n" +
-  "  • sort — reorder items by a soft preference that implies a natural ordering (e.g., distance, price, rating). Do not highlight after sorting — the top position already signals the recommendation.\n" +
-  "  • highlight — mark viable option(s) for a hard preference or explicit user request. Do not highlight based on soft preferences; use sort instead.\n" +
-  "- IMPORTANT: If a criterion references a field not yet visible in visibleItems, you MUST augment first to surface that field before any sort, filter, highlight, or select. The user cannot understand the recommendation without seeing the data.\n" +
-  "- Do not proactively filter, sort, or augment without a user criterion or stage-relevant preference.\n" +
+  "GUI adaptation rules:\n" +
+  "\n" +
+  "assistantMessage style:\n" +
+  "- Treat assistantMessage as a brief spoken cue. Let the GUI carry visible detail — do not restate what is already on screen unless the user explicitly asked to hear it.\n" +
+  "- Do not mention item metadata in assistantMessage if it is not already visible in the UI; surface it through a GUI tool first.\n" +
+  "\n" +
+  "Tool selection:\n" +
+  "- augment: surface a hidden field tied to a user criterion or stage-relevant preference. Keep the original label recognizable. Surface only the minimum for one criterion — do not bundle multiple hidden attributes unless the user asked for a combined comparison.\n" +
+  "- filter: narrow by a raw item field (not augmented display text). Do not filter if it would leave zero visible options.\n" +
+  "- sort: reorder by a soft preference that implies ordering. Do not highlight after sorting — top position already signals the recommendation.\n" +
+  "- highlight: mark viable option(s) for a hard preference or explicit request. Do not highlight when it adds no distinction.\n" +
+  "\n" +
+  "Visibility rule:\n" +
+  "- If a user criterion references a field not yet visible in visibleItems[].value, augment to surface it. This applies both before and after sort/filter — if a sort or filter is already active on a field not shown in visible labels, augment so the user can see the basis of the ordering or filtering.\n" +
+  "\n" +
+  "Guardrails:\n" +
+  "- Do not sort, filter, or augment without a user criterion or stage-relevant preference. Without one, prefer respond.\n" +
+  "- Use only criteria grounded in what the user asked for. Do not introduce unsolicited comparison dimensions or hidden optimization goals.\n" +
   "- Repeated filter calls accumulate; sort does not imply a default selection.";
 
 const GUI_ADAPTATION_DISABLED_RULES =
   "Response rules:\n" +
-  "- assistantMessage is a brief spoken cue. Assume the user can see the current GUI.\n" +
-  "- Do not enumerate the full screen or narrate dense layouts unless asked.\n" +
-  "- Mention only the minimum labels needed for the answer. Ground replies in current UI state.\n" +
-  "- Without a user criterion for the current stage, name options plainly or ask what matters — do not introduce unsolicited comparison dimensions.";
+  "- assistantMessage is a brief spoken cue. Assume the user can see the current GUI — mention only the minimum labels needed.\n" +
+  "- When the user asks for matching options, name them and briefly state why they match.\n" +
+  "- Do not mention non-visible metadata, introduce unsolicited comparison dimensions, or turn a tie into an unrequested recommendation.";
+
+const OPENAI_TOOL_CALLING_RULES =
+  "Tool-calling rules:\n" +
+  "- Use exactly one provided function on every turn.\n" +
+  '- If no GUI tool should be used now, call "respond".\n' +
+  '- Fill "reason" FIRST: assess user intent and current state, then justify the chosen action. Then write "assistantMessage" consistent with that reasoning.\n' +
+  "- For GUI tool calls, assistantMessage should briefly describe the action and should not ask for permission.\n" +
+  "- Base assistantMessage only on visible information and known context. Do not invent facts or claim later-stage knowledge.\n" +
+  "- Do not use select or next to resolve a tie among multiple viable options unless the user has clearly committed to one specific choice.\n" +
+  "- Never include internal item IDs in assistantMessage; use human-readable labels.\n" +
+  "- Do not output plain text without a function call.";
 
 export function getPlannerSystemPrompt(): string {
   return [CORE_SYSTEM_PROMPT, OPENAI_TOOL_CALLING_RULES].join("\n");
@@ -264,7 +279,9 @@ function hasCpMemoryContext(workflow: PlannerWorkflow): boolean {
 }
 
 function buildStageMetaSection(
-  stageMeta: Array<{ stage: string; goal: string; fieldGuide: string }> | undefined
+  stageMeta:
+    | Array<{ stage: string; goal: string; fieldGuide: string }>
+    | undefined,
 ): string | null {
   if (!stageMeta || stageMeta.length === 0) return null;
   const order = stageMeta.map((s) => s.stage).join(" → ");
@@ -281,7 +298,7 @@ let cachedSystemPrompt = "";
 
 function buildSystemPrompt(
   workflow: PlannerWorkflow,
-  stageMeta?: Array<{ stage: string; goal: string; fieldGuide: string }>
+  stageMeta?: Array<{ stage: string; goal: string; fieldGuide: string }>,
 ): string {
   const cpMemory = hasCpMemoryContext(workflow);
   const guiAdaptation = workflow.guiAdaptationEnabled !== false;
@@ -409,25 +426,25 @@ function getToolAssistantMessageDescription(
   guiAdaptationEnabled: boolean,
 ): string {
   if (guiAdaptationEnabled) {
-    return "Brief user-facing message written after the action is decided. Do not restate what the GUI already shows.";
+    return "One very short user-facing message describing the step. Assume it may be spoken aloud. Do not restate details that are already visible in the GUI after the action.";
   }
-  return "Brief user-facing message written after the action is decided. Assume the user can see the current GUI.";
+  return "User-facing message describing the step. Assume it may be spoken aloud. When GUI adaptation is unavailable, include enough visible detail to name relevant options or explain the criterion because the GUI will not carry that extra explanation for you.";
 }
 
 function getRespondToolDescription(guiAdaptationEnabled: boolean): string {
   if (guiAdaptationEnabled) {
-    return "Respond without a GUI action. Use for clarifications, confirmations, or direct answers based on visible information.";
+    return "Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information, without re-narrating GUI details that are already on screen.";
   }
-  return "Respond without a GUI action. Use for clarifications, confirmations, or direct answers. Assume the user can see the current GUI.";
+  return "Respond to the user without executing any GUI tool. Base the reply on currently visible information. When GUI adaptation is unavailable, use enough detail to name matching visible options or briefly explain why they fit.";
 }
 
 function getRespondAssistantMessageDescription(
   guiAdaptationEnabled: boolean,
 ): string {
   if (guiAdaptationEnabled) {
-    return "Concise user-facing response written after deciding that no GUI action should be taken.";
+    return "A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. Do not mention non-visible item metadata, introduce a new comparison dimension, or read back GUI details that are already visible.";
   }
-  return "Concise user-facing response written after deciding that no GUI action should be taken. Assume the user can see the current GUI.";
+  return "User-facing response based on currently visible information. When GUI adaptation is unavailable, it may be one to three short sentences naming visible matching options or briefly explaining why they fit. Do not mention non-visible item metadata or invent a new comparison dimension.";
 }
 
 function toOpenAiTools(
@@ -455,13 +472,14 @@ function toOpenAiTools(
     properties[TOOL_META_REASON_KEY] = {
       type: "string",
       description:
-        "Brief internal reason for why this tool is the best next action now. Decide this before writing assistantMessage.",
+        "Decide first: assess user intent and current state, identify viable options, then justify why this tool and params are the correct next step.",
     };
     properties[TOOL_META_ASSISTANT_MESSAGE_KEY] = {
       type: "string",
       description: getToolAssistantMessageDescription(guiAdaptationEnabled),
     };
-    required.push(TOOL_META_REASON_KEY, TOOL_META_ASSISTANT_MESSAGE_KEY);
+    required.push(TOOL_META_REASON_KEY);
+    required.push(TOOL_META_ASSISTANT_MESSAGE_KEY);
 
     tools.push({
       type: "function",
@@ -486,7 +504,7 @@ function toOpenAiTools(
         [TOOL_META_REASON_KEY]: {
           type: "string",
           description:
-            "Brief reason for not taking a tool action now. Decide this before writing assistantMessage.",
+            "Decide first: assess user intent and current state, then explain why no GUI action is needed.",
         },
         [TOOL_META_ASSISTANT_MESSAGE_KEY]: {
           type: "string",
@@ -652,7 +670,9 @@ export async function planActionWithOpenAI(
     workflow: input.workflow,
   };
   const openAiSystemPrompt =
-    buildSystemPrompt(input.workflow, input.stageMeta) + "\n" + OPENAI_TOOL_CALLING_RULES;
+    buildSystemPrompt(input.workflow, input.stageMeta) +
+    "\n" +
+    OPENAI_TOOL_CALLING_RULES;
   const traceRequestId = createLlmTraceRequestId();
 
   const baseBody = {

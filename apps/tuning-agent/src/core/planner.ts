@@ -122,6 +122,11 @@ function compactSystemSpec(value: unknown): Record<string, unknown> | null {
     summary.modification = modification;
   }
 
+  // Preserve confirm stage meta (booking summary) so the planner can see it
+  if (stage === 'confirm' && record.meta && typeof record.meta === 'object') {
+    summary.meta = record.meta;
+  }
+
   return Object.keys(summary).length > 0 ? summary : null;
 }
 
@@ -676,7 +681,7 @@ function validateLlmAction(
       type: 'tool.call' | 'none';
       toolName: string;
       params: Record<string, unknown>;
-      reason: string;
+      reason?: string;
     };
   }
 ): PlanDecision | null {
@@ -696,9 +701,9 @@ function validateLlmAction(
     return {
       action: {
         type: 'agent.message',
-        reason: decision.action.reason,
+        reason: decision.action.reason ?? '',
         payload: {
-          text: text || explainText || decision.action.reason,
+          text: text || explainText || (decision.action.reason ?? ''),
         },
       },
       explainText,
@@ -716,7 +721,7 @@ function validateLlmAction(
     const selectable = new Set(getEnabledVisibleItems(spec).map((item) => item.id));
     if (!selectable.has(itemId)) return null;
     return {
-      action: toolCall(toolName, { itemId }, decision.action.reason),
+      action: toolCall(toolName, { itemId }, decision.action.reason ?? ''),
       explainText,
       source: 'llm',
     };
@@ -729,14 +734,14 @@ function validateLlmAction(
     const selectable = new Set(getEnabledVisibleItems(spec).map((item) => item.id));
     if (itemIds.some((itemId) => !selectable.has(itemId))) return null;
     return {
-      action: toolCall(toolName, { itemIds }, decision.action.reason),
+      action: toolCall(toolName, { itemIds }, decision.action.reason ?? ''),
       explainText,
       source: 'llm',
     };
   }
 
   return {
-    action: toolCall(toolName, params, decision.action.reason),
+    action: toolCall(toolName, params, decision.action.reason ?? ''),
     explainText,
     source: 'llm',
   };

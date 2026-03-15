@@ -1222,8 +1222,9 @@ export default function App() {
                     >
                       {status}
                     </span>
+                    <CopyTraceButton interaction={item} />
                   </div>
-                  <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="grid grid-cols-2 gap-3">
                     <TraceBlock title="Request" value={getTraceRequestDisplayValue(item.request)} copyable />
                     <TraceBlock title="Response" value={item.parsed} copyable />
                   </div>
@@ -1305,9 +1306,26 @@ export default function App() {
               </div>
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-5">
-              <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
-                <TraceBlock fillHeight title="Request" value={selectedLlmRequestDisplayValue} copyable />
-                <TraceBlock fillHeight title="Response" value={selectedLlmInteraction.parsed} copyable />
+              {(() => {
+                const rawObj = selectedLlmInteraction.raw;
+                const summaries =
+                  rawObj && typeof rawObj === 'object' && !Array.isArray(rawObj)
+                    ? (rawObj as Record<string, unknown>).reasoningSummary
+                    : undefined;
+                const hasSummary = Array.isArray(summaries) && summaries.length > 0;
+                const cols = hasSummary ? 'grid-cols-3' : 'grid-cols-2';
+                return (
+                  <div className={`grid min-h-0 flex-1 ${cols} gap-3`}>
+                    <TraceBlock fillHeight title="Request" value={selectedLlmRequestDisplayValue} copyable />
+                    {hasSummary ? (
+                      <ReasoningSummaryBlock summaries={summaries.filter((s): s is string => typeof s === 'string')} />
+                    ) : null}
+                    <TraceBlock fillHeight title="Response" value={selectedLlmInteraction.parsed} copyable />
+                  </div>
+                );
+              })()}
+              <div className="max-h-[35vh] min-h-[140px]">
+                <TraceBlock fillHeight title="Raw Response" value={selectedLlmInteraction.raw} copyable />
               </div>
               {selectedLlmInteraction.error !== null && selectedLlmInteraction.error !== undefined ? (
                 <div className="max-h-[35vh] min-h-[140px]">
@@ -1452,6 +1470,54 @@ function ExportJsonButton({
   );
 }
 
+function CopyTraceButton({ interaction }: { interaction: LlmInteraction }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = window.setTimeout(() => setCopyState('idle'), 1200);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  async function handleCopy() {
+    try {
+      const trace: Record<string, unknown> = {
+        id: interaction.id,
+        timestamp: interaction.timestamp,
+        component: interaction.component,
+        request: interaction.request,
+        response: interaction.parsed,
+      };
+      if (interaction.error !== null && interaction.error !== undefined) {
+        trace.error = interaction.error;
+      }
+      await navigator.clipboard.writeText(JSON.stringify(trace, null, 2));
+      setCopyState('copied');
+    } catch {
+      setCopyState('error');
+    }
+  }
+
+  return (
+    <button
+      className={`rounded border px-2 py-0.5 text-[11px] ${
+        copyState === 'copied'
+          ? 'border-ok-500/60 bg-ok-500/15 text-ok-500'
+          : copyState === 'error'
+            ? 'border-danger-500/60 bg-danger-500/15 text-danger-500'
+            : 'border-ink-600 bg-ink-900/60 text-mist-200 hover:border-mist-500'
+      }`}
+      onClick={(event) => {
+        event.stopPropagation();
+        void handleCopy();
+      }}
+      type="button"
+    >
+      {copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Failed' : 'Copy Trace'}
+    </button>
+  );
+}
+
 function TraceBlock({
   title,
   value,
@@ -1510,6 +1576,26 @@ function TraceBlock({
       >
         {fmt(value)}
       </pre>
+    </section>
+  );
+}
+
+function ReasoningSummaryBlock({ summaries }: { summaries: string[] }) {
+  return (
+    <section className="flex min-h-0 flex-col">
+      <div className="mb-1 flex items-center gap-2">
+        <div className="text-xs font-semibold text-mist-300">Reasoning Summary</div>
+        <span className="rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-medium text-violet-300">
+          {summaries.length === 1 ? '1 step' : `${summaries.length} steps`}
+        </span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-md border border-ink-700 bg-ink-950/70 p-2">
+        {summaries.map((text, i) => (
+          <p key={i} className="whitespace-pre-wrap font-mono text-[11px] text-mist-100">
+            {text}
+          </p>
+        ))}
+      </div>
     </section>
   );
 }

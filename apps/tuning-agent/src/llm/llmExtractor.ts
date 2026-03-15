@@ -43,7 +43,6 @@ interface ActiveConflictDerivationInput {
 }
 
 interface ActiveConflictDerivationOutput {
-  analysis: string;
   activeConflicts: Array<{
     preferenceIds: string[];
     description: string;
@@ -102,15 +101,19 @@ const PREFERENCE_SYSTEM_PROMPT =
   '- Read precedingAgentMessage to understand what the user is responding to. If the agent asked the user to choose between options, the user\'s reply is a procedural selection — not a new or narrowed preference. Keep the existing preference intact.\n' +
   '- When in doubt, keep existingPreferences unchanged.\n' +
   '\n' +
+  'Reasoning steps:\n' +
+  '1. What is the agent asking or presenting? Read precedingAgentMessage.\n' +
+  '2. Is the user\'s reply a procedural action (selecting, confirming, navigating) or a durable preference? If procedural, return existingPreferences unchanged — stop here.\n' +
+  '3. For each durable preference, determine strength:\n' +
+  '   - "hard": the user can accept ONLY options that match. If no option matches, the user would want to be warned.\n' +
+  '   - "soft": the user prefers matching options but would accept alternatives. Useful for ranking among viable options.\n' +
+  '   If the user softens an existing hard preference, downgrade to soft. When genuinely ambiguous, default to "hard".\n' +
+  '4. Assign relevantStages: the stage(s) where this preference applies. Use stageFieldGuides to determine which stage controls the relevant data field.\n' +
+  '\n' +
   'Rules:\n' +
   '- Preferences come from user intent, not system availability.\n' +
   '- Preserve existing wording when meaning is unchanged (for stable IDs). Preserve relevantStages likewise.\n' +
   '- Remove obsolete preferences by omitting them.\n' +
-  '- strength: ask "if this condition is NOT met, should the system warn the user before proceeding?" If yes → "hard". If the user would accept alternatives without warning → "soft".\n' +
-  '  Hard signals: explicit requirements ("must", "need", "only"), explicit exclusions ("not X", "avoid X"), factual constraints ("I\'m unavailable"), clear intent ("I want X"), and reason-backed preferences ("I want X for/because Y").\n' +
-  '  Soft signals: explicit hedging ("ideally", "if possible", "preferably"), stated flexibility ("X, but Y is also fine"), comparatives without exclusion ("closer is better").\n' +
-  '  When ambiguous, default to "hard" — false hard is a harmless extra warning, false soft risks silent violation.\n' +
-  '- relevantStages: stages where this preference should be conflict-checked. Use the stage names from stageFieldGuides as the allowed values. Refer to each stage description in stageFieldGuides to understand what data fields it controls, then assign the minimal accurate set.\n' +
   '- Keep descriptions as short standalone sentences. Do not include IDs.\n' +
   'Return JSON: { "preferences": Array<{ "description": string, "strength": "hard" | "soft", "relevantStages": string[] }> }';
 
@@ -125,21 +128,23 @@ const ACTIVE_CONFLICT_SYSTEM_PROMPT =
   '- highlightedIds: IDs the UI is actively recommending.\n' +
   '- deadEnds (if present): dead-ends that could not be matched to a specific item but still apply broadly.\n' +
   '\n' +
-  'Core rules — when to report an active conflict:\n' +
-  '1. No viable item: after excluding dead-ended items, no remaining item satisfies all relevant hard preferences jointly.\n' +
-  '2. Current selection blocked: currentSelectionId points to a dead-ended item or one that violates hard preferences. Always report this — the user is on a broken path and needs redirection, even if alternatives exist.\n' +
-  '3. UI exclusively directing to violation: every highlightedId is blocked and no non-blocked option is highlighted.\n' +
+  'Reasoning steps:\n' +
+  '1. Identify which preferences are relevant to currentStage (check relevantStages). If no relevant hard preferences exist, return empty activeConflicts — stop here.\n' +
+  '2. For each relevant hard preference, derive any computed values needed (e.g., end time = start time + duration), then check whether at least one available non-dead-ended item satisfies it.\n' +
+  '3. Check all relevant hard preferences conjunctively: does at least one item satisfy ALL of them together? If yes, no conflict — skip to step 4.\n' +
+  '4. Check currentSelectionId (skip if null): does it point to a dead-ended or blocked item? If so, report a conflict even if alternatives exist.\n' +
   '\n' +
-  'Hard preferences are conjunctive: the same item must satisfy all of them together.\n' +
+  'When to report a conflict:\n' +
+  '- No viable item: no remaining item satisfies all relevant hard preferences jointly.\n' +
+  '- Current selection blocked: currentSelectionId is dead-ended or violates hard preferences.\n' +
+  '- UI exclusively directing to violation: every highlightedId is blocked.\n' +
   '\n' +
   'Rules:\n' +
-  '- Write a brief analysis FIRST: summarize which items are viable, dead-ended, or violating. Do not enumerate every item individually — focus on the conclusion.\n' +
-  '- Check whether currentSelectionId maps to a dead-ended or blocked item. If so, report an active conflict using the preferenceIds from the dead-end.\n' +
-  '- Then populate activeConflicts. Combine related preferenceIds into a single conflict entry.\n' +
+  '- Combine related preferenceIds into a single conflict entry.\n' +
   '- Use only preferenceIds that exist in the provided preferences.\n' +
   '- Do not carry over historical conflicts or create speculative ones.\n' +
   '- description: short summary of which preferences are violated and why.\n' +
-  'Return JSON: { "analysis": string, "activeConflicts": Array<{ "preferenceIds": string[], "description": string }> }';
+  'Return JSON: { "activeConflicts": Array<{ "preferenceIds": string[], "description": string }> }';
 
 export function getExtractorSystemPrompt(): string {
   return [
@@ -240,7 +245,7 @@ function materializePreferences(
     const description = normalizeDescription(rawPreference.description);
     if (!description) continue;
     const strength = normalizePreferenceStrength(rawPreference.strength);
-    const id = buildPreferenceId(description, strength);
+    const id = buildPreferenceId(description);
     const existing = existingById.get(id);
     preferences.push({
       id,
@@ -327,7 +332,6 @@ function toActiveConflictDerivationOutput(
   const rawConflicts = Array.isArray(value.activeConflicts) ? value.activeConflicts : null;
   if (!rawConflicts) return null;
 
-  const analysis = typeof value.analysis === 'string' ? value.analysis.trim() : '';
   const activeConflicts: ActiveConflictDerivationOutput['activeConflicts'] = [];
   for (const entry of rawConflicts) {
     if (!isRecord(entry)) continue;
@@ -342,13 +346,17 @@ function toActiveConflictDerivationOutput(
     });
   }
 
-  return { analysis, activeConflicts };
+  return { activeConflicts };
 }
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const DEFAULT_OPENAI_TEMPERATURE = 0;
 
-function resolveOpenAIReasoning(_kind: ExtractionKind): { effort: 'low' } | undefined {
+function resolveOpenAIReasoning(
+  kind: ExtractionKind,
+): { effort: 'low' | 'medium'; summary?: 'auto' } | undefined {
+  if (kind === 'preferences') return { effort: 'low' };
+  if (kind === 'active_conflicts') return { effort: 'medium', summary: 'auto' };
   return undefined;
 }
 
@@ -370,6 +378,27 @@ function isUnsupportedTemperatureError(status: number, errorText: string): boole
 
 function getOpenAIModel(): string {
   return process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
+}
+
+function parseReasoningSummary(body: unknown): string[] | null {
+  if (!body || typeof body !== 'object') return null;
+  const record = body as Record<string, unknown>;
+  const output = Array.isArray(record.output) ? record.output : [];
+  const summaries: string[] = [];
+  for (const item of output) {
+    if (!item || typeof item !== 'object') continue;
+    const itemRecord = item as Record<string, unknown>;
+    if (itemRecord.type !== 'reasoning') continue;
+    const summary = Array.isArray(itemRecord.summary) ? itemRecord.summary : [];
+    for (const entry of summary) {
+      if (!entry || typeof entry !== 'object') continue;
+      const entryRecord = entry as Record<string, unknown>;
+      if (typeof entryRecord.text === 'string' && entryRecord.text.trim()) {
+        summaries.push(entryRecord.text.trim());
+      }
+    }
+  }
+  return summaries.length > 0 ? summaries : null;
 }
 
 function parseOpenAIOutputText(body: unknown): string | null {
@@ -497,11 +526,13 @@ async function callOpenAIJson(
 
   const payload = (await response.json()) as unknown;
   const outputText = parseOpenAIOutputText(payload);
+  const reasoningSummary = parseReasoningSummary(payload);
   emitLlmTrace('response.raw', {
     requestId: traceRequestId,
     kind,
     provider: 'openai',
     outputText,
+    reasoningSummary,
   });
   if (!outputText) return null;
 
@@ -758,7 +789,7 @@ export async function deriveActiveConflicts(
   ctx: ActiveConflictDerivationContext
 ): Promise<ActiveConflict[]> {
   const stage = toConflictStage(ctx.currentStage);
-  if (!stage) return [];
+  if (!stage || stage === 'confirm') return [];
 
   const stagePreferences = ctx.preferences.filter((item) => item.relevantStages.includes(stage));
   if (stagePreferences.length === 0 && ctx.deadEnds.length === 0) return [];
@@ -784,7 +815,6 @@ export async function deriveActiveConflicts(
   const schema = {
     type: 'object',
     properties: {
-      analysis: { type: 'string' },
       activeConflicts: {
         type: 'array',
         items: {
@@ -798,7 +828,7 @@ export async function deriveActiveConflicts(
         },
       },
     },
-    required: ['analysis', 'activeConflicts'],
+    required: ['activeConflicts'],
     additionalProperties: false,
   };
 

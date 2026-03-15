@@ -795,15 +795,19 @@ function buildAgentMessageAction(text: string): import('./types').PlannedAction 
   };
 }
 
-const READING_DELAY_MS_PER_CHAR = 30;
-const MIN_READING_DELAY_MS = 800;
-const MAX_READING_DELAY_MS = 3000;
+const BASE_WPM = 155;
+const TTS_SPEED = (() => {
+  const parsed = Number.parseFloat(process.env.OPENAI_TTS_SPEED || '1.5');
+  if (!Number.isFinite(parsed)) return 1.5;
+  return Math.min(4, Math.max(0.25, parsed));
+})();
+const MIN_READING_DELAY_MS = 600;
+const TTS_PLAYBACK_TIMEOUT_MS = 15_000;
 
 function computeReadingDelay(text: string): number {
-  return Math.min(
-    Math.max(text.length * READING_DELAY_MS_PER_CHAR, MIN_READING_DELAY_MS),
-    MAX_READING_DELAY_MS
-  );
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  const durationMs = (wordCount / (BASE_WPM * TTS_SPEED)) * 60_000;
+  return Math.max(durationMs, MIN_READING_DELAY_MS);
 }
 
 async function maybeSendAssistantMessage(context: PerceivedContext, text: string): Promise<void> {
@@ -977,7 +981,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
             ttsPlaybackResolve = null;
             resolve();
           }
-        }, MAX_READING_DELAY_MS * 5);
+        }, TTS_PLAYBACK_TIMEOUT_MS);
       });
     } else {
       const remaining = pendingReadingDelayUntil - Date.now();

@@ -7,8 +7,7 @@ function hasTool(toolSchema: ToolSchemaItem[], toolName: string): boolean {
 export function isActionSafe(context: PerceivedContext, action: PlannedAction): boolean {
   if (action.type === 'tool.call') {
     const toolName = typeof action.payload.toolName === 'string' ? action.payload.toolName : '';
-    const reason = typeof action.payload.reason === 'string' ? action.payload.reason.trim() : '';
-    if (!toolName || !reason) return false;
+    if (!toolName) return false;
     return hasTool(context.toolSchema, toolName);
   }
   return true;

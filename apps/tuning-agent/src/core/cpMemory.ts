@@ -174,10 +174,9 @@ export function normalizeDeadEnds(deadEnds: DeadEnd[]): DeadEnd[] {
   return Array.from(deduped.values());
 }
 
-export function buildPreferenceId(description: string, strength: Preference['strength']): string {
+export function buildPreferenceId(description: string): string {
   const normalizedDescription = normalizeWhitespace(description).toLowerCase();
-  const base = `${strength}:${normalizedDescription}`;
-  return `pref_${slugify(normalizedDescription)}_${shortHash(base)}`;
+  return `pref_${slugify(normalizedDescription)}_${shortHash(normalizedDescription)}`;
 }
 
 export function normalizeConflictScope(scope: ConflictScope): ConflictScope {
