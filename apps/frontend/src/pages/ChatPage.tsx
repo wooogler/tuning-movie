@@ -1229,6 +1229,9 @@ export function ChatPage({
     onActiveItemChange: (item) => {
       setSpeakingMessageId(item?.id ?? null);
     },
+    onPlaybackComplete: () => {
+      sendTtsPlaybackComplete();
+    },
   });
 
   const handleAgentMessage = useCallback((text: string) => {
@@ -1243,6 +1246,8 @@ export function ChatPage({
   const {
     sendUserMessageToAgent,
     sendSessionResetToAgent,
+    sendVoiceModeChange,
+    sendTtsPlaybackComplete,
     isConnected: isAgentBridgeConnected,
     isJoined: isAgentBridgeJoined,
     connectedAgents,
@@ -1265,6 +1270,10 @@ export function ChatPage({
   useEffect(() => {
     agentStatusSupportedRef.current = agentStatusSupported;
   }, [agentStatusSupported]);
+
+  useEffect(() => {
+    sendVoiceModeChange(voiceModeEnabled);
+  }, [voiceModeEnabled, sendVoiceModeChange]);
 
   const submitChatInput = useCallback(
     (text: string, source: 'text' | 'voice' = 'text') => {

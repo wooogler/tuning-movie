@@ -20,6 +20,7 @@ export class AgentMemory {
   private preferences: Preference[] = [];
   private activeConflicts: ActiveConflict[] = [];
   private deadEnds: DeadEnd[] = [];
+  private stageItemCounts = new Map<string, { total: number; highlighted: number }>();
 
   reset(): void {
     this.context = null;
@@ -27,6 +28,7 @@ export class AgentMemory {
     this.preferences = [];
     this.activeConflicts = [];
     this.deadEnds = [];
+    this.stageItemCounts = new Map();
   }
 
   getPreferences(): Preference[] {
@@ -101,6 +103,14 @@ export class AgentMemory {
 
   getRecentRecords(windowSize = 10): EpisodicRecord[] {
     return this.episodic.slice(-windowSize);
+  }
+
+  setStageItemCount(stage: string, total: number, highlighted: number): void {
+    this.stageItemCounts.set(stage, { total, highlighted });
+  }
+
+  getStageItemCounts(): Map<string, { total: number; highlighted: number }> {
+    return new Map(this.stageItemCounts);
   }
 
   countRecentFailures(stage: string | null, windowSize = 8): number {

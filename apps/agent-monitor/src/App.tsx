@@ -94,6 +94,7 @@ type LlmInteraction = {
   id: number;
   timestamp: string;
   component: LlmComponent;
+  requestId: string | null;
   request: unknown;
   raw: unknown;
   parsed: unknown;
@@ -370,6 +371,11 @@ function getLlmComponent(event: MonitorEvent): LlmComponent {
   return 'planner';
 }
 
+function getLlmTraceRequestId(payload: unknown): string | null {
+  const record = asRecord(payload);
+  return typeof record?.requestId === 'string' && record.requestId.trim() ? record.requestId.trim() : null;
+}
+
 function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
   const interactions: LlmInteraction[] = [];
   const currentByComponent: Record<LlmComponent, LlmInteraction | null> = {
@@ -377,11 +383,68 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
     extractor: null,
     unknown: null,
   };
+  const currentByRequestId = new Map<string, LlmInteraction>();
 
   for (const event of events) {
     const llmEventType = getLlmEventType(event);
     if (!llmEventType) continue;
     const component = getLlmComponent(event);
+    const requestId = getLlmTraceRequestId(event.payload);
+
+    if (requestId) {
+      let current = currentByRequestId.get(requestId) ?? null;
+
+      if (llmEventType === 'request') {
+        if (current) {
+          current.request = event.payload;
+          current.sourceEvents.push(event);
+        } else {
+          currentByRequestId.set(requestId, {
+            id: event.index,
+            timestamp: event.timestamp,
+            component,
+            requestId,
+            request: event.payload,
+            raw: null,
+            parsed: null,
+            error: null,
+            sourceEvents: [event],
+          });
+        }
+        continue;
+      }
+
+      if (!current) {
+        current = {
+          id: event.index,
+          timestamp: event.timestamp,
+          component,
+          requestId,
+          request: null,
+          raw: null,
+          parsed: null,
+          error: null,
+          sourceEvents: [event],
+        };
+        currentByRequestId.set(requestId, current);
+      } else {
+        current.sourceEvents.push(event);
+      }
+
+      if (llmEventType === 'response.raw') {
+        current.raw = event.payload;
+      } else if (llmEventType === 'response.parsed') {
+        current.parsed = event.payload;
+        interactions.push(current);
+        currentByRequestId.delete(requestId);
+      } else if (llmEventType === 'error') {
+        current.error = event.payload;
+        interactions.push(current);
+        currentByRequestId.delete(requestId);
+      }
+      continue;
+    }
+
     let current = currentByComponent[component];
 
     if (llmEventType === 'request') {
@@ -403,6 +466,7 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
         id: event.index,
         timestamp: event.timestamp,
         component,
+        requestId: null,
         request: event.payload,
         raw: null,
         parsed: null,
@@ -417,6 +481,7 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
         id: event.index,
         timestamp: event.timestamp,
         component,
+        requestId: null,
         request: null,
         raw: null,
         parsed: null,
@@ -445,7 +510,14 @@ function buildLlmInteractions(events: MonitorEvent[]): LlmInteraction[] {
     const current = currentByComponent[component];
     if (current) interactions.push(current);
   }
-  return interactions;
+  for (const current of currentByRequestId.values()) {
+    interactions.push(current);
+  }
+  return interactions.sort((a, b) => {
+    if (a.id !== b.id) return a.id - b.id;
+    if (a.timestamp !== b.timestamp) return a.timestamp.localeCompare(b.timestamp);
+    return a.component.localeCompare(b.component);
+  });
 }
 
 function getInteractionStatus(item: LlmInteraction): LlmInteractionStatus {
@@ -526,6 +598,7 @@ function serializeLlmInteraction(
     id: item.id,
     timestamp: item.timestamp,
     component: item.component,
+    requestId: item.requestId,
     componentLabel: getComponentLabel(item.component, routingMode),
     status: getInteractionStatus(item),
     extractorBadge,

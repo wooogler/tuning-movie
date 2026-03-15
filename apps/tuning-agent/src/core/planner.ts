@@ -6,17 +6,14 @@ import {
 import { refreshModelEnvVars } from './envRefresh';
 import type { AgentMemory } from './memory';
 import {
-  summarizeActiveConflict,
-  summarizeDeadEnd,
-  summarizePreference,
-} from './cpMemory';
-import {
   getEnabledVisibleItems,
+  getHighlightedIds,
   getSelectedId,
   getSelectedListIds,
   toUISpecLike,
   type UISpecLike,
 } from './uiModel';
+import { buildEndTimeMap, parseDurationMinutes } from './timeUtils';
 import {
   buildWorkflowSelectionState,
   WORKFLOW_STAGE_ORDER,
@@ -37,7 +34,6 @@ const STAGE_ORDER = WORKFLOW_STAGE_ORDER;
 const RAW_SCAN_WINDOW = 24;
 const RECENT_WINDOW = 8;
 const MAX_HISTORY_ENTRIES = 12;
-const MAX_VISIBLE_ITEMS_PER_SYSTEM = 12;
 
 type HistoryMessageType = 'system' | 'user' | 'agent';
 
@@ -77,8 +73,7 @@ function toHistoryType(value: unknown): HistoryMessageType | null {
 }
 
 function compactVisibleItems(
-  value: unknown,
-  maxItems: number
+  value: unknown
 ): Array<{ id: string; value: string; isDisabled?: true }> {
   if (!Array.isArray(value)) return [];
   const compacted: Array<{ id: string; value: string; isDisabled?: true }> = [];
@@ -88,20 +83,13 @@ function compactVisibleItems(
     const id = readTrimmedString(record.id);
     const itemValue = readTrimmedString(record.value);
     if (!id || !itemValue) continue;
-    if (record.isDisabled === true) {
-      compacted.push({ id, value: itemValue, isDisabled: true });
-    } else {
-      compacted.push({ id, value: itemValue });
-    }
-    if (compacted.length >= maxItems) break;
+    if (record.isDisabled === true) continue;
+    compacted.push({ id, value: itemValue });
   }
   return compacted;
 }
 
-function compactSystemSpec(
-  value: unknown,
-  includeItems: boolean
-): Record<string, unknown> | null {
+function compactSystemSpec(value: unknown): Record<string, unknown> | null {
   const record = asRecord(value);
   if (!record) return null;
 
@@ -115,14 +103,14 @@ function compactSystemSpec(
   const modification = asRecord(record.modification);
   const summary: Record<string, unknown> = {};
   const rawVisibleItems = Array.isArray(record.visibleItems) ? record.visibleItems : [];
-  const visibleItems = compactVisibleItems(rawVisibleItems, MAX_VISIBLE_ITEMS_PER_SYSTEM);
+  const visibleItems = compactVisibleItems(rawVisibleItems);
 
   if (stage) summary.stage = stage;
   if (visibleItems.length > 0) {
     summary.visibleItems = visibleItems;
   }
   if (rawVisibleItems.length > visibleItems.length) {
-    summary.visibleItemCount = rawVisibleItems.length;
+    summary.disabledItemCount = rawVisibleItems.length - visibleItems.length;
   }
   if (selectedId && selectedValue) {
     summary.selected = { id: selectedId, value: selectedValue };
@@ -130,13 +118,8 @@ function compactSystemSpec(
   if (selectedListCount > 0) {
     summary.selectedListCount = selectedListCount;
   }
-  if (modification) {
+  if (modification && Object.keys(modification).length > 0) {
     summary.modification = modification;
-  }
-  if (includeItems) {
-    if (Array.isArray(record.items) && record.items.length > 0) {
-      summary.items = record.items;
-    }
   }
 
   return Object.keys(summary).length > 0 ? summary : null;
@@ -172,7 +155,6 @@ function compactAgentText(value: unknown): string | null {
 
 function compactHistoryEntry(
   entry: unknown,
-  includeSystemItems: boolean,
   linkedAgentText?: string | null
 ): { type: HistoryMessageType; value: Record<string, unknown> } | null {
   const record = asRecord(entry);
@@ -201,7 +183,7 @@ function compactHistoryEntry(
     return { type, value: compacted };
   }
 
-  const compactedSpec = compactSystemSpec(record.spec, includeSystemItems);
+  const compactedSpec = compactSystemSpec(record.spec);
   const annotation = compactAnnotation(record.annotation, !linkedAgentText);
   if (compactedSpec) compacted.spec = compactedSpec;
   if (linkedAgentText) compacted.linkedAgentText = linkedAgentText;
@@ -296,13 +278,195 @@ function stageTransition(stage: Stage): { previousStage: Stage | null; nextStage
   };
 }
 
+function buildSeatLayoutMeta(items: unknown[]): Record<string, unknown> | null {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  const rows = new Set<string>();
+  let maxCol = 0;
+  for (const rawItem of items) {
+    const item = asRecord(rawItem);
+    if (!item) continue;
+    const row = readTrimmedString(item.row);
+    const col = typeof item.number === 'number' ? item.number : 0;
+    if (row) rows.add(row);
+    if (col > maxCol) maxCol = col;
+  }
+  if (rows.size === 0 || maxCol === 0) return null;
+  return {
+    rows: Array.from(rows).sort(),
+    seatsPerRow: maxCol,
+    totalSeats: items.length,
+  };
+}
+
+function buildCurrentView(spec: UISpecLike): Record<string, unknown> | null {
+  const rawSpec = asRecord(spec as unknown);
+  if (!rawSpec) return null;
+
+  const state = asRecord(rawSpec.state);
+  const modification = asRecord(rawSpec.modification);
+  const selectedId = getSelectedId(spec);
+  const selectedValue = readTrimmedString(state?.selected && asRecord(state.selected)?.value);
+  const selectedListIds = getSelectedListIds(spec);
+  const highlightedIds = Array.from(
+    new Set([
+      ...normalizeStringArray(asRecord(modification?.highlight)?.itemIds),
+      ...getHighlightedIds(spec),
+    ])
+  ).sort();
+  const visibleItems = compactVisibleItems(rawSpec.visibleItems);
+  const summary: Record<string, unknown> = {
+    stage: spec.stage ?? null,
+  };
+
+  if (visibleItems.length > 0) {
+    summary.visibleItems = visibleItems;
+  }
+  const rawVisibleItems = Array.isArray(rawSpec.visibleItems) ? rawSpec.visibleItems.length : 0;
+  if (rawVisibleItems > visibleItems.length) {
+    summary.disabledItemCount = rawVisibleItems - visibleItems.length;
+  }
+  if (selectedId) {
+    summary.selected = selectedValue ? { id: selectedId, value: selectedValue } : { id: selectedId };
+  }
+  if (selectedListIds.length > 0) {
+    summary.selectedListIds = selectedListIds;
+  }
+  if (highlightedIds.length > 0) {
+    summary.highlightedIds = highlightedIds;
+  }
+  // Keep non-highlight modifications (filter, sort, augment)
+  if (modification) {
+    const other: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(modification)) {
+      if (key !== 'highlight') other[key] = val;
+    }
+    if (Object.keys(other).length > 0) {
+      summary.modification = other;
+    }
+  }
+  // Item details for current stage
+  const items = Array.isArray(rawSpec.items) ? rawSpec.items : [];
+  if (items.length > 0) {
+    const seatLayout = buildSeatLayoutMeta(items);
+    if (seatLayout) {
+      // Seat stage: layout meta + available seats only
+      summary.seatLayout = seatLayout;
+      summary.items = (items as Record<string, unknown>[])
+        .filter((item) => item && asRecord(item)?.status === 'available')
+        .map((item) => {
+          const { showingId: _s, label: _l, status: _st, ...rest } = item as Record<string, unknown>;
+          return rest;
+        });
+    } else {
+      // Other stages: include all items
+      summary.items = items;
+    }
+  }
+
+  return Object.keys(summary).length > 0 ? summary : null;
+}
+
+function buildTurnContext(trigger: string | undefined, context: PerceivedContext): Record<string, unknown> | null {
+  const summary: Record<string, unknown> = {};
+
+  if (trigger) {
+    const deferred = trigger.startsWith('deferred:');
+    if (deferred) {
+      summary.trigger = trigger.slice('deferred:'.length);
+      summary.isDeferred = true;
+    } else {
+      summary.trigger = trigger;
+    }
+  }
+
+  if (context.lastUserMessage?.text?.trim()) {
+    summary.lastUserMessageStage = context.lastUserMessage.stage ?? null;
+  }
+
+  return Object.keys(summary).length > 0 ? summary : null;
+}
+
+const STAGE_SCOPE_KEY: Record<string, string> = { time: 'showing', seat: 'seats' };
+
+const STAGE_PARENT_SCOPE_KEYS: Record<string, string[]> = Object.fromEntries(
+  STAGE_ORDER.map((stage, i) =>
+    [stage, STAGE_ORDER.slice(0, i).map((s) => STAGE_SCOPE_KEY[s] ?? s)],
+  ),
+);
+
+function resolveStateScopeValue(
+  state: Record<string, unknown>,
+  scopeKey: string,
+): string | null {
+  const entry = asRecord(state[scopeKey]);
+  if (!entry) return null;
+  return (
+    readTrimmedString(entry.title) ??
+    readTrimmedString(entry.name) ??
+    readTrimmedString(entry.date) ??
+    readTrimmedString(entry.id) ??
+    null
+  );
+}
+
+function isDeadEndRelevant(
+  deadEnd: DeadEnd,
+  stage: string,
+  state: Record<string, unknown> | null,
+): boolean {
+  if (!state) return true;
+  const parentKeys = STAGE_PARENT_SCOPE_KEYS[stage] ?? [];
+  const scope = deadEnd.scope as unknown as Record<string, unknown>;
+
+  for (const key of parentKeys) {
+    const scopeValue = typeof scope[key] === 'string' ? (scope[key] as string) : null;
+    if (!scopeValue) continue;
+    const stateValue = resolveStateScopeValue(state, key);
+    if (!stateValue) continue;
+    if (scopeValue !== stateValue) return false;
+  }
+  return true;
+}
+
+function findDeadEndItemIds(
+  items: Record<string, unknown>[],
+  deadEnds: DeadEnd[],
+  stage: string,
+  state: Record<string, unknown> | null,
+): string[] {
+  const scopeKey = STAGE_SCOPE_KEY[stage] ?? stage;
+  const relevantDeadEnds = deadEnds.filter((de) => isDeadEndRelevant(de, stage, state));
+  const deadEndValues = new Set<string>();
+  for (const de of relevantDeadEnds) {
+    const scope = de.scope as unknown as Record<string, unknown>;
+    const val = typeof scope[scopeKey] === 'string' ? (scope[scopeKey] as string) : null;
+    if (val) deadEndValues.add(val);
+  }
+  if (deadEndValues.size === 0) return [];
+
+  const ids: string[] = [];
+  for (const item of items) {
+    const id = typeof item.id === 'string' ? item.id : null;
+    if (!id) continue;
+    for (const v of Object.values(item)) {
+      if (typeof v === 'string' && deadEndValues.has(v)) {
+        ids.push(id);
+        break;
+      }
+    }
+  }
+  return ids;
+}
+
 function buildWorkflowContext(
   context: PerceivedContext,
   stage: Stage,
   spec: UISpecLike,
   plannerTools: ToolSchemaItem[],
-  plannerMemory: PlannerWorkflowMemory | null,
-  cpMemoryEnabled: boolean
+  cpMemoryEnabled: boolean,
+  deadEnds: DeadEnd[],
+  stageItemCounts: Map<string, { total: number; highlighted: number }>,
+  trigger?: string
 ): PlannerWorkflow {
   const selectedId = getSelectedId(spec);
   const selectedListCount = getSelectedListIds(spec).length;
@@ -328,6 +492,27 @@ function buildWorkflowContext(
     messageHistory: context.messageHistoryTail,
     uiSpec: context.uiSpec,
   });
+  const currentView = buildCurrentView(spec);
+
+  if (currentView && stage === 'time' && Array.isArray(currentView.items) && workflowState) {
+    const movie = asRecord(workflowState.movie);
+    const duration = movie ? readTrimmedString(movie.duration) : null;
+    if (duration) {
+      const mins = parseDurationMinutes(duration);
+      if (mins) {
+        const endTimeMap = buildEndTimeMap(currentView.items as Record<string, unknown>[], mins);
+        if (endTimeMap) currentView.endTimeByItemId = endTimeMap;
+      }
+    }
+  }
+
+  if (currentView && Array.isArray(currentView.items) && deadEnds.length > 0) {
+    const deadEndIds = findDeadEndItemIds(currentView.items as Record<string, unknown>[], deadEnds, stage, workflowState ?? null);
+    if (deadEndIds.length > 0) currentView.deadEndItemIds = deadEndIds;
+  }
+
+  const turnContext = buildTurnContext(trigger, context);
+  const priorStageSummaries = buildPriorStageSummaries(stageItemCounts, stage);
   const workflow: PlannerWorkflow = {
     stageOrder: STAGE_ORDER,
     currentStage: stage,
@@ -338,11 +523,40 @@ function buildWorkflowContext(
     availableToolNames: [...plannerTools.map((tool) => tool.name), 'respond'],
     guiAdaptationEnabled: context.guiAdaptationEnabled,
     ...(workflowState ? { state: workflowState } : {}),
-    ...(plannerMemory ? { memory: plannerMemory } : {}),
+    ...(currentView ? { currentView } : {}),
+    ...(turnContext ? { turnContext } : {}),
+    ...(priorStageSummaries.length > 0 ? { priorStageSummaries } : {}),
     cpMemoryEnabled,
   };
 
   return workflow;
+}
+
+function getSystemEntrySignature(entry: CompactedHistoryEntry): string | null {
+  if (entry.type !== 'system') return null;
+  const spec = asRecord(entry.value.spec);
+  if (!spec) return null;
+  const stage = readTrimmedString(entry.value.stage) ?? readTrimmedString(spec.stage) ?? '';
+  return JSON.stringify({ stage, spec });
+}
+
+function collapseRedundantSystemEntries(entries: CompactedHistoryEntry[]): CompactedHistoryEntry[] {
+  const collapsed: CompactedHistoryEntry[] = [];
+
+  for (const entry of entries) {
+    const previous = collapsed[collapsed.length - 1];
+    const previousSignature = previous ? getSystemEntrySignature(previous) : null;
+    const currentSignature = getSystemEntrySignature(entry);
+
+    if (previous && previousSignature && currentSignature && previousSignature === currentSignature) {
+      collapsed[collapsed.length - 1] = entry;
+      continue;
+    }
+
+    collapsed.push(entry);
+  }
+
+  return collapsed;
 }
 
 function buildPlannerHistory(
@@ -353,16 +567,6 @@ function buildPlannerHistory(
   const rawHistory = cpMemoryEnabled
     ? context.messageHistoryTail.slice(-RAW_SCAN_WINDOW)
     : context.messageHistoryTail.slice();
-  let latestSystemRawIndex = -1;
-
-  for (let i = rawHistory.length - 1; i >= 0; i -= 1) {
-    const record = asRecord(rawHistory[i]);
-    if (!record) continue;
-    if (toHistoryType(record.type) === 'system') {
-      latestSystemRawIndex = i;
-      break;
-    }
-  }
 
   const compacted: CompactedHistoryEntry[] = [];
   for (let i = 0; i < rawHistory.length; i += 1) {
@@ -373,7 +577,6 @@ function buildPlannerHistory(
     const currentType = toHistoryType(current.type);
     const currentStage = readTrimmedString(current.stage);
     let linkedAgentText: string | null = null;
-    const compactedIndex = i;
 
     if (currentType === 'system') {
       const next = asRecord(rawHistory[i + 1]);
@@ -388,28 +591,30 @@ function buildPlannerHistory(
       }
     }
 
-    const normalized = compactHistoryEntry(rawEntry, compactedIndex === latestSystemRawIndex, linkedAgentText);
+    const normalized = compactHistoryEntry(rawEntry, linkedAgentText);
     if (!normalized) continue;
     compacted.push({
-      index: compactedIndex,
+      index: i,
       type: normalized.type,
       value: normalized.value,
     });
   }
 
-  if (compacted.length === 0) return [];
+  const collapsed = collapseRedundantSystemEntries(compacted);
+
+  if (collapsed.length === 0) return [];
 
   if (!cpMemoryEnabled) {
-    return compacted.map((entry) => entry.value);
+    return collapsed.map((entry) => entry.value);
   }
 
   const selectedByIndex = new Map<number, CompactedHistoryEntry>();
-  for (const entry of compacted.slice(-RECENT_WINDOW)) {
+  for (const entry of collapsed.slice(-RECENT_WINDOW)) {
     selectedByIndex.set(entry.index, entry);
   }
 
   for (const type of ['system', 'user', 'agent'] as const) {
-    const latest = getLatestCompactedByType(compacted, type);
+    const latest = getLatestCompactedByType(collapsed, type);
     if (latest) {
       selectedByIndex.set(latest.index, latest);
     }
@@ -434,6 +639,27 @@ function filterPlannerPreferencesByStage(preferences: Preference[], stage: Stage
   });
 }
 
+function buildPriorStageSummaries(
+  stageItemCounts: Map<string, { total: number; highlighted: number }>,
+  currentStage: Stage
+): Array<{ stage: string; alternatives: number }> {
+  const currentIdx = STAGE_ORDER.indexOf(currentStage);
+  if (currentIdx <= 0) return [];
+
+  const summaries: Array<{ stage: string; alternatives: number }> = [];
+  for (let i = 0; i < currentIdx; i++) {
+    const s = STAGE_ORDER[i];
+    const counts = stageItemCounts.get(s);
+    if (!counts) continue;
+    const base = counts.highlighted > 0 ? counts.highlighted : counts.total;
+    const alternatives = base - 1;
+    if (alternatives > 0) {
+      summaries.push({ stage: s, alternatives });
+    }
+  }
+  return summaries;
+}
+
 function buildPlannerMemory(
   preferences: Preference[],
   activeConflicts: ActiveConflict[],
@@ -449,15 +675,16 @@ function buildPlannerMemory(
     return null;
   }
 
+  const compactDeadEnds = limitedDeadEnds.map(({ preferenceIds, scope, reason }) => ({
+    preferenceIds,
+    scope,
+    reason,
+  }));
+
   return {
     preferences,
     activeConflicts,
-    deadEnds: limitedDeadEnds,
-    summaries: {
-      preferences: preferences.map(summarizePreference),
-      activeConflicts: activeConflicts.map(summarizeActiveConflict),
-      deadEnds: limitedDeadEnds.map(summarizeDeadEnd),
-    },
+    deadEnds: compactDeadEnds,
   };
 }
 
@@ -538,7 +765,8 @@ function validateLlmAction(
 
 export async function planNextAction(
   context: PerceivedContext,
-  memory: AgentMemory
+  memory: AgentMemory,
+  trigger?: string
 ): Promise<PlanDecision> {
   if (!context.sessionId) {
     return { action: null, source: 'rule', fallbackReason: 'NO_SESSION' };
@@ -549,6 +777,10 @@ export async function planNextAction(
   if (!stage || !spec) {
     return { action: null, source: 'rule', fallbackReason: 'INVALID_STAGE_OR_SPEC' };
   }
+
+  const visibleCount = getEnabledVisibleItems(spec).length;
+  const highlightedCount = getHighlightedIds(spec).length;
+  memory.setStageItemCount(stage, visibleCount, highlightedCount);
 
   const userRequest = context.lastUserMessage?.text ?? '';
   const hasUserRequest = Boolean(userRequest.trim());
@@ -579,16 +811,20 @@ export async function planNextAction(
       memory.getDeadEnds(),
       plannerCpMemoryLimit
     );
+    const plannerHistory = buildPlannerHistory(context, cpMemoryEnabled);
     const plannerInput = {
-      history: buildPlannerHistory(context, cpMemoryEnabled),
+      ...(plannerMemory ? { memory: plannerMemory } : {}),
+      history: plannerHistory,
       availableTools: plannerTools,
       workflow: buildWorkflowContext(
         context,
         stage,
         spec,
         plannerTools,
-        plannerMemory,
-        cpMemoryEnabled
+        cpMemoryEnabled,
+        memory.getDeadEnds(),
+        memory.getStageItemCounts(),
+        trigger
       ),
     };
 

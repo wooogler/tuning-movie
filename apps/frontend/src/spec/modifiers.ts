@@ -115,6 +115,9 @@ export function computeDisplayItems<T extends DataItem>(
     if ('status' in item && typeof item.status === 'string' && item.status !== 'available') {
       displayItem.isDisabled = true;
     }
+    if ('available' in item && item.available === false) {
+      displayItem.isDisabled = true;
+    }
 
     return displayItem;
   });

@@ -1,4 +1,5 @@
 import { refreshModelEnvVars } from '../core/envRefresh';
+import { addEndTimeToItems, parseDurationMinutes } from '../core/timeUtils';
 import {
   buildActiveConflictId,
   buildConflictScope,
@@ -7,9 +8,10 @@ import {
   normalizePreferenceList,
 } from '../core/cpMemory';
 import { CONFLICT_STAGES } from '../types';
-import type { ActiveConflict, ConflictStage, Preference } from '../types';
+import type { ActiveConflict, ConflictScope, ConflictStage, Preference } from '../types';
 
 interface PreferenceExtractionInput {
+  precedingAgentMessage: string | null;
   userMessage: string;
   currentStage: string;
   state: Record<string, unknown> | null;
@@ -26,18 +28,25 @@ interface PreferenceExtractionOutput {
   }>;
 }
 
+interface CompactDeadEnd {
+  preferenceIds: string[];
+  scope: ConflictScope;
+  description: string;
+}
+
 interface ActiveConflictDerivationInput {
   currentStage: string;
   preferences: Preference[];
   state: Record<string, unknown> | null;
   uiSpec: unknown;
+  deadEnds: CompactDeadEnd[];
 }
 
 interface ActiveConflictDerivationOutput {
+  analysis: string;
   activeConflicts: Array<{
     preferenceIds: string[];
-    severity: 'blocking' | 'soft';
-    reason: string;
+    description: string;
   }>;
 }
 
@@ -65,6 +74,7 @@ const monitorEnabled =
 const monitorLlmTraceOverride = parseBooleanEnv(process.env.AGENT_MONITOR_LLM_TRACE);
 const MONITOR_LLM_TRACE_ENABLED = monitorEnabled && (monitorLlmTraceOverride ?? true);
 const llmTraceListeners = new Set<LlmTraceListener>();
+let llmTraceRequestSequence = 0;
 
 function emitLlmTrace(type: LlmTraceEvent['type'], payload: unknown): void {
   if (!MONITOR_LLM_TRACE_ENABLED) return;
@@ -82,57 +92,51 @@ export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
 }
 
 const PREFERENCE_SYSTEM_PROMPT =
-  'You maintain the structured user preference memory for an interactive booking agent.\n' +
-  'Inputs include userMessage, currentStage, state, uiSpec, recentHistory, and existingPreferences.\n' +
+  'You maintain the structured user preference memory for a booking agent.\n' +
+  'Input: precedingAgentMessage, userMessage, currentStage, state, uiSpec, recentHistory, existingPreferences.\n' +
   'Return the full updated preference list for the current turn.\n' +
+  '\n' +
+  'Durable vs procedural — the core distinction:\n' +
+  '- STORE only durable preferences: ongoing rules, constraints, or stable desires the user wants applied across branches.\n' +
+  '- DO NOT STORE procedural actions: selecting a visible option, confirming a suggestion, exploring, navigating, or making a one-time commitment for the current step. These do not narrow or replace an existing preference.\n' +
+  '- Read precedingAgentMessage to understand what the user is responding to. If the agent asked the user to choose between options, the user\'s reply is a procedural selection — not a new or narrowed preference. Keep the existing preference intact.\n' +
+  '- When in doubt, keep existingPreferences unchanged.\n' +
+  '\n' +
   'Rules:\n' +
-  '- Preferences must come from user intent, not from system availability.\n' +
-  '- Use recentHistory to distinguish durable user preferences from in-the-moment procedural replies.\n' +
-  '- Preserve existing preference wording when the meaning remains unchanged so the system can keep stable ids.\n' +
-  '- Remove obsolete preferences by omitting them from the returned list.\n' +
-  '- Ignore trivial acknowledgements, assistant suggestions, and system state that the user did not ask for.\n' +
-  '- Do not store procedural, exploratory, or temporary action requests as preferences.\n' +
-  '- Do not convert branch-local instructions into durable preferences. Examples: "check Movie A", "check Theater B", "check 4pm", "try this one", "go back", "clear that filter", "show another option", "check seats".\n' +
-  '- Treat requests to check, try, inspect, or look at one current option as procedural exploration unless the user also states a reusable preference or enduring rule.\n' +
-  '- Distinguish durable preferences from turn-local commitments. When the user is choosing among currently visible options to complete the current step, treat that as a local commitment unless they clearly express a reusable rule or enduring desire.\n' +
-  '- Do not store current-step selections as preferences when the user is simply picking one visible option or confirming a choice for this branch. This applies across stages (for example selecting a movie, theater, date, time, or seats from the current UI).\n' +
-  '- Short replies that accept one currently offered option are usually temporary selections, not durable preferences. Examples: "1:30 pm is good", "that one works", "let\'s do the second one", "book these seats".\n' +
-  '- Only store an option-specific preference when the user makes it reusable beyond the current step or branch, for example by stating an ongoing rule, a stable favorite, or a choice they want preserved even if they revisit options.\n' +
-  '- Do not create a new preference when the user is only answering an assistant confirmation question about the next step to inspect.\n' +
-  '- Treat option-specific trial confirmations as temporary unless the user clearly states an enduring desire or rule (for example "I want the 4:00 PM showtime" as a standing choice).\n' +
-  '- When the latest user message is procedural or temporary, prefer keeping existingPreferences unchanged unless the user also states a durable preference.\n' +
-  '- Use strength="hard" for requirements/constraints the user clearly insists on.\n' +
-  '- Use strength="soft" for softer wishes, preferences, or nice-to-haves.\n' +
-  '- For each preference, set relevantStages to the booking stages where that preference should be checked for active conflicts.\n' +
-  '- Allowed relevantStages values: movie, theater, date, time, seat, confirm.\n' +
-  '- Use one or more relevantStages per preference and prefer the minimal set that can actually evaluate the preference.\n' +
-  '- Preserve relevantStages for an existing preference when the meaning remains unchanged unless there is a clear reason to update them.\n' +
-  '- Keep each description as a short standalone sentence.\n' +
-  '- Do not include ids in the output.\n' +
-  'Return JSON only matching this schema: { "preferences": Array<{ "description": string, "strength": "hard" | "soft", "relevantStages": string[] }> }';
+  '- Preferences come from user intent, not system availability.\n' +
+  '- Preserve existing wording when meaning is unchanged (for stable IDs). Preserve relevantStages likewise.\n' +
+  '- Remove obsolete preferences by omitting them.\n' +
+  '- strength="hard" for requirements the user insists on; "soft" for wishes or nice-to-haves.\n' +
+  '- relevantStages: stages where this preference should be conflict-checked. Allowed: movie, theater, date, time, seat, confirm. Use the minimal set.\n' +
+  '- Keep descriptions as short standalone sentences. Do not include IDs.\n' +
+  'Return JSON: { "preferences": Array<{ "description": string, "strength": "hard" | "soft", "relevantStages": string[] }> }';
 
 const ACTIVE_CONFLICT_SYSTEM_PROMPT =
-  'You derive the current active conflicts for an interactive booking agent.\n' +
-  'Inputs include currentStage, preferences, state, and raw uiSpec.\n' +
-  'Return only conflicts that are active right now for the current branch.\n' +
+  'You derive active conflicts for a booking agent.\n' +
+  'Input fields:\n' +
+  '- currentStage: the booking step being decided now.\n' +
+  '- currentSelectionId: ID of the option the user is currently on (null if none).\n' +
+  '- preferences: hard/soft user constraints with relevantStages.\n' +
+  '- priorSelections: earlier-stage choices (movie, theater, etc.).\n' +
+  '- items: available options for the current stage. An item with a "deadEnds" array is blocked — all downstream paths for that option have failed. Each dead-end entry carries preferenceIds and a description.\n' +
+  '- highlightedIds: IDs the UI is actively recommending.\n' +
+  '- deadEnds (if present): dead-ends that could not be matched to a specific item but still apply broadly.\n' +
+  '\n' +
+  'Core rules — when to report an active conflict:\n' +
+  '1. No viable item: after excluding dead-ended items, no remaining item satisfies all relevant hard preferences jointly.\n' +
+  '2. Current selection blocked: currentSelectionId points to a dead-ended item or one that violates hard preferences. Always report this — the user is on a broken path and needs redirection, even if alternatives exist.\n' +
+  '3. UI exclusively directing to violation: every highlightedId is blocked and no non-blocked option is highlighted.\n' +
+  '\n' +
+  'Hard preferences are conjunctive: the same item must satisfy all of them together.\n' +
+  '\n' +
   'Rules:\n' +
-  '- Read the preferences first. Evaluate them one by one against the current state and raw uiSpec.\n' +
-  '- Before declaring a conflict, check whether at least one currently available option still satisfies the preference.\n' +
-  '- If any currently available option satisfies a preference, do not create a conflict for that preference.\n' +
-  '- Use existential satisfaction, not universal satisfaction: a preference is satisfied when at least one currently available option works, even if other matching options are unavailable.\n' +
-  '- Do not treat "some matching options are unavailable" as a conflict when another currently available matching option still exists.\n' +
-  '- Judge conflicts against the set of currently viable options, not against whether every matching option remains available.\n' +
-  '- Only create a conflict when the current branch has no viable option that can satisfy the preference now.\n' +
-  '- A conflict exists only when one or more provided preferences cannot currently be satisfied from the current UI/state.\n' +
-  '- If no conflict is active right now, return an empty list.\n' +
-  '- Never carry over stale or historical conflicts.\n' +
-  '- If the situation is uncertain or not yet evaluable, do not create a conflict.\n' +
-  '- Use only preferenceIds that already exist in the provided preferences input.\n' +
-  '- Use severity="blocking" for hard blockers that prevent progress on the current branch.\n' +
-  '- Use severity="soft" when the branch is viable but misses a soft preference.\n' +
-  '- Keep reason concise, factual, and grounded in the current UI/state.\n' +
-  '- Do not include scope or ids in the output.\n' +
-  'Return JSON only matching this schema: { "activeConflicts": Array<{ "preferenceIds": string[], "severity": "blocking" | "soft", "reason": string }> }';
+  '- Write a brief analysis FIRST: summarize which items are viable, dead-ended, or violating. Do not enumerate every item individually — focus on the conclusion.\n' +
+  '- Check whether currentSelectionId maps to a dead-ended or blocked item. If so, report an active conflict using the preferenceIds from the dead-end.\n' +
+  '- Then populate activeConflicts. Combine related preferenceIds into a single conflict entry.\n' +
+  '- Use only preferenceIds that exist in the provided preferences.\n' +
+  '- Do not carry over historical conflicts or create speculative ones.\n' +
+  '- description: short summary of which preferences are violated and why.\n' +
+  'Return JSON: { "analysis": string, "activeConflicts": Array<{ "preferenceIds": string[], "description": string }> }';
 
 export function getExtractorSystemPrompt(): string {
   return [
@@ -152,6 +156,11 @@ function readTrimmedString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function createLlmTraceRequestId(kind: ExtractionKind): string {
+  llmTraceRequestSequence += 1;
+  return `${kind}-${llmTraceRequestSequence}`;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -240,6 +249,18 @@ function materializePreferences(
   return normalizePreferenceList(preferences);
 }
 
+function deriveSeverity(
+  preferenceIds: string[],
+  preferences: Preference[]
+): 'blocking' | 'soft' {
+  const byId = new Map(preferences.map((item) => [item.id, item]));
+  for (const id of preferenceIds) {
+    const pref = byId.get(id);
+    if (pref && pref.strength === 'hard') return 'blocking';
+  }
+  return 'soft';
+}
+
 function materializeActiveConflicts(
   raw: ActiveConflictDerivationOutput,
   input: ActiveConflictDerivationInput
@@ -252,8 +273,6 @@ function materializeActiveConflicts(
   const conflicts: ActiveConflict[] = [];
 
   for (const rawConflict of raw.activeConflicts) {
-    const reason = normalizeDescription(rawConflict.reason);
-    if (!reason) continue;
     const preferenceIds = Array.from(
       new Set(
         rawConflict.preferenceIds
@@ -262,12 +281,14 @@ function materializeActiveConflicts(
       )
     );
     if (preferenceIds.length === 0) continue;
-    const severity = rawConflict.severity === 'soft' ? 'soft' : 'blocking';
+    const description = normalizeDescription(rawConflict.description);
+    if (!description) continue;
+    const severity = deriveSeverity(preferenceIds, input.preferences);
     const baseConflict = {
       preferenceIds,
+      description,
       scope,
       severity,
-      reason,
     } satisfies Omit<ActiveConflict, 'id'>;
     conflicts.push({
       ...baseConflict,
@@ -303,30 +324,29 @@ function toActiveConflictDerivationOutput(
   const rawConflicts = Array.isArray(value.activeConflicts) ? value.activeConflicts : null;
   if (!rawConflicts) return null;
 
+  const analysis = typeof value.analysis === 'string' ? value.analysis.trim() : '';
   const activeConflicts: ActiveConflictDerivationOutput['activeConflicts'] = [];
   for (const entry of rawConflicts) {
     if (!isRecord(entry)) continue;
     const preferenceIds = Array.isArray(entry.preferenceIds)
       ? entry.preferenceIds.filter((item): item is string => typeof item === 'string')
       : [];
-    const reason = normalizeDescription(entry.reason);
-    if (preferenceIds.length === 0 || !reason) continue;
+    const description = normalizeDescription(entry.description);
+    if (preferenceIds.length === 0 || !description) continue;
     activeConflicts.push({
       preferenceIds,
-      severity: entry.severity === 'soft' ? 'soft' : 'blocking',
-      reason,
+      description,
     });
   }
 
-  return { activeConflicts };
+  return { analysis, activeConflicts };
 }
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const DEFAULT_OPENAI_TEMPERATURE = 0;
 
-function resolveOpenAIReasoning(kind: ExtractionKind): { effort: 'low' } | undefined {
-  if (kind !== 'active_conflicts') return undefined;
-  return { effort: 'low' };
+function resolveOpenAIReasoning(_kind: ExtractionKind): { effort: 'low' } | undefined {
+  return undefined;
 }
 
 function resolveOpenAITemperature(): number | undefined {
@@ -409,11 +429,13 @@ async function callOpenAIJson(
     ...(typeof temperature === 'number' ? { temperature } : {}),
     ...(reasoning ? { reasoning } : {}),
   };
+  const traceRequestId = createLlmTraceRequestId(kind);
 
   if (DEBUG_LLM) {
     console.log(`[tuning-agent][extractor:${kind}:openai] request:`, JSON.stringify(input));
   }
   emitLlmTrace('request', {
+    requestId: traceRequestId,
     method: 'POST',
     url: OPENAI_API_URL,
     headers: {
@@ -439,6 +461,7 @@ async function callOpenAIJson(
 
     if (shouldRetryWithoutTemperature) {
       emitLlmTrace('request', {
+        requestId: traceRequestId,
         method: 'POST',
         url: OPENAI_API_URL,
         headers: {
@@ -458,18 +481,34 @@ async function callOpenAIJson(
 
     if (!response.ok) {
       const errorText = await response.text();
-      emitLlmTrace('error', { kind, provider: 'openai', status: response.status, errorText });
+      emitLlmTrace('error', {
+        requestId: traceRequestId,
+        kind,
+        provider: 'openai',
+        status: response.status,
+        errorText,
+      });
       throw new Error(`OpenAI extractor failed (${response.status}): ${errorText}`);
     }
   }
 
   const payload = (await response.json()) as unknown;
   const outputText = parseOpenAIOutputText(payload);
-  emitLlmTrace('response.raw', { kind, provider: 'openai', outputText });
+  emitLlmTrace('response.raw', {
+    requestId: traceRequestId,
+    kind,
+    provider: 'openai',
+    outputText,
+  });
   if (!outputText) return null;
 
   const parsed = parseJsonObject(outputText);
-  emitLlmTrace('response.parsed', { kind, provider: 'openai', parsed });
+  emitLlmTrace('response.parsed', {
+    requestId: traceRequestId,
+    kind,
+    provider: 'openai',
+    parsed,
+  });
   return parsed;
 }
 
@@ -497,6 +536,7 @@ export interface PreferenceExtractionContext {
   uiSpec: unknown;
   recentHistory: unknown[];
   existingPreferences: Preference[];
+  precedingAgentMessage?: string | null;
 }
 
 export interface ActiveConflictDerivationContext {
@@ -504,12 +544,26 @@ export interface ActiveConflictDerivationContext {
   state: Record<string, unknown> | null;
   uiSpec: unknown;
   preferences: Preference[];
+  deadEnds: CompactDeadEnd[];
 }
 
 export async function extractStructuredPreferences(
   ctx: PreferenceExtractionContext
 ): Promise<Preference[]> {
+  // Find the preceding agent message so the LLM can see what the user is responding to.
+  let precedingAgentMessage = ctx.precedingAgentMessage ?? null;
+  if (!precedingAgentMessage) {
+    for (let i = ctx.recentHistory.length - 1; i >= 0; i--) {
+      const entry = ctx.recentHistory[i];
+      if (isRecord(entry) && entry.type === 'agent' && typeof entry.text === 'string' && entry.text.trim()) {
+        precedingAgentMessage = entry.text.trim();
+        break;
+      }
+    }
+  }
+
   const input: PreferenceExtractionInput = {
+    precedingAgentMessage,
     userMessage: ctx.userMessage,
     currentStage: ctx.currentStage,
     state: ctx.state,
@@ -555,13 +609,154 @@ export async function extractStructuredPreferences(
   return materializePreferences(output, ctx.existingPreferences);
 }
 
+// ── Active-conflict LLM payload builder ─────────────────────────
+
+const STAGE_KEY_ALIASES: Record<string, string> = { time: 'showing', seat: 'seats' };
+
+function stageToScopeKey(stage: string): string {
+  return STAGE_KEY_ALIASES[stage] ?? stage;
+}
+
+function isDeadEndScopeCompatible(
+  deadEnd: CompactDeadEnd,
+  priorSelections: Record<string, unknown>,
+  currentStage: string
+): boolean {
+  const scope = deadEnd.scope as unknown as Record<string, unknown>;
+  const currentScopeKey = stageToScopeKey(currentStage);
+  for (const [field, scopeValue] of Object.entries(scope)) {
+    if (field === 'stage' || field === currentScopeKey) continue;
+    if (typeof scopeValue !== 'string') continue;
+    const selection = priorSelections[field];
+    if (!selection || !isRecord(selection)) continue;
+    let matched = false;
+    for (const v of Object.values(selection)) {
+      if (typeof v === 'string' && v === scopeValue) { matched = true; break; }
+    }
+    if (!matched) return false;
+  }
+  return true;
+}
+
+function doesDeadEndMatchItem(
+  deadEnd: CompactDeadEnd,
+  item: Record<string, unknown>,
+  currentStage: string
+): boolean {
+  const scopeKey = stageToScopeKey(currentStage);
+  const scopeValue = (deadEnd.scope as unknown as Record<string, unknown>)[scopeKey];
+  if (typeof scopeValue !== 'string' || !scopeValue) return false;
+  for (const value of Object.values(item)) {
+    if (typeof value === 'string' && value === scopeValue) return true;
+  }
+  return false;
+}
+
+function isItemAvailable(item: Record<string, unknown>): boolean {
+  if (item.available === false) return false;
+  if (typeof item.status === 'string' && item.status !== 'available') return false;
+  return true;
+}
+
+function extractHighlightedIds(uiSpec: unknown): string[] {
+  if (!isRecord(uiSpec)) return [];
+  const spec = uiSpec as Record<string, unknown>;
+  const modification = isRecord(spec.modification) ? spec.modification : null;
+  const highlight = modification && isRecord(modification.highlight) ? modification.highlight : null;
+  if (!highlight || !Array.isArray(highlight.itemIds)) return [];
+  return highlight.itemIds.filter((id): id is string => typeof id === 'string');
+}
+
+function extractRawItems(uiSpec: unknown): Record<string, unknown>[] {
+  if (!isRecord(uiSpec)) return [];
+  const items = (uiSpec as Record<string, unknown>).items;
+  if (!Array.isArray(items)) return [];
+  return items.filter((item): item is Record<string, unknown> => isRecord(item));
+}
+
+function buildConflictLlmPayload(
+  input: ActiveConflictDerivationInput
+): Record<string, unknown> {
+  let currentSelectionId: string | null = null;
+  if (input.state && isRecord(input.state.currentSelection)) {
+    currentSelectionId = readTrimmedString(input.state.currentSelection.id);
+  }
+
+  const currentStageKey = stageToScopeKey(input.currentStage);
+  const priorSelections: Record<string, unknown> = {};
+  if (input.state) {
+    for (const [key, value] of Object.entries(input.state)) {
+      if (key === 'currentSelection' || key === currentStageKey) continue;
+      if (isRecord(value)) {
+        priorSelections[key] = value;
+      }
+    }
+  }
+
+  const highlightedIds = extractHighlightedIds(input.uiSpec);
+  let rawItems = extractRawItems(input.uiSpec).filter(isItemAvailable);
+
+  const applicableDeadEnds = input.deadEnds.filter((de) =>
+    isDeadEndScopeCompatible(de, priorSelections, input.currentStage)
+  );
+
+  if (input.currentStage === 'time' && input.state) {
+    const movie = isRecord(input.state.movie) ? input.state.movie : null;
+    const duration = movie ? readTrimmedString(movie.duration) : null;
+    if (duration) {
+      const mins = parseDurationMinutes(duration);
+      if (mins) {
+        rawItems = addEndTimeToItems(rawItems, mins);
+      }
+    }
+  }
+
+  const matchedDeadEndIndices = new Set<number>();
+  const items = rawItems.map((item) => {
+    const copy = { ...item };
+    const matchingDeadEnds: Array<{ preferenceIds: string[]; description: string }> = [];
+    applicableDeadEnds.forEach((de, idx) => {
+      if (doesDeadEndMatchItem(de, item, input.currentStage)) {
+        matchedDeadEndIndices.add(idx);
+        matchingDeadEnds.push({ preferenceIds: de.preferenceIds, description: de.description });
+      }
+    });
+    if (matchingDeadEnds.length > 0) copy.deadEnds = matchingDeadEnds;
+    return copy;
+  });
+
+  const unmatchedDeadEnds = applicableDeadEnds
+    .filter((_, idx) => !matchedDeadEndIndices.has(idx))
+    .map((de) => ({ preferenceIds: de.preferenceIds, description: de.description }));
+
+  const payload: Record<string, unknown> = {
+    currentStage: input.currentStage,
+    currentSelectionId,
+    preferences: input.preferences,
+  };
+  if (Object.keys(priorSelections).length > 0) payload.priorSelections = priorSelections;
+  payload.items = items;
+  if (highlightedIds.length > 0) payload.highlightedIds = highlightedIds;
+  if (unmatchedDeadEnds.length > 0) payload.deadEnds = unmatchedDeadEnds;
+
+  return payload;
+}
+
 export async function deriveActiveConflicts(
   ctx: ActiveConflictDerivationContext
 ): Promise<ActiveConflict[]> {
   const stage = toConflictStage(ctx.currentStage);
   if (!stage) return [];
 
-  const relevantPreferences = ctx.preferences.filter((item) => item.relevantStages.includes(stage));
+  const stagePreferences = ctx.preferences.filter((item) => item.relevantStages.includes(stage));
+  if (stagePreferences.length === 0 && ctx.deadEnds.length === 0) return [];
+
+  const stagePreferenceIds = new Set(stagePreferences.map((p) => p.id));
+  const deadEndReferencedIds = new Set(ctx.deadEnds.flatMap((d) => d.preferenceIds));
+  const extraPreferences = ctx.preferences.filter(
+    (p) => !stagePreferenceIds.has(p.id) && deadEndReferencedIds.has(p.id)
+  );
+  const relevantPreferences = [...stagePreferences, ...extraPreferences];
   if (relevantPreferences.length === 0) return [];
 
   const input: ActiveConflictDerivationInput = {
@@ -569,33 +764,36 @@ export async function deriveActiveConflicts(
     preferences: relevantPreferences,
     state: ctx.state,
     uiSpec: ctx.uiSpec,
+    deadEnds: ctx.deadEnds,
   };
+
+  const llmPayload = buildConflictLlmPayload(input);
 
   const schema = {
     type: 'object',
     properties: {
+      analysis: { type: 'string' },
       activeConflicts: {
         type: 'array',
         items: {
           type: 'object',
           properties: {
             preferenceIds: { type: 'array', items: { type: 'string' } },
-            severity: { type: 'string', enum: ['blocking', 'soft'] },
-            reason: { type: 'string' },
+            description: { type: 'string' },
           },
-          required: ['preferenceIds', 'severity', 'reason'],
+          required: ['preferenceIds', 'description'],
           additionalProperties: false,
         },
       },
     },
-    required: ['activeConflicts'],
+    required: ['analysis', 'activeConflicts'],
     additionalProperties: false,
   };
 
   const parsed = await callStructuredExtractor(
     'active_conflicts',
     ACTIVE_CONFLICT_SYSTEM_PROMPT,
-    input,
+    llmPayload,
     schema
   );
   if (!parsed) {

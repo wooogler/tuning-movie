@@ -18,6 +18,7 @@ interface UseVoiceOutputOptions {
   synthesizeSpeech: (text: string, signal?: AbortSignal) => Promise<Blob>;
   onLogEvent?: (type: string, payload: unknown) => void;
   onActiveItemChange?: (item: VoiceOutputQueueItem | null) => void;
+  onPlaybackComplete?: (item: VoiceOutputQueueItem) => void;
 }
 
 interface UseVoiceOutputResult {
@@ -38,6 +39,7 @@ export function useVoiceOutput({
   synthesizeSpeech,
   onLogEvent,
   onActiveItemChange,
+  onPlaybackComplete,
 }: UseVoiceOutputOptions): UseVoiceOutputResult {
   const [status, setStatus] = useState<VoiceOutputStatus>(enabled ? 'idle' : 'off');
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export function useVoiceOutput({
   const synthesizeSpeechRef = useRef(synthesizeSpeech);
   const onLogEventRef = useRef(onLogEvent);
   const onActiveItemChangeRef = useRef(onActiveItemChange);
+  const onPlaybackCompleteRef = useRef(onPlaybackComplete);
   const statusRef = useRef<VoiceOutputStatus>(enabled ? 'idle' : 'off');
   const errorRef = useRef<string | null>(null);
 
@@ -83,6 +86,10 @@ export function useVoiceOutput({
   useEffect(() => {
     onActiveItemChangeRef.current = onActiveItemChange;
   }, [onActiveItemChange]);
+
+  useEffect(() => {
+    onPlaybackCompleteRef.current = onPlaybackComplete;
+  }, [onPlaybackComplete]);
 
   const setActiveItem = useCallback((nextItem: VoiceOutputQueueItem | null) => {
     const currentItem = activeItemRef.current;
@@ -199,6 +206,7 @@ export function useVoiceOutput({
         onLogEventRef.current?.('chat.voice_output.completed', {
           textLength: nextText.length,
         });
+        onPlaybackCompleteRef.current?.(nextItem);
         void playNext();
       };
 

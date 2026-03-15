@@ -84,8 +84,8 @@ export function SeatStage({
 
                   const highlightClass = isHighlighted
                     ? motionProfile === 'full-tuning'
-                      ? 'border-primary/80 shadow-[0_0_0_2px_rgba(229,9,20,0.18)] gui-highlight-border-once'
-                      : 'ring-2 ring-primary gui-highlight-wave'
+                      ? 'border-blue-500 border-2 shadow-[0_0_0_4px_rgba(37,99,235,0.38)] gui-highlight-border-once'
+                      : 'ring-[4px] ring-blue-500 gui-highlight-wave'
                     : '';
 
                   return (
@@ -93,7 +93,7 @@ export function SeatStage({
                       key={seat.id}
                       onClick={() => !isOccupied && onToggle(seat.id)}
                       disabled={isOccupied}
-                      title={`${seat.label} • ${formatUsd(seat.price)} • ${seat.type}`}
+                      title={seat.label}
                       style={{ gridColumn: `${seat.number} / span 1` }}
                       className={`
                         relative aspect-square min-w-0 w-full overflow-hidden rounded-t-md text-[10px] transition-all sm:rounded-t-lg sm:text-xs

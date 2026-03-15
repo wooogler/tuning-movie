@@ -19,7 +19,7 @@ import {
   type ActiveConflictDerivationContext,
   type PreferenceExtractionContext,
 } from './llm/llmExtractor';
-import { materializeDeadEndsFromConflicts } from './core/cpMemory';
+import { buildConflictScope, buildDeadEndId, materializeDeadEndsFromConflicts } from './core/cpMemory';
 import {
   buildWorkflowSelectionState,
   toWorkflowStage,
@@ -30,6 +30,7 @@ import { isActionSafe } from './policies/safetyPolicy';
 import { RelayClient } from './runtime/relayClient';
 import { AgentMonitorServer } from './monitor/server';
 import type {
+  ActiveConflict,
   PlanDecision,
   PerceivedContext,
   RelayEnvelope,
@@ -124,6 +125,9 @@ function unsubscribeAllLlmTraces(): void {
 let actionInFlight = false;
 let lastActionFingerprint = '';
 let lastActionAt = 0;
+let pendingReadingDelayUntil = 0;
+let voiceModeEnabled = false;
+let ttsPlaybackResolve: (() => void) | null = null;
 let ensureSessionReadyInFlight: Promise<void> | null = null;
 let sessionReady = false;
 let hostConnectionAvailable = false;
@@ -137,6 +141,8 @@ let userConversationStarted = false;
 let fatalErrorMessage: string | null = null;
 let perceptionVersion = 0;
 let lastUiFingerprint: string | null = null;
+let lastConflictDerivationFingerprint: string | null = null;
+let skipNextConflictDerivation = false;
 let isFirstSnapshotSeen = false;
 type AgentStatusPhase = 'idle' | 'planning' | 'executing';
 let currentAgentStatusPhase: AgentStatusPhase = 'idle';
@@ -156,7 +162,6 @@ const DEFAULT_CP_MEMORY_LIMIT = Math.max(
 );
 const EXTRACTION_STAGE_ORDER = WORKFLOW_STAGE_ORDER;
 const EXTRACTION_HISTORY_WINDOW = 10;
-const EXTRACTION_VISIBLE_ITEMS_LIMIT = 6;
 
 function getMonitorApiPort(): number {
   if (!monitor.isEnabled()) return monitorPort;
@@ -237,7 +242,6 @@ function compactExtractionVisibleItems(
     } else {
       compacted.push({ id, value: itemValue });
     }
-    if (compacted.length >= EXTRACTION_VISIBLE_ITEMS_LIMIT) break;
   }
 
   return compacted;
@@ -477,18 +481,31 @@ function buildUiFingerprint(uiSpec: unknown): string {
   }
 }
 
+function buildConflictDerivationFingerprint(
+  stage: string | null,
+  preferences: { id: string }[],
+  deadEnds: { id: string }[]
+): string {
+  const prefIds = preferences.map((p) => p.id).sort().join(',');
+  const deadEndIds = deadEnds.map((d) => d.id).sort().join(',');
+  return `${stage ?? ''}|${prefIds}|${deadEndIds}`;
+}
+
 function sanitizeExtractionUiSpec(uiSpec: unknown): unknown {
   if (uiSpec === null || uiSpec === undefined || Array.isArray(uiSpec) || typeof uiSpec !== 'object') {
     return uiSpec ?? null;
   }
 
   const spec = uiSpec as Record<string, unknown>;
-  if (!Object.prototype.hasOwnProperty.call(spec, 'state')) {
-    return spec;
-  }
-
   const nextSpec: Record<string, unknown> = { ...spec };
+  // state is provided separately in the extraction input
   delete nextSpec.state;
+  // UI chrome fields — noise for preference/conflict extraction
+  delete nextSpec.title;
+  delete nextSpec.description;
+  delete nextSpec.display;
+  // meta duplicates state fields
+  delete nextSpec.meta;
   return nextSpec;
 }
 
@@ -532,18 +549,35 @@ async function runPreferenceExtractionFromUserMessage(
   try {
     const updatedPreferences = await extractStructuredPreferences(extractionCtx);
     memory.setPreferences(updatedPreferences);
-    const activeConflictCtx: ActiveConflictDerivationContext = {
-      currentStage: extractionView.currentStage,
-      state: extractionView.state,
-      uiSpec: extractionView.uiSpec,
-      preferences: updatedPreferences,
-    };
-    const updatedActiveConflicts = await deriveActiveConflicts(activeConflictCtx);
-    memory.setActiveConflicts(updatedActiveConflicts);
+
+    const conflictFingerprint = buildConflictDerivationFingerprint(
+      context.stage,
+      updatedPreferences,
+      memory.getDeadEnds()
+    );
+    const conflictSkipped =
+      lastConflictDerivationFingerprint !== null &&
+      conflictFingerprint === lastConflictDerivationFingerprint;
+
+    let updatedActiveConflicts: ActiveConflict[] | null = null;
+    if (!conflictSkipped) {
+      const activeConflictCtx: ActiveConflictDerivationContext = {
+        currentStage: extractionView.currentStage,
+        state: extractionView.state,
+        uiSpec: extractionView.uiSpec,
+        preferences: updatedPreferences,
+        deadEnds: memory.getDeadEnds().map((d) => ({ preferenceIds: d.preferenceIds, scope: d.scope, description: d.reason })),
+      };
+      updatedActiveConflicts = await deriveActiveConflicts(activeConflictCtx);
+      memory.setActiveConflicts(updatedActiveConflicts);
+      lastConflictDerivationFingerprint = conflictFingerprint;
+    }
+
     syncMonitorMemoryState();
     monitor.pushEvent('extraction.completed', {
       trigger: 'user.message',
-      mode: 'preferences+active-conflicts',
+      mode: conflictSkipped ? 'preferences-only' : 'preferences+active-conflicts',
+      conflictSkipped,
       uiFingerprint,
       updatedPreferences,
       updatedActiveConflicts,
@@ -567,19 +601,48 @@ async function runActiveConflictDerivationFromUiChange(
   uiFingerprint: string,
   uiFingerprintChanged: boolean
 ): Promise<void> {
-  const extractionView = buildExtractionViewContext(context);
+  if (skipNextConflictDerivation) {
+    skipNextConflictDerivation = false;
+    monitor.pushEvent('extraction.skipped', {
+      trigger,
+      mode: 'active-conflicts',
+      reason: 'post-backtrack',
+      uiFingerprint,
+      uiFingerprintChanged,
+    });
+    return;
+  }
+
   const preferences = memory.getPreferences();
+  const deadEnds = memory.getDeadEnds();
+
+  // Skip if the inputs that matter for conflict derivation haven't changed
+  const conflictFingerprint = buildConflictDerivationFingerprint(context.stage, preferences, deadEnds);
+  if (lastConflictDerivationFingerprint !== null && conflictFingerprint === lastConflictDerivationFingerprint) {
+    monitor.pushEvent('extraction.skipped', {
+      trigger,
+      mode: 'active-conflicts',
+      reason: 'conflict-derivation-fingerprint-unchanged',
+      uiFingerprint,
+      uiFingerprintChanged,
+    });
+    return;
+  }
+
+  const extractionView = buildExtractionViewContext(context);
 
   const extractionCtx: ActiveConflictDerivationContext = {
     currentStage: extractionView.currentStage,
     state: extractionView.state,
     uiSpec: extractionView.uiSpec,
     preferences,
+    deadEnds: deadEnds.map((d) => ({ preferenceIds: d.preferenceIds, scope: d.scope, description: d.reason })),
   };
 
   try {
     const updatedActiveConflicts = await deriveActiveConflicts(extractionCtx);
     memory.setActiveConflicts(updatedActiveConflicts);
+    lastConflictDerivationFingerprint = conflictFingerprint;
     syncMonitorMemoryState();
     monitor.pushEvent('extraction.completed', {
       trigger,
@@ -590,7 +653,7 @@ async function runActiveConflictDerivationFromUiChange(
       updatedActiveConflicts,
       preferences: memory.getPreferences(),
       activeConflicts: memory.getActiveConflicts(),
-      deadEnds: memory.getDeadEnds(),
+      deadEnds,
     });
   } catch (extractionError) {
     monitor.pushEvent('extraction.failed', {
@@ -628,6 +691,28 @@ function syncUserConversationStarted(context: PerceivedContext): void {
 function getToolName(action: import('./types').PlannedAction): string {
   if (action.type !== 'tool.call') return action.type;
   return typeof action.payload.toolName === 'string' ? action.payload.toolName : 'tool.call';
+}
+
+function buildActionFingerprint(action: import('./types').PlannedAction, stage: string | null): string {
+  if (action.type === 'tool.call') {
+    const toolName = typeof action.payload.toolName === 'string' ? action.payload.toolName : '';
+    const params =
+      action.payload.params && typeof action.payload.params === 'object' && !Array.isArray(action.payload.params)
+        ? action.payload.params
+        : {};
+    return JSON.stringify({
+      stage,
+      type: action.type,
+      toolName,
+      params,
+    });
+  }
+
+  return JSON.stringify({
+    stage,
+    type: action.type,
+    payload: action.payload,
+  });
 }
 
 function requestDeferredReplan(trigger: string): void {
@@ -693,6 +778,17 @@ function buildAgentMessageAction(text: string): import('./types').PlannedAction 
       text,
     },
   };
+}
+
+const READING_DELAY_MS_PER_CHAR = 30;
+const MIN_READING_DELAY_MS = 800;
+const MAX_READING_DELAY_MS = 3000;
+
+function computeReadingDelay(text: string): number {
+  return Math.min(
+    Math.max(text.length * READING_DELAY_MS_PER_CHAR, MIN_READING_DELAY_MS),
+    MAX_READING_DELAY_MS
+  );
 }
 
 async function maybeSendAssistantMessage(context: PerceivedContext, text: string): Promise<void> {
@@ -841,6 +937,42 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
   // NOTE: userConversationStarted gate removed to allow llmPlanner
   // to act proactively from the first stage (e.g. greeting on snapshot).
 
+  // Deferred replans fire via microtask before queued state.updated events,
+  // so conflict derivation from that event hasn't run yet. Refresh conflicts
+  // before planning to avoid acting on stale activeConflicts.
+  const isDeferredTrigger = trigger.startsWith('deferred:');
+  const cpMemoryEnabled = isPlannerCpMemoryEnabled(context.plannerCpMemoryLimit);
+  if (isDeferredTrigger && !isBaselineMode && cpMemoryEnabled && isFirstSnapshotSeen) {
+    const uiFingerprint = buildUiFingerprint(context.uiSpec);
+    await runActiveConflictDerivationFromUiChange(
+      context,
+      `${trigger}:pre-plan-refresh`,
+      uiFingerprint,
+      true
+    );
+  }
+
+  let readingDelayPromise: Promise<void> | null = null;
+  if (pendingReadingDelayUntil > 0) {
+    if (voiceModeEnabled) {
+      readingDelayPromise = new Promise<void>((resolve) => {
+        ttsPlaybackResolve = resolve;
+        setTimeout(() => {
+          if (ttsPlaybackResolve === resolve) {
+            ttsPlaybackResolve = null;
+            resolve();
+          }
+        }, MAX_READING_DELAY_MS * 5);
+      });
+    } else {
+      const remaining = pendingReadingDelayUntil - Date.now();
+      if (remaining > 0) {
+        readingDelayPromise = sleep(remaining);
+      }
+    }
+    pendingReadingDelayUntil = 0;
+  }
+
   planningInFlight = true;
   monitor.updateContext(context);
   monitor.updateState({ pendingUserMessages: deferredReplanRequested ? 1 : 0 });
@@ -850,11 +982,12 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     const planningContext = memory.getContext() ?? context;
     const decision: PlanDecision = isBaselineMode
       ? await planBaselineAction(planningContext)
-      : await planNextAction(planningContext, memory);
+      : await planNextAction(planningContext, memory, trigger);
     const action = decision.action;
     const decisionExplainText = decision.explainText ?? '';
 
     if (!action) {
+      if (readingDelayPromise) await readingDelayPromise;
       if (decisionExplainText.trim()) {
         await maybeSendAssistantMessage(planningContext, decisionExplainText);
       }
@@ -874,11 +1007,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       action,
     });
 
-    const actionFingerprint = JSON.stringify({
-      stage: planningContext.stage,
-      type: action.type,
-      payload: action.payload,
-    });
+    const actionFingerprint = buildActionFingerprint(action, planningContext.stage);
     const now = Date.now();
     if (!isBaselineMode && actionFingerprint === lastActionFingerprint && now - lastActionAt < 700) {
       return;
@@ -897,6 +1026,8 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       console.warn(`[tuning-agent] action blocked by safety policy (${trigger})`);
       return;
     }
+
+    if (readingDelayPromise) await readingDelayPromise;
 
     actionInFlight = true;
     monitor.updateState({ actionInFlight: true, phase: 'executing-action' });
@@ -960,17 +1091,47 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       (toolName === 'prev' || toolName === 'startOver')
     ) {
       const blockingConflicts = memory.getBlockingActiveConflicts();
+      const timestamp = new Date().toISOString();
       if (blockingConflicts.length > 0) {
-        const timestamp = new Date().toISOString();
         const deadEnds = materializeDeadEndsFromConflicts(blockingConflicts, timestamp);
         memory.upsertDeadEnds(deadEnds);
         syncMonitorMemoryState();
         monitor.pushEvent('memory.dead_ends_updated', {
           trigger,
           toolName,
+          source: 'active-conflicts',
+          deadEnds: memory.getDeadEnds(),
+        });
+      } else if (action.reason?.trim()) {
+        // No blocking conflict was derived, but the planner decided to backtrack.
+        // Use the planner's reason as a dead-end so the branch is not revisited.
+        const scope = buildConflictScope(
+          (planningContext.stage as import('./types').ConflictStage) ?? 'movie',
+          buildWorkflowSelectionState({
+            currentStage: (planningContext.stage as import('./types').ConflictStage) ?? 'movie',
+            messageHistory: planningContext.messageHistoryTail,
+            uiSpec: planningContext.uiSpec,
+          })
+        );
+        const reason = action.reason.trim();
+        const payload = { preferenceIds: [] as string[], scope, reason };
+        const deadEnd: import('./types').DeadEnd = {
+          id: buildDeadEndId(payload),
+          ...payload,
+          createdAt: timestamp,
+          lastSeenAt: timestamp,
+          count: 1,
+        };
+        memory.upsertDeadEnds([deadEnd]);
+        syncMonitorMemoryState();
+        monitor.pushEvent('memory.dead_ends_updated', {
+          trigger,
+          toolName,
+          source: 'planner-reason',
           deadEnds: memory.getDeadEnds(),
         });
       }
+      skipNextConflictDerivation = true;
     }
 
     if (!outcome.ok) {
@@ -988,6 +1149,10 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         code: outcome.code,
       });
       await relay.request('snapshot.get', {});
+    }
+
+    if (!isBaselineMode && decisionExplainText.trim()) {
+      pendingReadingDelayUntil = Date.now() + computeReadingDelay(decisionExplainText);
     }
 
     if (action.type === 'session.end' && outcome.ok) {
@@ -1060,6 +1225,8 @@ function resetRuntimeState(): void {
   fatalErrorMessage = null;
   perceptionVersion = 0;
   lastUiFingerprint = null;
+  lastConflictDerivationFingerprint = null;
+  skipNextConflictDerivation = false;
   isFirstSnapshotSeen = false;
   lastActionFingerprint = '';
   lastActionAt = 0;
@@ -1204,6 +1371,19 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
         }
       });
       await userPreferenceExtractionInFlight;
+      return;
+    }
+    case 'voice.mode': {
+      const payload = asRecord(envelope.payload);
+      voiceModeEnabled = payload?.enabled === true;
+      monitor.pushEvent('voice.mode', { enabled: voiceModeEnabled });
+      return;
+    }
+    case 'tts.playback.complete': {
+      if (ttsPlaybackResolve) {
+        ttsPlaybackResolve();
+        ttsPlaybackResolve = null;
+      }
       return;
     }
     case 'session.reset': {

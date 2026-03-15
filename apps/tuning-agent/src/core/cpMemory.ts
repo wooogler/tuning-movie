@@ -123,19 +123,19 @@ export function normalizeActiveConflicts(conflicts: ActiveConflict[]): ActiveCon
   const deduped = new Map<string, ActiveConflict>();
   for (const conflict of conflicts) {
     const id = conflict.id.trim();
-    const reason = normalizeWhitespace(conflict.reason);
+    const description = normalizeWhitespace(conflict.description);
     const preferenceIds = Array.from(
       new Set(conflict.preferenceIds.map((item) => item.trim()).filter(Boolean))
     );
-    if (!id || !reason || preferenceIds.length === 0) continue;
+    if (!id || !description || preferenceIds.length === 0) continue;
     const severity = conflict.severity === 'soft' ? 'soft' : 'blocking';
     const scope = normalizeConflictScope(conflict.scope);
     deduped.set(id, {
       id,
       preferenceIds,
+      description,
       scope,
       severity,
-      reason,
     });
   }
   return Array.from(deduped.values());
@@ -195,7 +195,7 @@ export function buildActiveConflictId(conflict: Omit<ActiveConflict, 'id'>): str
     preferenceIds: Array.from(new Set(conflict.preferenceIds)).sort(),
     scope: normalizeConflictScope(conflict.scope),
     severity: conflict.severity,
-    reason: normalizeWhitespace(conflict.reason),
+    description: normalizeWhitespace(conflict.description),
   };
   const base = stableJson(normalized);
   return `conf_${shortHash(base)}`;
@@ -221,7 +221,7 @@ export function materializeDeadEndsFromConflicts(
       const payload = {
         preferenceIds: conflict.preferenceIds,
         scope: conflict.scope,
-        reason: conflict.reason,
+        reason: conflict.description,
       };
       return {
         id: buildDeadEndId(payload),
@@ -253,7 +253,7 @@ function summarizeScope(scope: ConflictScope): string {
 export function summarizeActiveConflict(conflict: ActiveConflict): string {
   const prefix = conflict.severity === 'soft' ? 'Soft conflict' : 'Blocking conflict';
   const scope = summarizeScope(conflict.scope);
-  return scope ? `${prefix} at ${scope}: ${conflict.reason}` : `${prefix}: ${conflict.reason}`;
+  return scope ? `${prefix} at ${scope}: ${conflict.description}` : `${prefix}: ${conflict.description}`;
 }
 
 export function summarizeDeadEnd(deadEnd: DeadEnd): string {

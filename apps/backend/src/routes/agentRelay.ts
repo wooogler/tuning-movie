@@ -60,6 +60,8 @@ const HOST_TO_AGENT_TYPES = new Set([
   'error',
   'session.ended',
   'user.message',
+  'voice.mode',
+  'tts.playback.complete',
 ]);
 
 const sessions = new Map<string, SessionState>();

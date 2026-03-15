@@ -841,9 +841,6 @@ function GuiSnapshotCard({
   onStartOver?: () => void;
   onConfirm?: () => void;
 }) {
-  const statusBadgeClass = snapshot.isLatest
-    ? 'border-info-border bg-info-bg/70 text-info-text'
-    : 'border-dark-border bg-dark-light text-fg-muted';
   const frameClass = speaking
     ? 'border-rose-500/70 shadow-[0_0_0_3px_rgba(244,63,94,0.18)]'
     : agentActive
@@ -887,11 +884,6 @@ function GuiSnapshotCard({
               <div className="flex shrink-0 items-center justify-end gap-2 self-start">
                 <span className="rounded-full border border-info-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-info-text">
                   {snapshot.stage}
-                </span>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${statusBadgeClass}`}
-                >
-                  {snapshot.isLatest ? 'Agent' : 'Read Only'}
                 </span>
               </div>
             </div>

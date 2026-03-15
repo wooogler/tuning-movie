@@ -130,6 +130,7 @@ export interface DateItem extends DataItem {
   dayOfWeek: string;
   displayText: string;
   available: boolean;
+  isToday: boolean;
 }
 
 export function generateDateSpec(
@@ -180,6 +181,7 @@ export function createDateItems(
       dayOfWeek,
       displayText: `${month} ${day} (${dayOfWeek})`,
       available: availableDates ? availableDates.includes(dateStr) : true,
+      isToday: i === 0,
     });
   }
 
@@ -251,14 +253,30 @@ export interface SeatItem extends DataItem {
   status: 'available' | 'occupied' | 'selected';
 }
 
+function formatSeatTypeLabel(type: SeatItem['type']): string {
+  switch (type) {
+    case 'premium':
+      return 'Premium';
+    case 'couple':
+      return 'Couple';
+    case 'standard':
+    default:
+      return 'Standard';
+  }
+}
+
 export function generateSeatSpec(seats: Seat[]): UISpec<SeatItem> {
+  const currencyFormatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  });
   const items: SeatItem[] = seats
     .map((s) => ({
       id: s.id,
       showingId: s.showingId,
       row: s.row,
       number: s.number,
-      label: `${s.row}${s.number} - ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(s.price)}`,
+      label: `${s.row}${s.number} - ${formatSeatTypeLabel(s.type)} - ${currencyFormatter.format(s.price)}`,
       type: s.type,
       price: s.price,
       status: s.status,

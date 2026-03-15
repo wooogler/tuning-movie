@@ -49,7 +49,7 @@ export const modificationTools: ToolDefinition[] = [
   {
     name: 'sort',
     description:
-      'Sort items by a specific field only when the user explicitly asked for that comparison objective in the current stage and the ordering basis is already visible or has already been surfaced through the UI. Prefer the structured comparison attribute over "value" unless sorting the visible label text itself. Do not use this just because a field seems helpful or available, and do not invent new field names.',
+      'Sort items by a specific field when the user explicitly asked for that comparison objective, or when a soft preference implies a natural ordering (e.g., closest, cheapest, highest-rated). Prefer the structured comparison attribute over "value" unless sorting the visible label text itself. Do not invent new field names.',
     parameters: {
       field: {
         type: 'string',

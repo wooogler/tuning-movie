@@ -66,6 +66,7 @@ export interface WorkflowDateSelection {
   displayText?: string;
   dayOfWeek?: string;
   available?: boolean;
+  isToday?: boolean;
 }
 
 export interface WorkflowShowingSelection {

@@ -36,9 +36,9 @@ export interface ConflictScope {
 export interface ActiveConflict {
   id: string;
   preferenceIds: string[];
+  description: string;
   scope: ConflictScope;
   severity: 'blocking' | 'soft';
-  reason: string;
 }
 
 export interface DeadEnd {

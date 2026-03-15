@@ -1,14 +1,14 @@
-import type { ActiveConflict, DeadEnd, Preference, ToolSchemaItem } from '../types';
+import type {
+  ActiveConflict,
+  DeadEnd,
+  Preference,
+  ToolSchemaItem,
+} from "../types";
 
 export interface PlannerWorkflowMemory {
   preferences: Preference[];
   activeConflicts: ActiveConflict[];
-  deadEnds: DeadEnd[];
-  summaries: {
-    preferences: string[];
-    activeConflicts: string[];
-    deadEnds: string[];
-  };
+  deadEnds: Array<Pick<DeadEnd, 'preferenceIds' | 'scope' | 'reason'>>;
 }
 
 export interface PlannerWorkflow {
@@ -21,55 +21,63 @@ export interface PlannerWorkflow {
   availableToolNames: string[];
   guiAdaptationEnabled?: boolean;
   state?: Record<string, unknown>;
-  memory?: PlannerWorkflowMemory;
+  currentView?: Record<string, unknown>;
+  turnContext?: Record<string, unknown>;
+  priorStageSummaries?: Array<{ stage: string; alternatives: number }>;
   cpMemoryEnabled?: boolean;
 }
 
 interface PlannerInput {
+  memory?: PlannerWorkflowMemory;
   history: unknown[];
   availableTools: ToolSchemaItem[];
   workflow: PlannerWorkflow;
 }
 
 interface PlannerAction {
-  type: 'tool.call' | 'none';
+  type: "tool.call" | "none";
   toolName: string;
   params: Record<string, unknown>;
   reason: string;
 }
 
 export interface PlannerOutput {
-  assistantMessage: string;
   action: PlannerAction;
+  assistantMessage: string;
 }
 
 interface LlmTraceEvent {
-  component: 'planner';
-  type: 'request' | 'response.raw' | 'response.parsed' | 'error';
+  component: "planner";
+  type: "request" | "response.raw" | "response.parsed" | "error";
   payload: unknown;
 }
 
 type LlmTraceListener = (event: LlmTraceEvent) => void;
 
-const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === 'true';
+const DEBUG_LLM = process.env.AGENT_LLM_DEBUG === "true";
 
 function parseBooleanEnv(value: string | undefined): boolean | null {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'true') return true;
-  if (normalized === 'false') return false;
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
   return null;
 }
 
 const monitorEnabled =
-  parseBooleanEnv(process.env.AGENT_MONITOR_ENABLED) ?? process.env.NODE_ENV !== 'production';
-const monitorLlmTraceOverride = parseBooleanEnv(process.env.AGENT_MONITOR_LLM_TRACE);
-const MONITOR_LLM_TRACE_ENABLED = monitorEnabled && (monitorLlmTraceOverride ?? true);
+  parseBooleanEnv(process.env.AGENT_MONITOR_ENABLED) ??
+  process.env.NODE_ENV !== "production";
+const monitorLlmTraceOverride = parseBooleanEnv(
+  process.env.AGENT_MONITOR_LLM_TRACE,
+);
+const MONITOR_LLM_TRACE_ENABLED =
+  monitorEnabled && (monitorLlmTraceOverride ?? true);
 const llmTraceListeners = new Set<LlmTraceListener>();
+let llmTraceRequestSequence = 0;
 
-function emitLlmTrace(type: LlmTraceEvent['type'], payload: unknown): void {
+function emitLlmTrace(type: LlmTraceEvent["type"], payload: unknown): void {
   if (!MONITOR_LLM_TRACE_ENABLED) return;
-  const event: LlmTraceEvent = { component: 'planner', type, payload };
+  const event: LlmTraceEvent = { component: "planner", type, payload };
   for (const listener of llmTraceListeners) {
     listener(event);
   }
@@ -85,17 +93,17 @@ export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
 function parseJsonObject(text: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(text) as unknown;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }
     return null;
   } catch {
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
     if (start < 0 || end <= start) return null;
     try {
       const parsed = JSON.parse(text.slice(start, end + 1)) as unknown;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         return parsed as Record<string, unknown>;
       }
     } catch {
@@ -106,127 +114,154 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readTrimmedString(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 }
 
-function toPlannerOutput(value: Record<string, unknown>): PlannerOutput | null {
-  const assistantMessage =
-    typeof value.assistantMessage === 'string' ? value.assistantMessage.trim() : '';
+function createLlmTraceRequestId(): string {
+  llmTraceRequestSequence += 1;
+  return `planner-${llmTraceRequestSequence}`;
+}
 
+function createPlannerOutput(
+  action: PlannerAction,
+  assistantMessage: string,
+): PlannerOutput {
+  return {
+    action,
+    assistantMessage,
+  };
+}
+
+function toPlannerOutput(value: Record<string, unknown>): PlannerOutput | null {
   const actionRaw =
-    value.action && typeof value.action === 'object' && !Array.isArray(value.action)
+    value.action &&
+    typeof value.action === "object" &&
+    !Array.isArray(value.action)
       ? (value.action as Record<string, unknown>)
       : null;
   if (!actionRaw) return null;
 
-  const type = actionRaw.type === 'tool.call' || actionRaw.type === 'none' ? actionRaw.type : null;
+  const type =
+    actionRaw.type === "tool.call" || actionRaw.type === "none"
+      ? actionRaw.type
+      : null;
   if (!type) return null;
 
-  const toolName = typeof actionRaw.toolName === 'string' ? actionRaw.toolName.trim() : '';
-  const reason = typeof actionRaw.reason === 'string' ? actionRaw.reason.trim() : '';
+  const toolName =
+    typeof actionRaw.toolName === "string" ? actionRaw.toolName.trim() : "";
+  const reason =
+    typeof actionRaw.reason === "string" ? actionRaw.reason.trim() : "";
   const params =
-    actionRaw.params && typeof actionRaw.params === 'object' && !Array.isArray(actionRaw.params)
+    actionRaw.params &&
+    typeof actionRaw.params === "object" &&
+    !Array.isArray(actionRaw.params)
       ? (actionRaw.params as Record<string, unknown>)
       : {};
+  const assistantMessage =
+    typeof value.assistantMessage === "string"
+      ? value.assistantMessage.trim()
+      : "";
 
   if (!reason) return null;
 
-  return {
-    assistantMessage,
-    action: {
+  return createPlannerOutput(
+    {
       type,
       toolName,
       params,
       reason,
     },
-  };
+    assistantMessage,
+  );
 }
 
 const CORE_SYSTEM_PROMPT =
-  'You are a movie-booking decision-support assistant. Read the frontend state from the user\'s point of view and help the user make their own choice.\n' +
-  'Core rules:\n' +
-  '- Use history and workflow together to infer intent, prioritizing unresolved recent user preferences.\n' +
-  '- Treat workflow.currentStage, available tools, proceed rules, and the built-in respond function as hard boundaries.\n' +
-  '- Use workflow.state to understand selections already made across earlier stages.\n' +
-  '- Keep criteria stage-appropriate: broad earlier-stage rationale does not by itself create a new comparison objective for the current stage.\n' +
-  '- Keep stage knowledge bounded: do not claim access to information that would only become knowable after advancing to a later stage, making a different selection, or inspecting another branch.\n' +
-  '- Primary goal: help the user complete booking safely while preserving the user\'s agency over the choice.\n' +
-  '- Prefer concrete progress when intent is clear, but do not turn an unresolved comparison into an autonomous choice.\n' +
-  '- When multiple viable options remain and the user has not yet given a usable decision criterion for the current stage, prefer a short clarification that asks what matters for this stage rather than assuming a ranking or tie-breaker.\n' +
-  '- An explicit comparison preference may justify sorting or surfacing information, but it does not by itself authorize selecting the current top-ranked option while multiple visible options remain.\n' +
-  '- When multiple options remain or the next step would be assumption-heavy, prefer one non-committal GUI modification if it can make the user\'s stated criterion easier to see or apply without assuming a choice; otherwise use respond for a helpful clarification or direct answer grounded in visible information.\n' +
-  '- Use navigation or commitment actions only after clear user-originated confirmation, or when exactly one visible enabled option remains under the user\'s explicit criteria.\n' +
-  '- Do not infer unstated optimization goals or tie-breakers such as highest-rated, cheapest, nearest, earliest, latest, shortest, or best default.\n' +
-  '- Choose exactly one next step for this turn.';
+  "You are a movie-booking assistant helping a user complete their reservation.\n" +
+  "\n" +
+  "Decision framework — when to ACT vs ASK:\n" +
+  '- ACT when the user\'s intent is clear: a direct instruction to select a specific item, or an explicit "choose for me" / confirmation of a highlighted suggestion.\n' +
+  "- SUGGEST when a user preference points to a best match but the user has not explicitly chosen it. Choose the right tool by preference strength:\n" +
+  "  • hard preference → filter or highlight to narrow to viable options only.\n" +
+  "  • soft preference that implies ordering (e.g., closest, cheapest) → sort to reorder, then let the user pick. Do NOT highlight for soft preferences.\n" +
+  "  After highlighting or sorting, WAIT for the user to respond — do not follow up with select on the next turn. Do not use select for preference-based recommendations — let the user confirm first.\n" +
+  "- ASK only when multiple viable options genuinely remain and no recent user statement distinguishes them.\n" +
+  '- When asking, elicit the user\'s preferences or criteria in natural language. The GUI already prompts the user to select an item, so never repeat that selection prompt.\n' +
+  "- Use history to infer intent.\n" +
+  "\n" +
+  "Boundaries:\n" +
+  "- Stay within workflow.currentStage, available tools, and proceedRule.\n" +
+  "- Treat workflow.currentView as the authoritative current screen state. History may include earlier intermediate snapshots from the same stage.\n" +
+  "- If workflow.currentView already reflects a recommendation or modification you would otherwise make, continue from that state instead of repeating the same tool call.\n" +
+  "- Use workflow.turnContext to understand whether this turn is following up on an existing recommendation or UI change.\n" +
+  "- Use workflow.state for earlier-stage context. Do not assume information only available in later stages or unvisited branches.\n" +
+  "- Keep criteria stage-appropriate — earlier-stage rationale alone does not create new objectives for the current stage.\n" +
+  "- Choose exactly one action per turn.";
 
 const CP_MEMORY_PROMPT_RULES =
-  '- Use workflow.memory.preferences as structured user intent, and treat preferences as active guidance only when their relevantStages include workflow.currentStage unless the user explicitly restated them for the current step.\n' +
-  '- Use workflow.memory.activeConflicts as the current blockers for the active branch.\n' +
-  '- Use workflow.memory.deadEnds to eliminate branches that previously failed after backtracking. Treat a dead-end scope as unavailable unless the user explicitly asks to revisit it. When applying preferences and dead-ends together narrows the viable set to a single option, select it directly instead of asking for clarification.\n' +
-  '- Prefer workflow.memory.activeConflicts over workflow.memory.deadEnds when they disagree.\n' +
-  '- workflow.memory.summaries contains concise natural-language projections of the structured memory for quick scanning.';
+  "Memory (top-level 'memory' field):\n" +
+  "The input contains a 'memory' object with preferences, deadEnds, and activeConflicts. Use history and memory together to infer intent.\n" +
+  "\n" +
+  "- preferences: active decision criteria. Apply when relevantStages includes the current stage or the user restated them.\n" +
+  "- deadEnds: branches tried and failed. Treat dead-ended scopes as unavailable — they narrow viable options and may cause activeConflicts. When preferences + dead-ends leave exactly one viable option, select it immediately.\n" +
+  "- activeConflicts: current blockers derived from preferences + available options + dead-ends. A severity:blocking conflict means NO option at that stage satisfies all hard preferences jointly.\n" +
+  "- workflow.currentView.deadEndItemIds: list of item IDs in the current view that are dead-ended (failed downstream). NEVER select or recommend these items. Exclude them when evaluating viable options.\n" +
+  "\n" +
+  "Memory-aware decision rules:\n" +
+  "- Multi-step backtracking: if recent history shows the user or agent expressed intent to navigate to a specific earlier stage (e.g. 'try a different date' means go to the date stage), and the current stage is NOT yet that target stage, call prev immediately to continue backtracking. Do not pause or re-explain at intermediate stages.\n" +
+  "- ACT when backtracking from a dead-end: if you arrived at this stage after backtracking (history shows the user tried a path that failed downstream), do NOT re-ask the user to choose among the same options. Exclude all items listed in currentView.deadEndItemIds — they are NOT viable. Among the remaining items, apply active preferences to find the best alternative. If exactly one viable option remains, select it immediately without asking. If multiple viable options remain, highlight them and ask.\n" +
+  "- BLOCKING CONFLICTS override all other actions: if memory.activeConflicts contains a severity:blocking conflict for the current stage, do NOT recommend, highlight, or select any option that violates a hard preference — even if it partially matches.\n" +
+  "- Blocking conflict — check these rules IN ORDER, use the FIRST that matches:\n" +
+  "  1. Active backtracking: if a recent user message or agent response in history indicates the user is heading to an earlier stage, call prev immediately. Do not re-explain.\n" +
+  "  2. User agrees or requests backtracking at the current stage: call prev immediately. Do not repeat the explanation.\n" +
+  "  3. First encounter (none of the above matched): inform the user briefly that no viable option exists and why, then suggest backtracking. Do NOT call prev yet — let the user decide.\n" +
+  "- Resolution priority for blocking conflicts: (1) backtrack to an earlier stage to try a different branch, (2) only if the user declines, offer relaxing a preference.\n" +
+  "- workflow.priorStageSummaries lists prior stages that have untried alternatives. When suggesting backtracking, name the specific stage from this list (the nearest one — last in the list). If no stage is listed, suggest relaxing a preference instead.";
 
 const OPENAI_TOOL_CALLING_RULES =
-  'Tool-calling rules:\n' +
-  '- Use exactly one provided function on every turn.\n' +
-  '- If no GUI tool should be used now, call "respond".\n' +
-  '- Put a user-facing explanation in "assistantMessage".\n' +
-  '- Put a concise rationale in "reason".\n' +
-  '- For GUI tool calls, assistantMessage should briefly describe the action and should not ask for permission.\n' +
-  '- For respond, base assistantMessage only on currently visible information or stage-relevant stored preferences. Do not mention non-visible item metadata, do not introduce a new comparison dimension, and do not invent facts.\n' +
-  '- For respond, if the user asks about later-stage or branch-dependent information that is not verifiable yet from the current state, say so briefly and redirect to a stage-appropriate clarification or preference question instead of guessing.\n' +
-  '- Do not use select, selectMultiple, or next to resolve a tie among multiple viable options unless the user has clearly committed to one specific choice.\n' +
-  '- Do not justify a commitment action with an inferred ranking or default ordering.\n' +
-  '- Do not output plain text without a function call.\n' +
-  '- Never include internal item ids in assistantMessage; use human-readable labels only.';
+  "Tool-calling format:\n" +
+  '- Call exactly one function per turn. If no GUI tool is needed, call "respond".\n' +
+  "- Decide the single best action first: choose the function/tool and its params before drafting any user-facing wording.\n" +
+  '- After deciding the action, write a short "reason", then write "assistantMessage" that matches that action.\n' +
+  '- "assistantMessage": brief user-facing explanation of the action.\n' +
+  '- "reason": concise internal rationale for the chosen action.\n' +
+  "- For GUI tool calls, describe the action briefly; do not ask permission.\n" +
+  "- Base assistantMessage only on visible information and known context. Do not invent facts or claim later-stage knowledge.\n" +
+  "- Never include internal item IDs in assistantMessage; use human-readable labels.\n" +
+  "- Do not output plain text without a function call.";
 
 const GUI_ADAPTATION_ENABLED_RULES =
-  'Response rules for interfaces that can modify the GUI:\n' +
-  '- Treat assistantMessage as a brief spoken cue, not a narration track.\n' +
-  '- When the GUI already shows the relevant labels, rankings, values, or updated state, do not repeat those details in assistantMessage.\n' +
-  '- Let the GUI carry visible detail. Use assistantMessage only for the smallest coordination cue or next-step hint that is still useful aloud.\n' +
-  '- After a GUI tool call, do not restate option names, rankings, prices, times, seat labels, counts, or other details that are now visible on screen unless the user explicitly asked to hear them.\n' +
-  '- For GUI tool calls, prefer short cues like "I narrowed the list.", "I sorted the options.", "I highlighted the closest matches.", or "Take a look at the updated options." when that is sufficient.\n' +
-  '- For respond, keep assistantMessage to the smallest helpful clarification or direct answer based only on currently visible information. Do not read back GUI details that are already obvious on screen.\n' +
-  '- Match the tool to the need: use augment to surface a short fact tied to an explicit current-stage user request or a stored preference already relevant to this stage, filter to narrow by an explicit criterion, sort to order by an explicit comparison goal, and highlight to mark a small relevant subset.\n' +
-  '- For filter or sort, prefer the structured item field that directly represents the user\'s criterion or comparison goal. Use "value" only when operating on the visible label text itself, and do not invent field names that are not present on the current items.\n' +
-  '- Do not call filter if it would leave zero visible options. When a criterion appears to eliminate everything, ask a concise clarification or choose a less restrictive non-committal step instead.\n' +
-  '- Earlier-stage rationale or preferences do not by themselves authorize current-stage filter, sort, or augment actions unless the criterion was explicitly restated for this stage or is already stored as stage-relevant guidance.\n' +
-  '- If the current stage has no explicit criterion yet, prefer respond over filter, sort, or augment, usually by asking what matters most for this stage.\n' +
-  '- If the user has not stated a criterion or comparison goal for the current stage, do not proactively sort, filter, or augment just because a field seems helpful or available.\n' +
-  '- Do not use augment to reveal hidden item attributes unless that information is justified by the user\'s current-stage request or by stage-relevant stored preferences.\n' +
-  '- When using augment, surface only the minimum information needed for one current criterion, and do not bundle multiple hidden attributes into labels unless the user explicitly asked for that combined comparison.\n' +
-  '- If the user explicitly asks to filter, sort, or compare by a field that is not yet visible in the current UI, prefer augment first to surface that field on the relevant options. Do not call filter or sort on that field until it has already been surfaced in the UI.\n' +
-  '- If the user\'s stated criterion is not yet visible in the UI, prefer surfacing or applying that criterion through one non-committal GUI modification before asking for a tie-break.\n' +
-  '- Use only criteria grounded in what the user asked for. Do not introduce a new comparison dimension or hidden optimization goal.\n' +
-  '- Do not mention item metadata directly in assistantMessage if it is not already visible; surface it through the UI first.\n' +
-  '- Do not use sort to create a best default, do not use highlight when it adds no distinction, and let repeated filter calls accumulate additional conditions instead of replacing earlier filters.';
+  "GUI response rules:\n" +
+  "- assistantMessage is a brief spoken cue. Let the GUI carry visible detail — do not restate what is already on screen.\n" +
+  "- When narrowing options or highlighting a recommendation, include a brief reason in assistantMessage — especially facts the user cannot see on screen (e.g., computed end times). Do not over-explain.\n" +
+  '- After a GUI tool call, keep assistantMessage short but informative.\n' +
+  "- Tool selection:\n" +
+  "  • augment — surface a hidden fact tied to the user's criterion or a stage-relevant preference (from memory.preferences, if present) while keeping the original visible label intact and recognizable.\n" +
+  "  • filter — narrow by a field that exists in items data. Filter operates on raw item fields, NOT on augmented display text. If a criterion depends on a computed or derived value not present in items, use highlight instead.\n" +
+  "  • sort — reorder items by a soft preference that implies a natural ordering (e.g., distance, price, rating). Do not highlight after sorting — the top position already signals the recommendation.\n" +
+  "  • highlight — mark viable option(s) for a hard preference or explicit user request. Do not highlight based on soft preferences; use sort instead.\n" +
+  "- IMPORTANT: If a criterion references a field not yet visible in visibleItems, you MUST augment first to surface that field before any sort, filter, highlight, or select. The user cannot understand the recommendation without seeing the data.\n" +
+  "- Do not proactively filter, sort, or augment without a user criterion or stage-relevant preference.\n" +
+  "- Repeated filter calls accumulate; sort does not imply a default selection.";
 
 const GUI_ADAPTATION_DISABLED_RULES =
-  'Response rules for this interface:\n' +
-  '- Do not rely on the GUI to newly surface, filter, sort, or highlight the relevant options for the user.\n' +
-  '- Treat assistantMessage as a brief spoken cue, not a narration track.\n' +
-  '- Assume the user can already see the current GUI state. Do not read back the whole screen or enumerate all currently shown options just because the GUI cannot be modified.\n' +
-  '- Keep assistantMessage under the same brevity standard as other modes: give the smallest helpful clarification or direct answer grounded in the current UI state.\n' +
-  '- Mention only the minimum labels or details needed for the current answer. Do not narrate dense visual layouts such as a seat map, calendar grid, or long option list unless the user explicitly asked for that enumeration.\n' +
-  '- Ground the reply in the current UI state, but avoid literally saying "visible", "shown", or "on screen" unless clarifying scope is necessary.\n' +
-  '- If the user has not stated a comparison goal or decision criterion for the current stage, do not proactively introduce comparison axes such as distance, amenities, price, rating, or time. In that case, name the current options plainly or ask what matters most for this stage.\n' +
-  '- Do not mention non-visible item metadata, invent new comparison dimensions, or turn a tie into a recommendation the user did not ask for.';
+  "Response rules:\n" +
+  "- assistantMessage is a brief spoken cue. Assume the user can see the current GUI.\n" +
+  "- Do not enumerate the full screen or narrate dense layouts unless asked.\n" +
+  "- Mention only the minimum labels needed for the answer. Ground replies in current UI state.\n" +
+  "- Without a user criterion for the current stage, name options plainly or ask what matters — do not introduce unsolicited comparison dimensions.";
 
 export function getPlannerSystemPrompt(): string {
-  return [CORE_SYSTEM_PROMPT, OPENAI_TOOL_CALLING_RULES].join('\n');
+  return [CORE_SYSTEM_PROMPT, OPENAI_TOOL_CALLING_RULES].join("\n");
 }
 
 function hasCpMemoryContext(workflow: PlannerWorkflow): boolean {
-  if (workflow.cpMemoryEnabled === true) return true;
-  if (workflow.cpMemoryEnabled === false) return false;
-  return Boolean(workflow.memory);
+  return workflow.cpMemoryEnabled === true;
 }
 
 function buildSystemPrompt(workflow: PlannerWorkflow): string {
@@ -239,17 +274,23 @@ function buildSystemPrompt(workflow: PlannerWorkflow): string {
   } else {
     sections.push(GUI_ADAPTATION_DISABLED_RULES);
   }
-  return sections.join('\n');
+  return sections.join("\n");
 }
 
-type OpenAiJsonSchemaType = 'string' | 'number' | 'integer' | 'boolean' | 'object' | 'array';
+type OpenAiJsonSchemaType =
+  | "string"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "object"
+  | "array";
 
 interface OpenAiFunctionTool {
-  type: 'function';
+  type: "function";
   name: string;
   description?: string;
   parameters: {
-    type: 'object';
+    type: "object";
     properties: Record<string, unknown>;
     required?: string[];
     additionalProperties: boolean;
@@ -261,25 +302,27 @@ interface NativeToolCall {
   arguments: Record<string, unknown>;
 }
 
-const TOOL_META_ASSISTANT_MESSAGE_KEY = 'assistantMessage';
-const TOOL_META_REASON_KEY = 'reason';
-const NATIVE_NONE_TOOL_NAME = 'respond';
+const TOOL_META_ASSISTANT_MESSAGE_KEY = "assistantMessage";
+const TOOL_META_REASON_KEY = "reason";
+const NATIVE_NONE_TOOL_NAME = "respond";
 
-function normalizeJsonSchemaType(raw: string | null): OpenAiJsonSchemaType | null {
+function normalizeJsonSchemaType(
+  raw: string | null,
+): OpenAiJsonSchemaType | null {
   if (!raw) return null;
   switch (raw.toLowerCase()) {
-    case 'string':
-      return 'string';
-    case 'number':
-      return 'number';
-    case 'integer':
-      return 'integer';
-    case 'boolean':
-      return 'boolean';
-    case 'object':
-      return 'object';
-    case 'array':
-      return 'array';
+    case "string":
+      return "string";
+    case "number":
+      return "number";
+    case "integer":
+      return "integer";
+    case "boolean":
+      return "boolean";
+    case "object":
+      return "object";
+    case "array":
+      return "array";
     default:
       return null;
   }
@@ -292,25 +335,28 @@ function toOpenAiParamSchema(paramValue: unknown): Record<string, unknown> {
   const description = readTrimmedString(paramRecord.description);
   if (description) schema.description = description;
 
-  const normalizedType = normalizeJsonSchemaType(readTrimmedString(paramRecord.type));
+  const normalizedType = normalizeJsonSchemaType(
+    readTrimmedString(paramRecord.type),
+  );
   if (normalizedType) {
     schema.type = normalizedType;
-    if (normalizedType === 'array') {
+    if (normalizedType === "array") {
       schema.items = {};
     }
-    if (normalizedType === 'object') {
+    if (normalizedType === "object") {
       schema.additionalProperties = true;
     }
   }
 
   if (Array.isArray(paramRecord.enum)) {
     const enumValues = paramRecord.enum.filter(
-      (item): item is string => typeof item === 'string' && Boolean(item.trim())
+      (item): item is string =>
+        typeof item === "string" && Boolean(item.trim()),
     );
     if (enumValues.length > 0) {
       schema.enum = enumValues;
       if (!normalizedType) {
-        schema.type = 'string';
+        schema.type = "string";
       }
     }
   }
@@ -318,36 +364,42 @@ function toOpenAiParamSchema(paramValue: unknown): Record<string, unknown> {
   return schema;
 }
 
-function getToolParametersRecord(tool: ToolSchemaItem): Record<string, unknown> {
+function getToolParametersRecord(
+  tool: ToolSchemaItem,
+): Record<string, unknown> {
   if (isRecord(tool.parameters)) return tool.parameters;
   if (isRecord(tool.params)) return tool.params;
   return {};
 }
 
-function getToolAssistantMessageDescription(guiAdaptationEnabled: boolean): string {
+function getToolAssistantMessageDescription(
+  guiAdaptationEnabled: boolean,
+): string {
   if (guiAdaptationEnabled) {
-    return 'One very short user-facing message describing the step. Assume it may be spoken aloud. Do not restate details that are already visible in the GUI after the action.';
+    return "Brief user-facing message written after the action is decided. Do not restate what the GUI already shows.";
   }
-  return 'One very short user-facing message describing the step. Assume it may be spoken aloud and that the user can already see the current GUI. Ground it in the current UI state, but do not narrate or enumerate screen details that are already apparent unless the user explicitly asked for them.';
+  return "Brief user-facing message written after the action is decided. Assume the user can see the current GUI.";
 }
 
 function getRespondToolDescription(guiAdaptationEnabled: boolean): string {
   if (guiAdaptationEnabled) {
-    return 'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer based only on currently visible information, without re-narrating GUI details that are already on screen. If the user asks for later-stage or branch-dependent information that is not verifiable yet, say so briefly and ask a stage-appropriate clarification instead of guessing.';
+    return "Respond without a GUI action. Use for clarifications, confirmations, or direct answers based on visible information.";
   }
-  return 'Respond to the user without executing any GUI tool. Use this for the smallest helpful clarification, confirmation, or direct answer grounded in the current UI state, while assuming the user can already see the current GUI. Do not narrate or enumerate screen details that are already apparent unless the user explicitly asked for them. If the user asks for later-stage or branch-dependent information that is not verifiable yet, say so briefly and ask a stage-appropriate clarification instead of guessing. If the user has not given a current-stage criterion, do not proactively compare by distance, amenities, price, rating, time, or similar axes; instead name the options plainly or ask what matters most.';
+  return "Respond without a GUI action. Use for clarifications, confirmations, or direct answers. Assume the user can see the current GUI.";
 }
 
-function getRespondAssistantMessageDescription(guiAdaptationEnabled: boolean): string {
+function getRespondAssistantMessageDescription(
+  guiAdaptationEnabled: boolean,
+): string {
   if (guiAdaptationEnabled) {
-    return 'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer based only on currently visible information. If the user asks for later-stage or branch-dependent information that is not verifiable yet, say that briefly and ask a stage-appropriate clarification instead of guessing. Do not mention non-visible item metadata, introduce a new comparison dimension, or read back GUI details that are already visible.';
+    return "Concise user-facing response written after deciding that no GUI action should be taken.";
   }
-  return 'A very concise user-facing response. Keep it to the smallest helpful clarification or direct answer grounded in the current UI state, while assuming the user can already see the current GUI. Do not narrate or enumerate screen details that are already apparent unless the user explicitly asked for them. If the user asks for later-stage or branch-dependent information that is not verifiable yet, say that briefly and ask a stage-appropriate clarification instead of guessing. If the user has not given a current-stage criterion, do not proactively compare by distance, amenities, price, rating, time, or similar axes; instead name the options plainly or ask what matters most. Do not mention non-visible item metadata or invent a new comparison dimension.';
+  return "Concise user-facing response written after deciding that no GUI action should be taken. Assume the user can see the current GUI.";
 }
 
 function toOpenAiTools(
   availableTools: ToolSchemaItem[],
-  guiAdaptationEnabled: boolean
+  guiAdaptationEnabled: boolean,
 ): OpenAiFunctionTool[] {
   const tools: OpenAiFunctionTool[] = [];
 
@@ -367,21 +419,23 @@ function toOpenAiTools(
       }
     }
 
+    properties[TOOL_META_REASON_KEY] = {
+      type: "string",
+      description:
+        "Brief internal reason for why this tool is the best next action now. Decide this before writing assistantMessage.",
+    };
     properties[TOOL_META_ASSISTANT_MESSAGE_KEY] = {
-      type: 'string',
+      type: "string",
       description: getToolAssistantMessageDescription(guiAdaptationEnabled),
     };
-    properties[TOOL_META_REASON_KEY] = {
-      type: 'string',
-      description: 'Brief internal reason for why this tool is the best next action now.',
-    };
+    required.push(TOOL_META_REASON_KEY, TOOL_META_ASSISTANT_MESSAGE_KEY);
 
     tools.push({
-      type: 'function',
+      type: "function",
       name,
       ...(description ? { description } : {}),
       parameters: {
-        type: 'object',
+        type: "object",
         properties,
         ...(required.length > 0 ? { required } : {}),
         additionalProperties: false,
@@ -390,22 +444,24 @@ function toOpenAiTools(
   }
 
   tools.push({
-    type: 'function',
+    type: "function",
     name: NATIVE_NONE_TOOL_NAME,
     description: getRespondToolDescription(guiAdaptationEnabled),
     parameters: {
-      type: 'object',
+      type: "object",
       properties: {
-        [TOOL_META_ASSISTANT_MESSAGE_KEY]: {
-          type: 'string',
-          description: getRespondAssistantMessageDescription(guiAdaptationEnabled),
-        },
         [TOOL_META_REASON_KEY]: {
-          type: 'string',
-          description: 'Brief reason for not taking a tool action now.',
+          type: "string",
+          description:
+            "Brief reason for not taking a tool action now. Decide this before writing assistantMessage.",
+        },
+        [TOOL_META_ASSISTANT_MESSAGE_KEY]: {
+          type: "string",
+          description:
+            getRespondAssistantMessageDescription(guiAdaptationEnabled),
         },
       },
-      required: [TOOL_META_ASSISTANT_MESSAGE_KEY],
+      required: [TOOL_META_REASON_KEY, TOOL_META_ASSISTANT_MESSAGE_KEY],
       additionalProperties: false,
     },
   });
@@ -415,7 +471,7 @@ function toOpenAiTools(
 
 function parseToolArguments(raw: unknown): Record<string, unknown> {
   if (isRecord(raw)) return raw;
-  if (typeof raw === 'string') {
+  if (typeof raw === "string") {
     const parsed = parseJsonObject(raw);
     return parsed ?? {};
   }
@@ -428,7 +484,7 @@ function extractNativeToolCall(body: unknown): NativeToolCall | null {
 
   for (const item of output) {
     if (!isRecord(item)) continue;
-    if (item.type !== 'function_call') continue;
+    if (item.type !== "function_call") continue;
     const toolName = readTrimmedString(item.name);
     if (!toolName) continue;
     return {
@@ -442,15 +498,18 @@ function extractNativeToolCall(body: unknown): NativeToolCall | null {
 
 function plannerOutputFromNativeToolCall(
   toolCall: NativeToolCall,
-  outputText: string | null
+  outputText: string | null,
 ): PlannerOutput {
   const params = { ...toolCall.arguments };
-  const assistantMessageFromToolArg = readTrimmedString(params[TOOL_META_ASSISTANT_MESSAGE_KEY]);
+  const assistantMessageFromToolArg = readTrimmedString(
+    params[TOOL_META_ASSISTANT_MESSAGE_KEY],
+  );
   const reasonFromToolArg = readTrimmedString(params[TOOL_META_REASON_KEY]);
   delete params[TOOL_META_ASSISTANT_MESSAGE_KEY];
   delete params[TOOL_META_REASON_KEY];
 
-  const assistantMessage = assistantMessageFromToolArg ?? readTrimmedString(outputText) ?? '';
+  const assistantMessage =
+    assistantMessageFromToolArg ?? readTrimmedString(outputText) ?? "";
   const reason =
     reasonFromToolArg ??
     assistantMessageFromToolArg ??
@@ -458,81 +517,86 @@ function plannerOutputFromNativeToolCall(
     `Use ${toolCall.toolName} as the best next action based on user intent and current workflow state.`;
 
   if (toolCall.toolName === NATIVE_NONE_TOOL_NAME) {
-    return {
-      assistantMessage,
-      action: {
-        type: 'none',
-        toolName: '',
+    return createPlannerOutput(
+      {
+        type: "none",
+        toolName: "",
         params: {},
         reason,
       },
-    };
+      assistantMessage,
+    );
   }
 
-  return {
-    assistantMessage,
-    action: {
-      type: 'tool.call',
+  return createPlannerOutput(
+    {
+      type: "tool.call",
       toolName: toolCall.toolName,
       params,
       reason,
     },
-  };
+    assistantMessage,
+  );
 }
 
-function plannerOutputFromNoToolCall(outputText: string | null): PlannerOutput | null {
-  const assistantMessage = readTrimmedString(outputText) ?? '';
+function plannerOutputFromNoToolCall(
+  outputText: string | null,
+): PlannerOutput | null {
+  const assistantMessage = readTrimmedString(outputText) ?? "";
   if (!assistantMessage) return null;
-  return {
-    assistantMessage,
-    action: {
-      type: 'none',
-      toolName: '',
+  return createPlannerOutput(
+    {
+      type: "none",
+      toolName: "",
       params: {},
       reason: assistantMessage,
     },
-  };
+    assistantMessage,
+  );
 }
 
 // ── OpenAI ──────────────────────────────────────────────────────────────────
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
-const OPENAI_MODEL = process.env.AGENT_OPENAI_MODEL || 'gpt-5.2';
+const OPENAI_API_URL = "https://api.openai.com/v1/responses";
+const OPENAI_MODEL = process.env.AGENT_OPENAI_MODEL || "gpt-5.2";
 const DEFAULT_OPENAI_TEMPERATURE = 0;
 
 function resolveOpenAITemperature(): number | undefined {
   return DEFAULT_OPENAI_TEMPERATURE;
 }
 
-function isUnsupportedTemperatureError(status: number, errorText: string): boolean {
+function isUnsupportedTemperatureError(
+  status: number,
+  errorText: string,
+): boolean {
   if (status !== 400) return false;
   const lowered = errorText.toLowerCase();
   return (
-    lowered.includes('temperature') &&
-    (lowered.includes('not supported') ||
-      lowered.includes('unsupported') ||
-      lowered.includes('only support') ||
-      lowered.includes('invalid'))
+    lowered.includes("temperature") &&
+    (lowered.includes("not supported") ||
+      lowered.includes("unsupported") ||
+      lowered.includes("only support") ||
+      lowered.includes("invalid"))
   );
 }
 
 function parseOpenAIOutputText(body: unknown): string | null {
-  if (!body || typeof body !== 'object') return null;
+  if (!body || typeof body !== "object") return null;
   const record = body as Record<string, unknown>;
 
-  if (typeof record.output_text === 'string' && record.output_text.trim()) {
+  if (typeof record.output_text === "string" && record.output_text.trim()) {
     return record.output_text.trim();
   }
 
   const output = Array.isArray(record.output) ? record.output : [];
   for (const item of output) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== "object") continue;
     const itemRecord = item as Record<string, unknown>;
     const content = Array.isArray(itemRecord.content) ? itemRecord.content : [];
     for (const part of content) {
-      if (!part || typeof part !== 'object') continue;
+      if (!part || typeof part !== "object") continue;
       const partRecord = part as Record<string, unknown>;
-      if (typeof partRecord.text === 'string' && partRecord.text.trim()) {
+      if (typeof partRecord.text === "string" && partRecord.text.trim()) {
         return partRecord.text.trim();
       }
     }
@@ -540,57 +604,63 @@ function parseOpenAIOutputText(body: unknown): string | null {
   return null;
 }
 
-export async function planActionWithOpenAI(input: PlannerInput): Promise<PlannerOutput | null> {
-  if (process.env.AGENT_ENABLE_OPENAI === 'false') return null;
+export async function planActionWithOpenAI(
+  input: PlannerInput,
+): Promise<PlannerOutput | null> {
+  if (process.env.AGENT_ENABLE_OPENAI === "false") return null;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
   const temperature = resolveOpenAITemperature();
   const guiAdaptationEnabled = input.workflow.guiAdaptationEnabled !== false;
   const openAiTools = toOpenAiTools(input.availableTools, guiAdaptationEnabled);
   const nativePlannerInput = {
+    ...(input.memory ? { memory: input.memory } : {}),
     history: input.history,
     workflow: input.workflow,
   };
   const openAiSystemPrompt =
-    buildSystemPrompt(input.workflow) +
-    '\n' +
-    OPENAI_TOOL_CALLING_RULES;
+    buildSystemPrompt(input.workflow) + "\n" + OPENAI_TOOL_CALLING_RULES;
+  const traceRequestId = createLlmTraceRequestId();
 
   const baseBody = {
     model: OPENAI_MODEL,
     input: [
       {
-        role: 'system',
+        role: "system",
         content: openAiSystemPrompt,
       },
       {
-        role: 'user',
+        role: "user",
         content: JSON.stringify(nativePlannerInput),
       },
     ],
-    ...(openAiTools.length > 0 ? { tools: openAiTools, parallel_tool_calls: false } : {}),
+    ...(openAiTools.length > 0
+      ? { tools: openAiTools, parallel_tool_calls: false }
+      : {}),
   };
   const body =
-    typeof temperature === 'number'
-      ? { ...baseBody, temperature }
-      : baseBody;
+    typeof temperature === "number" ? { ...baseBody, temperature } : baseBody;
 
   if (DEBUG_LLM) {
-    console.log('[tuning-agent][llm] planner request input:', JSON.stringify(input));
+    console.log(
+      "[tuning-agent][llm] planner request input:",
+      JSON.stringify(input),
+    );
   }
-  emitLlmTrace('request', {
-    method: 'POST',
+  emitLlmTrace("request", {
+    requestId: traceRequestId,
+    method: "POST",
     url: OPENAI_API_URL,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body,
   });
 
   let response = await fetch(OPENAI_API_URL, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
@@ -599,27 +669,28 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   if (!response.ok) {
     const firstErrorText = await response.text();
     const shouldRetryWithoutTemperature =
-      typeof temperature === 'number' &&
+      typeof temperature === "number" &&
       isUnsupportedTemperatureError(response.status, firstErrorText);
 
     if (shouldRetryWithoutTemperature) {
       if (DEBUG_LLM) {
         console.warn(
-          '[tuning-agent][llm] planner temperature rejected; retrying without temperature'
+          "[tuning-agent][llm] planner temperature rejected; retrying without temperature",
         );
       }
-      emitLlmTrace('request', {
-        method: 'POST',
+      emitLlmTrace("request", {
+        requestId: traceRequestId,
+        method: "POST",
         url: OPENAI_API_URL,
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: baseBody,
       });
       response = await fetch(OPENAI_API_URL, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(baseBody),
@@ -629,10 +700,16 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
     if (!response.ok) {
       const errorText = await response.text();
       if (DEBUG_LLM) {
-        console.error('[tuning-agent][llm] planner error response:', errorText);
+        console.error("[tuning-agent][llm] planner error response:", errorText);
       }
-      emitLlmTrace('error', { status: response.status, errorText });
-      throw new Error(`OpenAI planner failed (${response.status}): ${errorText}`);
+      emitLlmTrace("error", {
+        requestId: traceRequestId,
+        status: response.status,
+        errorText,
+      });
+      throw new Error(
+        `OpenAI planner failed (${response.status}): ${errorText}`,
+      );
     }
   }
 
@@ -640,31 +717,55 @@ export async function planActionWithOpenAI(input: PlannerInput): Promise<Planner
   const outputText = parseOpenAIOutputText(payload);
   const nativeToolCall = extractNativeToolCall(payload);
   if (DEBUG_LLM) {
-    console.log('[tuning-agent][llm] planner raw output_text:', outputText);
-    console.log('[tuning-agent][llm] planner native tool call:', JSON.stringify(nativeToolCall));
+    console.log("[tuning-agent][llm] planner raw output_text:", outputText);
+    console.log(
+      "[tuning-agent][llm] planner native tool call:",
+      JSON.stringify(nativeToolCall),
+    );
   }
-  emitLlmTrace('response.raw', { outputText, nativeToolCall });
+  emitLlmTrace("response.raw", {
+    requestId: traceRequestId,
+    outputText,
+    nativeToolCall,
+  });
 
   if (nativeToolCall) {
-    const parsedNative = plannerOutputFromNativeToolCall(nativeToolCall, outputText);
-    emitLlmTrace('response.parsed', { parsed: parsedNative });
+    const parsedNative = plannerOutputFromNativeToolCall(
+      nativeToolCall,
+      outputText,
+    );
+    emitLlmTrace("response.parsed", {
+      requestId: traceRequestId,
+      parsed: parsedNative,
+    });
     return parsedNative;
   }
 
   if (!outputText) return null;
   const parsed = parseJsonObject(outputText);
   if (DEBUG_LLM) {
-    console.log('[tuning-agent][llm] planner parsed output:', JSON.stringify(parsed));
+    console.log(
+      "[tuning-agent][llm] planner parsed output:",
+      JSON.stringify(parsed),
+    );
   }
   if (parsed) {
     const structured = toPlannerOutput(parsed);
-    emitLlmTrace('response.parsed', { parsed: structured ?? parsed, parser: 'json-schema-fallback' });
+    emitLlmTrace("response.parsed", {
+      requestId: traceRequestId,
+      parsed: structured ?? parsed,
+      parser: "json-schema-fallback",
+    });
     if (structured) {
       return structured;
     }
   }
 
   const noToolOutput = plannerOutputFromNoToolCall(outputText);
-  emitLlmTrace('response.parsed', { parsed: noToolOutput, parser: 'text-no-tool' });
+  emitLlmTrace("response.parsed", {
+    requestId: traceRequestId,
+    parsed: noToolOutput,
+    parser: "text-no-tool",
+  });
   return noToolOutput;
 }
