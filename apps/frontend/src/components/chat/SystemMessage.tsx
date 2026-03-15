@@ -71,67 +71,74 @@ export function SystemMessage({
   const toolDescriptionClass = 'mb-3 whitespace-pre-wrap break-words text-base font-medium text-info-text';
   const titleClass = isActive ? 'text-fg-strong font-medium mb-1' : 'text-fg-faint font-medium mb-1';
   const descriptionClass = isActive ? 'text-fg-muted text-sm mb-3' : 'text-fg-faint text-sm mb-3';
-  const breadcrumb = <SelectionBreadcrumb spec={spec} subdued={!isActive} />;
-  const breadcrumbWrapperClass = showAvatar ? 'ml-11 min-w-0' : 'min-w-0';
-  const stageCardClass = linkedAssistantSpeaking
-    ? 'w-[400px] max-w-[calc(100%-2.75rem)] min-w-0 rounded-2xl rounded-tl-sm border border-rose-500/70 bg-dark px-4 py-3 shadow-[0_0_0_3px_rgba(244,63,94,0.18)]'
-    : 'w-[400px] max-w-[calc(100%-2.75rem)] min-w-0 rounded-2xl rounded-tl-sm border border-dark-border bg-dark px-4 py-3';
+  const breadcrumb = <SelectionBreadcrumb spec={spec} stage={spec.stage} subdued={!isActive} />;
+  const stageCardBorderClass = linkedAssistantSpeaking
+    ? 'rounded-2xl rounded-tl-sm border border-rose-500/70 bg-dark px-4 py-3 shadow-[0_0_0_3px_rgba(244,63,94,0.18)]'
+    : 'rounded-2xl rounded-tl-sm border border-dark-border bg-dark px-4 py-3';
   const stageCardShellClass = showAvatar ? 'flex items-start gap-3' : '';
+  const avatarElement = showAvatar ? (
+    <div
+      className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary ${
+        isAgentControlled ? 'ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]' : ''
+      }`}
+    >
+      <svg
+        className="w-5 h-5 text-primary-fg"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+        />
+      </svg>
+    </div>
+  ) : null;
+  const stageCardInner = (
+    <div className={stageCardBorderClass}>
+      <div className={titleClass}>{spec.title}</div>
+      {spec.description && (
+        <div className={descriptionClass}>{spec.description}</div>
+      )}
+      <div
+        className={`transition-opacity ${
+          !isActive ? 'opacity-50 pointer-events-none' : ''
+        }`}
+      >
+        <StageRenderer
+          spec={spec}
+          onSelect={isActive && onSelect ? onSelect : () => {}}
+          onToggle={isActive && onToggle ? onToggle : () => {}}
+          onNext={isActive && onNext ? onNext : () => {}}
+          onBack={isActive && onBack ? onBack : undefined}
+          onStartOver={isActive && onStartOver ? onStartOver : undefined}
+          onConfirm={isActive && onConfirm ? onConfirm : () => {}}
+        />
+      </div>
+    </div>
+  );
   const stageCardContent = (
-    <div className="w-full max-w-[444px] min-w-0">
+    <div className="min-w-0">
       <div className={stageCardShellClass}>
-        {showAvatar ? (
-          <div
-            className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary ${
-              isAgentControlled ? 'ring-2 ring-blue-400 shadow-[0_0_0_3px_rgba(59,130,246,0.2)]' : ''
-            }`}
-          >
-            <svg
-              className="w-5 h-5 text-primary-fg"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-        ) : null}
-        <div className={stageCardClass}>
-          <div className={titleClass}>{spec.title}</div>
-          {spec.description && (
-            <div className={descriptionClass}>{spec.description}</div>
-          )}
-
-          <div
-            className={`transition-opacity ${
-              !isActive ? 'opacity-50 pointer-events-none' : ''
-            }`}
-          >
-            <StageRenderer
-              spec={spec}
-              onSelect={isActive && onSelect ? onSelect : () => {}}
-              onToggle={isActive && onToggle ? onToggle : () => {}}
-              onNext={isActive && onNext ? onNext : () => {}}
-              onBack={isActive && onBack ? onBack : undefined}
-              onStartOver={isActive && onStartOver ? onStartOver : undefined}
-              onConfirm={isActive && onConfirm ? onConfirm : () => {}}
-            />
-          </div>
+        {avatarElement}
+        <div className="w-[400px] max-w-full min-w-0">
+          {stageCardInner}
         </div>
       </div>
     </div>
   );
   const stageCard = (
-    <div className="w-full max-w-[444px] min-w-0">
-      <div className={breadcrumbWrapperClass}>
-        {breadcrumb}
+    <div className="min-w-0">
+      <div className={stageCardShellClass}>
+        {avatarElement}
+        <div className="w-[400px] max-w-full min-w-0">
+          {breadcrumb}
+          {stageCardInner}
+        </div>
       </div>
-      {stageCardContent}
     </div>
   );
 

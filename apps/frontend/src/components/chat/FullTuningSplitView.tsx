@@ -850,7 +850,7 @@ function GuiSnapshotCard({
 
   return (
     <div className="w-[400px] max-w-full">
-      <SelectionBreadcrumb spec={snapshot.spec} subdued={!interactive} />
+      <SelectionBreadcrumb spec={snapshot.spec} stage={snapshot.stage} subdued={!interactive} />
       <div
         className={`rounded-2xl border bg-dark p-4 transition-colors ${frameClass}`}
       >
@@ -877,16 +877,9 @@ function GuiSnapshotCard({
             </svg>
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-4">
-              <span className="min-w-0 text-sm font-semibold text-info-label">
-                {getSnapshotContextLabel(snapshot)}
-              </span>
-              <div className="flex shrink-0 items-center justify-end gap-2 self-start">
-                <span className="rounded-full border border-info-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-info-text">
-                  {snapshot.stage}
-                </span>
-              </div>
-            </div>
+            <span className="min-w-0 text-sm font-semibold text-info-label">
+              {getSnapshotContextLabel(snapshot)}
+            </span>
             <div className={contextClass}>
               {renderMessageText(getSnapshotContextText(snapshot))}
             </div>

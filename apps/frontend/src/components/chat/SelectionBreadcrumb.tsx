@@ -1,17 +1,28 @@
 import { Fragment } from 'react';
-import type { UISpec, WorkflowSelectionState } from '../../spec';
+import type { Stage, UISpec, WorkflowSelectionState } from '../../spec';
 import { formatTime12Hour } from '../../utils/displayFormats';
 
 interface SelectionBreadcrumbProps {
   spec: UISpec;
+  stage?: Stage;
   subdued?: boolean;
 }
 
 interface BreadcrumbSegment {
   key: string;
   label: string;
-  value: string;
+  value?: string;
+  active?: boolean;
 }
+
+const STAGE_LABEL: Record<Stage, string> = {
+  movie: 'Movie',
+  theater: 'Theater',
+  date: 'Date',
+  time: 'ShowTime',
+  seat: 'Seat',
+  confirm: 'Confirm',
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -131,7 +142,7 @@ function getSeatValues(workflow: WorkflowSelectionState, meta: Record<string, un
   return getMetaSeats(meta).map(formatSeatLabel).filter(Boolean);
 }
 
-function buildSegments(spec: UISpec): BreadcrumbSegment[] {
+function buildSegments(spec: UISpec, stage?: Stage): BreadcrumbSegment[] {
   const workflow = getWorkflow(spec);
   const meta = getMetaRecord(spec);
   const segments: BreadcrumbSegment[] = [];
@@ -161,11 +172,20 @@ function buildSegments(spec: UISpec): BreadcrumbSegment[] {
     segments.push({ key: 'seat', label: 'Seat', value: seatValues.join(', ') });
   }
 
+  if (stage) {
+    const existing = segments.find((s) => s.key === stage);
+    if (existing) {
+      existing.active = true;
+    } else {
+      segments.push({ key: stage, label: STAGE_LABEL[stage], active: true });
+    }
+  }
+
   return segments;
 }
 
-export function SelectionBreadcrumb({ spec, subdued = false }: SelectionBreadcrumbProps) {
-  const segments = buildSegments(spec);
+export function SelectionBreadcrumb({ spec, stage, subdued = false }: SelectionBreadcrumbProps) {
+  const segments = buildSegments(spec, stage);
 
   if (segments.length === 0) return null;
 
@@ -183,16 +203,20 @@ export function SelectionBreadcrumb({ spec, subdued = false }: SelectionBreadcru
           <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
             <span
               className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${
-                subdued
-                  ? 'bg-dark-border/50 text-fg-faint'
-                  : 'bg-primary/10 text-primary'
+                segment.active && !subdued
+                  ? 'bg-primary text-primary-fg'
+                  : subdued
+                    ? 'bg-dark-border/50 text-fg-faint'
+                    : 'bg-primary/10 text-primary'
               }`}
             >
               {segment.label}
             </span>
-            <span className={`font-medium ${subdued ? 'text-fg-muted' : 'text-fg-strong'}`}>
-              {segment.value}
-            </span>
+            {segment.value ? (
+              <span className={`font-medium ${subdued ? 'text-fg-muted' : 'text-fg-strong'}`}>
+                {segment.value}
+              </span>
+            ) : null}
           </span>
           {index < segments.length - 1 ? (
             <span className={subdued ? 'text-fg-faint/60' : 'text-primary/55'}>{'>'}</span>
