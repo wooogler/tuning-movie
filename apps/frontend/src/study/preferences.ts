@@ -118,14 +118,14 @@ const KNOWN_PREFERENCE_DESCRIPTIONS: Record<string, string> = {
 const KNOWN_PREFERENCE_STORY_HIGHLIGHTS: Record<string, string[]> = {
   'ai-recommendation': ['want AI to recommend a movie first'],
   action: ['It must be an action movie'],
-  'arrive-after-530pm': ['earliest you can arrive at the theater is 5:30 PM'],
-  'arrive-after-6pm': ['earliest you can arrive at the theater is 6:00 PM'],
+  'arrive-after-530pm': ['earliest I can arrive at the theater is 5:30 PM'],
+  'arrive-after-6pm': ['earliest I can arrive at the theater is 6:00 PM'],
   'before-7pm': ['finishes before 7 PM'],
-  'before-8pm': ['after 8 PM on Saturday and Sunday', 'before 8 PM'],
+  'before-8pm': ['after 8 PM on Saturday and Sunday', 'unavailable after 8 PM'],
   'center-seat': [
     'do not want a side seat',
     'seat needs to be reasonably centered on the screen',
-    'seat in the center section',
+    'a seat in the center section',
   ],
   'closest-theater': ['closest theater'],
   comedy: ['agreed on a comedy', "as long as it's a comedy movie"],
@@ -138,7 +138,7 @@ const KNOWN_PREFERENCE_STORY_HIGHLIGHTS: Record<string, string[]> = {
   'end-before-1030pm': ['end before 10:30 PM'],
   'weekend-only': [
     'this weekend',
-    'if not this weekend, it will be a while before your schedules align again',
+    'if not this weekend, it will be a while before our schedules align again',
     'this Saturday',
   ],
   'distance-under-10mi': ['within 10 miles', 'Anything outside the town would not work'],
@@ -152,7 +152,7 @@ const KNOWN_PREFERENCE_STORY_HIGHLIGHTS: Record<string, string[]> = {
     'kid-friendly movie appropriate for ages 7 to 9',
     'kid-friendly movie appropriate for ages 7-9',
   ],
-  'ocean-depths': ['watch a documentary called Ocean Depths'],
+  'ocean-depths': ['watch a documentary called Ocean Depths', 'Ocean Depths'],
   'premium-seat': ['premium reclining seats with extra legroom'],
   'start-after-1pm': ['start after 1 PM'],
   'start-after-2pm': ['start after 2 PM'],
@@ -168,15 +168,15 @@ const KNOWN_PREFERENCE_STORY_HIGHLIGHTS: Record<string, string[]> = {
     'the first row is too close',
     'anything beyond the third row is too far',
   ],
-  'high-rating': ['prefer movies with high ratings'],
-  thriller: ['want to watch a thriller movie'],
+  'high-rating': ['prefer movies with high ratings', 'prefer the highest-rated'],
+  thriller: ['want to watch a thriller movie', 'thriller'],
   'under-2-hours': ['under 2 hours long'],
   'avoid-romcom': [
     'prefer to avoid romantic comedies',
-    "you're open to it if the other options don't work out",
+    "we're open to it if the other options don't work out",
   ],
   'desk-for-two': ['Shared Shift'],
-  'saturday-afternoon': ['On Saturdays, you tend to sleep in, so morning showtimes are not ideal'],
+  'saturday-afternoon': ['On Saturdays, I tend to sleep in, so morning showtimes are not ideal'],
 };
 
 const KNOWN_PREFERENCE_STAGES: Record<string, PreferenceStage> = {

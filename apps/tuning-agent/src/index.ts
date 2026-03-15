@@ -418,6 +418,11 @@ function isPlannerCpMemoryEnabled(plannerCpMemoryLimit: number | null | undefine
   return Math.floor(plannerCpMemoryLimit ?? 0) > 0;
 }
 
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.values(value as Record<string, unknown>).every((v) => typeof v === 'string');
+}
+
 function toSnapshotPayload(value: unknown): SnapshotStatePayload {
   const payload = asRecord(value);
   return {
@@ -430,6 +435,7 @@ function toSnapshotPayload(value: unknown): SnapshotStatePayload {
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
     guiAdaptationEnabled:
       typeof payload.guiAdaptationEnabled === 'boolean' ? payload.guiAdaptationEnabled : undefined,
+    stageFieldGuides: isStringRecord(payload.stageFieldGuides) ? payload.stageFieldGuides : undefined,
   };
 }
 
@@ -544,6 +550,7 @@ async function runPreferenceExtractionFromUserMessage(
     userMessage,
     ...extractionView,
     existingPreferences,
+    stageFieldGuides: context.stageFieldGuides,
   };
 
   try {

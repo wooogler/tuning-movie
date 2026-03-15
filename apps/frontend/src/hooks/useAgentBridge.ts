@@ -4,6 +4,7 @@ import { PROTOCOL_VERSION, type RelayEnvelope, type SnapshotPayload } from '../a
 import type { UISpec, Stage } from '../spec';
 import type { ChatMessage } from '../store/chatStore';
 import type { ToolApplyContext } from '../components/devToolsContextShared';
+import { STAGE_FIELD_GUIDES } from '../spec/generators';
 
 interface UseAgentBridgeOptions {
   uiSpec: UISpec | null;
@@ -184,6 +185,7 @@ export function useAgentBridge({
       toolSchema: current.toolSchema,
       plannerCpMemoryLimit: normalizeCpMemoryLimit(current.plannerCpMemoryLimit),
       guiAdaptationEnabled: current.guiAdaptationEnabled !== false,
+      stageFieldGuides: STAGE_FIELD_GUIDES,
     };
   }, [normalizeCpMemoryLimit]);
 

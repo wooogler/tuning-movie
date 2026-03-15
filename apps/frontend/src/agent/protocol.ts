@@ -18,4 +18,6 @@ export interface SnapshotPayload {
   toolSchema: ToolDefinition[];
   plannerCpMemoryLimit: number;
   guiAdaptationEnabled: boolean;
+  /** 전체 stage별 필드 안내 (preference extraction용). 초기화 시 한 번만 전송. */
+  stageFieldGuides?: Record<string, string>;
 }
