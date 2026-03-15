@@ -12,11 +12,9 @@ export interface PlannerWorkflowMemory {
 }
 
 export interface PlannerWorkflow {
-  stageOrder: string[];
   currentStage: string;
   previousStage: string | null;
   nextStage: string | null;
-  stageGoal: string;
   proceedRule: string;
   availableToolNames: string[];
   guiAdaptationEnabled?: boolean;
@@ -32,6 +30,7 @@ interface PlannerInput {
   history: unknown[];
   availableTools: ToolSchemaItem[];
   workflow: PlannerWorkflow;
+  stageMeta?: Array<{ stage: string; goal: string; fieldGuide: string }>;
 }
 
 interface PlannerAction {
@@ -264,17 +263,51 @@ function hasCpMemoryContext(workflow: PlannerWorkflow): boolean {
   return workflow.cpMemoryEnabled === true;
 }
 
-function buildSystemPrompt(workflow: PlannerWorkflow): string {
+function buildStageMetaSection(
+  stageMeta: Array<{ stage: string; goal: string; fieldGuide: string }> | undefined
+): string | null {
+  if (!stageMeta || stageMeta.length === 0) return null;
+  const order = stageMeta.map((s) => s.stage).join(" → ");
+  const goals = stageMeta.map((s) => `  ${s.stage}: ${s.goal}`).join("\n");
+  return `Stage workflow (fixed order):\n  ${order}\nStage goals:\n${goals}`;
+}
+
+// ── System prompt cache ─────────────────────────────────────────────────────
+// cpMemoryEnabled + guiAdaptationEnabled + stageMeta are fixed for a session,
+// so we memoize by the combination key to avoid rebuilding on every turn.
+
+let cachedSystemPromptKey = "";
+let cachedSystemPrompt = "";
+
+function buildSystemPrompt(
+  workflow: PlannerWorkflow,
+  stageMeta?: Array<{ stage: string; goal: string; fieldGuide: string }>
+): string {
+  const cpMemory = hasCpMemoryContext(workflow);
+  const guiAdaptation = workflow.guiAdaptationEnabled !== false;
+  const key = `cp:${cpMemory}|gui:${guiAdaptation}|meta:${stageMeta ? stageMeta.length : 0}`;
+
+  if (key === cachedSystemPromptKey && cachedSystemPrompt) {
+    return cachedSystemPrompt;
+  }
+
   const sections = [CORE_SYSTEM_PROMPT];
-  if (hasCpMemoryContext(workflow)) {
+  const stageSection = buildStageMetaSection(stageMeta);
+  if (stageSection) {
+    sections.push(stageSection);
+  }
+  if (cpMemory) {
     sections.push(CP_MEMORY_PROMPT_RULES);
   }
-  if (workflow.guiAdaptationEnabled !== false) {
+  if (guiAdaptation) {
     sections.push(GUI_ADAPTATION_ENABLED_RULES);
   } else {
     sections.push(GUI_ADAPTATION_DISABLED_RULES);
   }
-  return sections.join("\n");
+
+  cachedSystemPrompt = sections.join("\n");
+  cachedSystemPromptKey = key;
+  return cachedSystemPrompt;
 }
 
 type OpenAiJsonSchemaType =
@@ -619,7 +652,7 @@ export async function planActionWithOpenAI(
     workflow: input.workflow,
   };
   const openAiSystemPrompt =
-    buildSystemPrompt(input.workflow) + "\n" + OPENAI_TOOL_CALLING_RULES;
+    buildSystemPrompt(input.workflow, input.stageMeta) + "\n" + OPENAI_TOOL_CALLING_RULES;
   const traceRequestId = createLlmTraceRequestId();
 
   const baseBody = {

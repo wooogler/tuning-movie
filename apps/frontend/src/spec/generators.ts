@@ -11,36 +11,70 @@ import { computeVisibleItems } from './modifiers';
 import { formatTime12Hour } from '../utils/displayFormats';
 
 // =============================================================================
-// Stage Field Guides (preference extraction용)
+// Stage Metadata (초기화 시 agent에 전송, extractor + planner 공용)
 // =============================================================================
 
+export interface StageMeta {
+  /** stage 식별자 */
+  stage: Stage;
+  /** stage에서 수행할 목표 (planner용) */
+  goal: string;
+  /** stage의 item 필드 및 preference 배정 가이드 (extractor용) */
+  fieldGuide: string;
+}
+
 /**
- * 전체 stage별 필드 안내.
- * LLM extractor가 유저 preference의 relevantStages를 정확히 배정하도록 돕는다.
- * 모든 UISpec에 포함되어, 어느 stage에서든 전체 가이드를 참조할 수 있다.
+ * 전체 stage 메타데이터 (순서 보존).
+ * 세션 초기화 시 snapshot으로 한 번 전송되어,
+ * - extractor: relevantStages 배정에 fieldGuide 사용
+ * - planner: stage order/goal을 system prompt에 포함 (prompt caching 대상)
  */
-export const STAGE_FIELD_GUIDES: Record<Stage, string> = {
-  movie:
-    'Film selection. Item fields: title, genre (array), rating, duration, ageRating, synopsis, releaseDate. ' +
-    'Assign preferences about: specific movie title, genre, rating threshold, duration, age appropriateness.',
-  theater:
-    'Cinema location selection. Item fields: name, location, distanceMiles, screenCount, amenities. ' +
-    'Assign preferences about: theater distance/proximity, specific theater name, location constraints. ' +
-    'Note: screening format (IMAX, 3D) is NOT a property of theaters — it varies per showtime and belongs to the time stage.',
-  date:
-    'Calendar date selection. Item fields: date, dayOfWeek, displayText, available, isToday. ' +
-    'Assign preferences about: specific dates, weekday/weekend constraints, date ranges.',
-  time:
-    'Showtime/screening selection. Item fields: time, displayTime, format ("Standard" | "IMAX" | "3D"), screenNumber, availableSeats, totalSeats. ' +
-    'Assign preferences about: start/end time constraints, arrival time, screening format (IMAX, 3D). ' +
-    'Important: IMAX and 3D are per-showtime attributes determined at this stage, not at the theater stage.',
-  seat:
-    'Seat selection within a screening room. Item fields: row, number, label, type ("standard" | "premium" | "couple"), price, status. ' +
-    'Assign preferences about: seat position (center, front, back), row avoidance, seat type (premium, couple), adjacent seats, price.',
-  confirm:
-    'Final booking review and confirmation. Summary of all prior selections (movie, theater, date, time, seats, totalPrice). ' +
-    'No item-level filtering preferences apply at this stage.',
-};
+export const STAGE_META: StageMeta[] = [
+  {
+    stage: 'movie',
+    goal: 'Pick one movie title.',
+    fieldGuide:
+      'Film selection. Item fields: title, genre (array), rating, duration, ageRating, synopsis, releaseDate. ' +
+      'Assign preferences about: specific movie title, genre, rating threshold, duration, age appropriateness.',
+  },
+  {
+    stage: 'theater',
+    goal: 'Pick one theater for the selected movie.',
+    fieldGuide:
+      'Cinema location selection. Item fields: name, location, distanceMiles, screenCount, amenities. ' +
+      'Assign preferences about: theater distance/proximity, specific theater name, location constraints. ' +
+      'Note: screening format (IMAX, 3D) is NOT a property of theaters — it varies per showtime and belongs to the time stage.',
+  },
+  {
+    stage: 'date',
+    goal: 'Pick one date for the selected movie and theater.',
+    fieldGuide:
+      'Calendar date selection. Item fields: date, dayOfWeek, displayText, available, isToday. ' +
+      'Assign preferences about: specific dates, weekday/weekend constraints, date ranges.',
+  },
+  {
+    stage: 'time',
+    goal: 'Pick one showtime.',
+    fieldGuide:
+      'Showtime/screening selection. Item fields: time, displayTime, format ("Standard" | "IMAX" | "3D"), screenNumber, availableSeats, totalSeats. ' +
+      'Assign preferences about: start/end time constraints, arrival time, screening format (IMAX, 3D). ' +
+      'Important: IMAX and 3D are per-showtime attributes determined at this stage, not at the theater stage.',
+  },
+  {
+    stage: 'seat',
+    goal: 'Select one or more seats.',
+    fieldGuide:
+      'Seat selection within a screening room. Item fields: row, number, label, type ("standard" | "premium" | "couple"), price, status. ' +
+      'Assign preferences about: seat position (center, front, back), row avoidance, seat type (premium, couple), adjacent seats, price.',
+  },
+  {
+    stage: 'confirm',
+    goal: 'Submit confirmation to finalize booking.',
+    fieldGuide:
+      'Final booking review and confirmation. Summary of all prior selections (movie, theater, date, time, seats, totalPrice). ' +
+      'No item-level filtering preferences apply at this stage.',
+  },
+];
 
 // =============================================================================
 // Helper: Create Spec

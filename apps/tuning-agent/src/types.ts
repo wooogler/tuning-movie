@@ -64,7 +64,7 @@ export interface SnapshotStatePayload {
   plannerCpMemoryLimit?: number;
   plannerCpEnabled?: boolean;
   guiAdaptationEnabled?: boolean;
-  stageFieldGuides?: Record<string, string>;
+  stageMeta?: Array<{ stage: string; goal: string; fieldGuide: string }>;
 }
 
 export interface StateUpdatedPayload {
@@ -87,7 +87,7 @@ export interface PerceivedContext {
   guiAdaptationEnabled: boolean;
   lastUserMessage: UserMessagePayload | null;
   lastUpdatedAt: string;
-  stageFieldGuides?: Record<string, string>;
+  stageMeta?: Array<{ stage: string; goal: string; fieldGuide: string }>;
 }
 
 export type PlannedActionType = 'tool.call' | 'agent.message' | 'snapshot.get' | 'session.end';

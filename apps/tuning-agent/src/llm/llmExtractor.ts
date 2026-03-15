@@ -18,7 +18,6 @@ interface PreferenceExtractionInput {
   uiSpec: unknown;
   recentHistory: unknown[];
   existingPreferences: Preference[];
-  stageFieldGuides?: Record<string, string>;
 }
 
 interface PreferenceExtractionOutput {
@@ -94,7 +93,7 @@ export function subscribeLlmTrace(listener: LlmTraceListener): () => void {
 
 const PREFERENCE_SYSTEM_PROMPT =
   'You maintain the structured user preference memory for a booking agent.\n' +
-  'Input: precedingAgentMessage, userMessage, currentStage, state, uiSpec, recentHistory, existingPreferences, stageFieldGuides.\n' +
+  'Input: precedingAgentMessage, userMessage, currentStage, state, uiSpec, recentHistory, existingPreferences.\n' +
   'Return the full updated preference list for the current turn.\n' +
   '\n' +
   'Durable vs procedural — the core distinction:\n' +
@@ -107,7 +106,10 @@ const PREFERENCE_SYSTEM_PROMPT =
   '- Preferences come from user intent, not system availability.\n' +
   '- Preserve existing wording when meaning is unchanged (for stable IDs). Preserve relevantStages likewise.\n' +
   '- Remove obsolete preferences by omitting them.\n' +
-  '- strength="hard" for requirements the user insists on; "soft" for wishes or nice-to-haves.\n' +
+  '- strength: ask "if this condition is NOT met, should the system warn the user before proceeding?" If yes → "hard". If the user would accept alternatives without warning → "soft".\n' +
+  '  Hard signals: explicit requirements ("must", "need", "only"), explicit exclusions ("not X", "avoid X"), factual constraints ("I\'m unavailable"), clear intent ("I want X"), and reason-backed preferences ("I want X for/because Y").\n' +
+  '  Soft signals: explicit hedging ("ideally", "if possible", "preferably"), stated flexibility ("X, but Y is also fine"), comparatives without exclusion ("closer is better").\n' +
+  '  When ambiguous, default to "hard" — false hard is a harmless extra warning, false soft risks silent violation.\n' +
   '- relevantStages: stages where this preference should be conflict-checked. Use the stage names from stageFieldGuides as the allowed values. Refer to each stage description in stageFieldGuides to understand what data fields it controls, then assign the minimal accurate set.\n' +
   '- Keep descriptions as short standalone sentences. Do not include IDs.\n' +
   'Return JSON: { "preferences": Array<{ "description": string, "strength": "hard" | "soft", "relevantStages": string[] }> }';
@@ -538,7 +540,7 @@ export interface PreferenceExtractionContext {
   recentHistory: unknown[];
   existingPreferences: Preference[];
   precedingAgentMessage?: string | null;
-  stageFieldGuides?: Record<string, string>;
+  stageMeta?: Array<{ stage: string; goal: string; fieldGuide: string }>;
 }
 
 export interface ActiveConflictDerivationContext {
@@ -572,7 +574,6 @@ export async function extractStructuredPreferences(
     uiSpec: ctx.uiSpec,
     recentHistory: ctx.recentHistory,
     existingPreferences: ctx.existingPreferences,
-    ...(ctx.stageFieldGuides ? { stageFieldGuides: ctx.stageFieldGuides } : {}),
   };
 
   const schema = {
@@ -599,7 +600,15 @@ export async function extractStructuredPreferences(
     additionalProperties: false,
   };
 
-  const parsed = await callStructuredExtractor('preferences', PREFERENCE_SYSTEM_PROMPT, input, schema);
+  const systemPrompt = ctx.stageMeta
+    ? PREFERENCE_SYSTEM_PROMPT +
+      '\n\nstageFieldGuides:\n' +
+      ctx.stageMeta
+        .map((s) => `- ${s.stage}: ${s.fieldGuide}`)
+        .join('\n')
+    : PREFERENCE_SYSTEM_PROMPT;
+
+  const parsed = await callStructuredExtractor('preferences', systemPrompt, input, schema);
   if (!parsed) {
     throw new Error('PREFERENCE_EXTRACTION_INVALID_OUTPUT');
   }

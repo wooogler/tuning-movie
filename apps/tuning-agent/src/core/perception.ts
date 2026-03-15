@@ -62,7 +62,7 @@ export function fromSnapshot(payload: SnapshotStatePayload): PerceivedContext {
     guiAdaptationEnabled: normalizeGuiAdaptationEnabled(payload.guiAdaptationEnabled, true),
     lastUserMessage: null,
     lastUpdatedAt: nowIso(),
-    stageFieldGuides: payload.stageFieldGuides,
+    stageMeta: payload.stageMeta,
   };
 }
 

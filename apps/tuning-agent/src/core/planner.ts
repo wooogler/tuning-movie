@@ -250,25 +250,6 @@ function containsBookingConfirmed(messages: unknown[]): boolean {
   });
 }
 
-function stageGoal(stage: Stage): string {
-  switch (stage) {
-    case 'movie':
-      return 'Pick one movie title.';
-    case 'theater':
-      return 'Pick one theater for the selected movie.';
-    case 'date':
-      return 'Pick one date for the selected movie and theater.';
-    case 'time':
-      return 'Pick one showtime.';
-    case 'seat':
-      return 'Select one or more seats.';
-    case 'confirm':
-      return 'Submit confirmation to finalize booking.';
-    default:
-      return 'Make progress to the next stage.';
-  }
-}
-
 function stageTransition(stage: Stage): { previousStage: Stage | null; nextStage: Stage | null } {
   const index = STAGE_ORDER.indexOf(stage);
   if (index < 0) return { previousStage: null, nextStage: null };
@@ -514,11 +495,9 @@ function buildWorkflowContext(
   const turnContext = buildTurnContext(trigger, context);
   const priorStageSummaries = buildPriorStageSummaries(stageItemCounts, stage);
   const workflow: PlannerWorkflow = {
-    stageOrder: STAGE_ORDER,
     currentStage: stage,
     previousStage,
     nextStage,
-    stageGoal: stageGoal(stage),
     proceedRule,
     availableToolNames: [...plannerTools.map((tool) => tool.name), 'respond'],
     guiAdaptationEnabled: context.guiAdaptationEnabled,
@@ -826,6 +805,7 @@ export async function planNextAction(
         memory.getStageItemCounts(),
         trigger
       ),
+      stageMeta: context.stageMeta,
     };
 
     const llm = await planActionWithOpenAI(plannerInput);

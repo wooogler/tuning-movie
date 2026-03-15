@@ -418,9 +418,17 @@ function isPlannerCpMemoryEnabled(plannerCpMemoryLimit: number | null | undefine
   return Math.floor(plannerCpMemoryLimit ?? 0) > 0;
 }
 
-function isStringRecord(value: unknown): value is Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  return Object.values(value as Record<string, unknown>).every((v) => typeof v === 'string');
+function parseStageMeta(value: unknown): Array<{ stage: string; goal: string; fieldGuide: string }> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const result: Array<{ stage: string; goal: string; fieldGuide: string }> = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rec = entry as Record<string, unknown>;
+    if (typeof rec.stage === 'string' && typeof rec.goal === 'string' && typeof rec.fieldGuide === 'string') {
+      result.push({ stage: rec.stage, goal: rec.goal, fieldGuide: rec.fieldGuide });
+    }
+  }
+  return result.length > 0 ? result : undefined;
 }
 
 function toSnapshotPayload(value: unknown): SnapshotStatePayload {
@@ -435,7 +443,7 @@ function toSnapshotPayload(value: unknown): SnapshotStatePayload {
       typeof payload.plannerCpEnabled === 'boolean' ? payload.plannerCpEnabled : undefined,
     guiAdaptationEnabled:
       typeof payload.guiAdaptationEnabled === 'boolean' ? payload.guiAdaptationEnabled : undefined,
-    stageFieldGuides: isStringRecord(payload.stageFieldGuides) ? payload.stageFieldGuides : undefined,
+    stageMeta: parseStageMeta(payload.stageMeta),
   };
 }
 
@@ -550,7 +558,7 @@ async function runPreferenceExtractionFromUserMessage(
     userMessage,
     ...extractionView,
     existingPreferences,
-    stageFieldGuides: context.stageFieldGuides,
+    stageMeta: context.stageMeta,
   };
 
   try {
