@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 APP_DIR=${APP_DIR:-"$REPO_ROOT"}
 
+# renew-tls-cert.sh requires CERTBOT_DOMAIN, so bake it into the cron entry.
+CERTBOT_DOMAIN=${CERTBOT_DOMAIN:?Set CERTBOT_DOMAIN to your deployment domain (e.g. example.edu)}
+
 CERTBOT_BASE=${CERTBOT_BASE:-"$APP_DIR/deploy/certbot/state"}
 CERTBOT_CONFIG_DIR=${CERTBOT_CONFIG_DIR:-"$CERTBOT_BASE/config"}
 CERTBOT_WORK_DIR=${CERTBOT_WORK_DIR:-"$CERTBOT_BASE/work"}
@@ -18,7 +21,7 @@ if [ -d /tmp/tuning-certbot/config ] && [ ! -d "$CERTBOT_CONFIG_DIR/live" ]; the
   cp -a /tmp/tuning-certbot/config/. "$CERTBOT_CONFIG_DIR/"
 fi
 
-ENTRY="23 3,15 * * * cd $APP_DIR && $APP_DIR/deploy/scripts/renew-tls-cert.sh >> $CRON_LOG_DIR/renew-cron.log 2>&1 # tuning-movie-cert-renew"
+ENTRY="23 3,15 * * * cd $APP_DIR && CERTBOT_DOMAIN=$CERTBOT_DOMAIN $APP_DIR/deploy/scripts/renew-tls-cert.sh >> $CRON_LOG_DIR/renew-cron.log 2>&1 # tuning-movie-cert-renew"
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
 

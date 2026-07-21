@@ -66,8 +66,10 @@ echo -e "${YELLOW}[7/9] Starting containers...${NC}"
 podman-compose up -d
 
 echo -e "${YELLOW}[8/9] Running database seeds...${NC}"
-podman exec tuning-movie-backend npm run db:seed
-podman exec tuning-movie-backend npm run db:seed:scenarios
+# The production image is installed with --omit=dev (no tsx), so run the
+# compiled seeds instead of the npm scripts.
+podman exec -w /app/apps/backend tuning-movie-backend node dist/db/seed.js
+podman exec -w /app/apps/backend tuning-movie-backend node dist/db/seedScenarios.js
 echo -e "${GREEN}Database seeding complete.${NC}"
 
 echo -e "${YELLOW}[9/9] Verifying deployment...${NC}"
@@ -97,8 +99,9 @@ if command -v curl >/dev/null 2>&1; then
   if curl -fsSk https://127.0.0.1/monitor-api/health >/dev/null 2>&1 || curl -fsS http://127.0.0.1/monitor-api/health >/dev/null 2>&1; then
     echo -e "${GREEN}Monitor API check passed.${NC}"
   else
-    echo -e "${RED}Monitor API check failed (/monitor-api/health).${NC}"
-    exit 1
+    # The monitor is optional (and disabled in demo-style configs), so this is
+    # informational rather than a deployment failure.
+    echo -e "${YELLOW}Monitor API not responding (/monitor-api/health) — expected when the agent monitor is disabled.${NC}"
   fi
 fi
 
