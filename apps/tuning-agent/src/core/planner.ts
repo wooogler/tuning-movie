@@ -1,8 +1,10 @@
 import {
+  isOpenAiAuthError,
   planActionWithOpenAI,
   type PlannerWorkflow,
   type PlannerWorkflowMemory,
 } from '../llm/llmPlanner';
+import { resolveOpenAiApiKey } from '../llm/openaiKey';
 import { refreshModelEnvVars } from './envRefresh';
 import type { AgentMemory } from './memory';
 import {
@@ -823,7 +825,7 @@ export async function planNextAction(
   refreshModelEnvVars();
 
   const openaiEnabled =
-    process.env.AGENT_ENABLE_OPENAI !== 'false' && Boolean(process.env.OPENAI_API_KEY);
+    process.env.AGENT_ENABLE_OPENAI !== 'false' && Boolean(resolveOpenAiApiKey());
 
   if (!openaiEnabled) {
     return {
@@ -900,6 +902,20 @@ export async function planNextAction(
     return validated;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (isOpenAiAuthError(error)) {
+      // Always speak up here, even without a pending user request: an invalid
+      // key blocks every turn, so silence would leave the UI waiting forever.
+      console.error(
+        `[tuning-agent] planner aborted: OpenAI authentication failed (${error.status}). Check the provided API key.`
+      );
+      return {
+        action: null,
+        explainText:
+          'Your OpenAI API key was rejected, so I cannot respond. Please enter a valid key and try again.',
+        source: 'rule',
+        fallbackReason: `LLM_AUTH_FAILED:${error.status}`,
+      };
+    }
     return {
       action: null,
       explainText: hasUserRequest

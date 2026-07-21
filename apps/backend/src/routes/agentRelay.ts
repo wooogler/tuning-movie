@@ -1,7 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import type { FastifyInstance } from 'fastify';
-import { getSessionContextByToken } from '../study/sessionService';
+import {
+  getSessionContextByToken,
+  getStudyModeByRelaySessionId,
+} from '../study/sessionService';
 
 type Role = 'host' | 'agent';
 type Direction = 'in' | 'out' | 'internal';
@@ -64,7 +67,51 @@ const HOST_TO_AGENT_TYPES = new Set([
   'tts.playback.complete',
 ]);
 
+// Keys that must never survive a hop through the relay, in any casing/shape.
+const SECRET_PAYLOAD_KEY_PATTERN = /^(x[-_])?(openai[-_]?)?api[-_]?key$/i;
+const MAX_SANITIZE_DEPTH = 8;
+
 const sessions = new Map<string, SessionState>();
+// Relay session ids belonging to demo-mode study sessions. Demo produces zero
+// log writes, so this is consulted before any log line is built.
+const demoRelaySessionIds = new Set<string>();
+
+function isDemoRelaySession(sessionId: string): boolean {
+  if (demoRelaySessionIds.has(sessionId)) return true;
+  if (getStudyModeByRelaySessionId(sessionId) === 'demo') {
+    demoRelaySessionIds.add(sessionId);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Defensive scrub: a client should never put an API key in a relay envelope, but
+ * if one shows up it must not be forwarded, logged, or snapshotted.
+ */
+function stripSecrets(value: unknown, depth = 0): unknown {
+  if (depth > MAX_SANITIZE_DEPTH) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripSecrets(item, depth + 1));
+  }
+  if (!value || typeof value !== 'object') return value;
+
+  const source = value as Record<string, unknown>;
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(source)) {
+    if (SECRET_PAYLOAD_KEY_PATTERN.test(key)) continue;
+    cleaned[key] = stripSecrets(entry, depth + 1);
+  }
+  return cleaned;
+}
+
+function sanitizeEnvelope(envelope: RelayEnvelope): RelayEnvelope {
+  if (!envelope.payload || typeof envelope.payload !== 'object') return envelope;
+  return {
+    ...envelope,
+    payload: stripSecrets(envelope.payload) as Record<string, unknown>,
+  };
+}
 
 function getOrCreateSession(sessionId: string): SessionState {
   const existing = sessions.get(sessionId);
@@ -136,6 +183,8 @@ function appendSessionLog(
   payload: unknown
 ): void {
   if (!ENABLE_RELAY_LOGS) return;
+  // Demo mode logs nothing, ever — even with AGENT_RELAY_LOG_ENABLED=true.
+  if (isDemoRelaySession(sessionId)) return;
 
   const session = getOrCreateSession(sessionId);
   const entry = {
@@ -169,6 +218,7 @@ function removeClient(client: RelayClient): void {
 
   if (!session.host && session.agents.size === 0) {
     sessions.delete(client.sessionId);
+    demoRelaySessionIds.delete(client.sessionId);
   }
 }
 
@@ -286,7 +336,8 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
     });
 
     client.socket.on('message', (raw: unknown) => {
-      const message = parseEnvelope(raw);
+      const parsed = parseEnvelope(raw);
+      const message = parsed ? sanitizeEnvelope(parsed) : null;
       if (!message) {
         sendError(client.socket, 'INVALID_MESSAGE', 'Message must be valid JSON with a string "type".');
         return;
@@ -330,6 +381,10 @@ export async function agentRelayRoutes(fastify: FastifyInstance): Promise<void> 
           }
           sessionId = context.record.relaySessionId;
         }
+
+        // Resolve and cache demo membership at join time, so logging stays off
+        // for the whole connection even after the study record is gone.
+        isDemoRelaySession(sessionId);
 
         if (client.sessionId) {
           const previousSessionId = client.sessionId;

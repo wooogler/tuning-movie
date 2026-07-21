@@ -1,5 +1,6 @@
 import { refreshModelEnvVars } from "../core/envRefresh";
 import { buildPreferenceId, normalizePreferenceList } from "../core/cpMemory";
+import { resolveOpenAiApiKey } from "./openaiKey";
 import { CONFLICT_STAGES } from "../types";
 import type { ConflictStage, Preference } from "../types";
 
@@ -278,6 +279,12 @@ function getOpenAIModel(): string {
   return process.env.AGENT_OPENAI_MODEL || "gpt-5.4";
 }
 
+// OpenAI auth errors echo a partially masked key back in the error body; strip
+// anything key-shaped before it reaches a log or trace.
+function redactApiKeys(text: string): string {
+  return text.replace(/sk-[A-Za-z0-9_*\-]{6,}/g, "sk-[redacted]");
+}
+
 function parseReasoningSummary(body: unknown): string[] | null {
   if (!body || typeof body !== "object") return null;
   const record = body as Record<string, unknown>;
@@ -361,7 +368,7 @@ async function callOpenAIJson(
   schema: Record<string, unknown>,
 ): Promise<Record<string, unknown> | null> {
   if (process.env.AGENT_ENABLE_OPENAI === "false") return null;
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = resolveOpenAiApiKey();
   if (!apiKey) return null;
 
   const model = getOpenAIModel();
@@ -464,6 +471,7 @@ async function callOpenAIJson(
       typeof temperature === "number" &&
       isUnsupportedTemperatureError(response.status, firstErrorText);
 
+    let retriedWithoutTemperature = false;
     if (shouldRetryWithoutTemperature) {
       emitLlmTrace("request", {
         requestId: traceRequestId,
@@ -483,6 +491,7 @@ async function callOpenAIJson(
           },
           body: JSON.stringify(baseBody),
         });
+        retriedWithoutTemperature = true;
       } catch (error) {
         emitLlmTrace("error", {
           requestId: traceRequestId,
@@ -496,7 +505,17 @@ async function callOpenAIJson(
     }
 
     if (!response.ok) {
-      const errorText = await response.text();
+      // The first response body is already consumed; only re-read when a retry
+      // produced a new response.
+      const errorText = redactApiKeys(
+        retriedWithoutTemperature ? await response.text() : firstErrorText,
+      );
+      if (response.status === 401 || response.status === 403) {
+        console.error(
+          `[tuning-agent][extractor:${kind}:openai] OpenAI rejected the API key (${response.status}):`,
+          errorText,
+        );
+      }
       emitLlmTrace("error", {
         requestId: traceRequestId,
         kind,
@@ -557,7 +576,7 @@ async function callStructuredExtractor(
   refreshModelEnvVars();
   const openaiEnabled =
     process.env.AGENT_ENABLE_OPENAI !== "false" &&
-    Boolean(process.env.OPENAI_API_KEY);
+    Boolean(resolveOpenAiApiKey());
 
   if (!openaiEnabled) {
     throw new Error("EXTRACTION_PROVIDER_UNAVAILABLE");

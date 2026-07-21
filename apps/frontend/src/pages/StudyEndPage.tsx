@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import type { StudySessionState } from '../study/sessionStorage';
+import { isDemoStudyMode } from './studyOptions';
 import { formatScenarioTitle, isHardTaskScenario } from '../utils/displayFormats';
 
 function deriveSetLabel(scenarioId: string | null): string | null {
@@ -28,12 +29,16 @@ export function StudyEndPage({
   const [downloadingLog, setDownloadingLog] = useState(false);
   const [downloadingTrace, setDownloadingTrace] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Demo sessions record nothing and have no surveys, so every log/survey
+  // control here would be dead: hide them instead of offering dead ends.
+  const demoMode = isDemoStudyMode(studySession?.studyMode);
   const canDownloadLog = Boolean(studySession?.interactionLogFile && studySession?.studyToken);
   const canDownloadTrace = Boolean(studySession?.interactionLogFile && studySession?.studyToken);
   const conditionCode = studySession?.conditionLabel ?? null;
   const setLabel = useMemo(() => deriveSetLabel(studySession?.scenario.id ?? null), [studySession]);
   const showPerTrialSurveyButton = useMemo(
     () =>
+      !isDemoStudyMode(studySession?.studyMode) &&
       isHardTaskScenario({
         scenarioId: studySession?.scenario.id ?? null,
         scenarioTitle: studySession?.scenario.title ?? selectedScenarioTitle ?? null,
@@ -113,10 +118,14 @@ export function StudyEndPage({
       <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-start sm:justify-center">
         <div className="w-full rounded-2xl border border-dark-border bg-dark-light p-6 sm:p-8">
           <div className="mb-6">
-            <h1 className="text-2xl font-semibold text-fg-strong">Study Complete</h1>
+            <h1 className="text-2xl font-semibold text-fg-strong">
+              {demoMode ? 'Demo Complete' : 'Study Complete'}
+            </h1>
           </div>
 
-          <p className="mb-4 text-sm text-fg-muted">The session has ended. Thanks for completing it.</p>
+          <p className="mb-4 text-sm text-fg-muted">
+            The session has ended. Thanks for {demoMode ? 'trying the demo' : 'completing it'}.
+          </p>
 
           <div className="space-y-2 rounded-xl border border-dark-border bg-dark p-4">
             <div className="text-sm font-semibold text-fg-strong">Session summary</div>
@@ -125,7 +134,11 @@ export function StudyEndPage({
                 Scenario: {formatScenarioTitle(selectedScenarioTitle)}
               </div>
             ) : null}
-            <div className="text-sm text-fg-muted">You can download both the interaction log and the LLM trace before leaving this page.</div>
+            <div className="text-sm text-fg-muted">
+              {demoMode
+                ? 'Nothing from this demo session was recorded, so there is nothing to download.'
+                : 'You can download both the interaction log and the LLM trace before leaving this page.'}
+            </div>
           </div>
 
           {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
@@ -144,32 +157,36 @@ export function StudyEndPage({
           ) : null}
 
           <div className="mt-4 flex flex-wrap justify-end gap-3">
-            <button
-              type="button"
-              onClick={handleDownloadLog}
-              disabled={!canDownloadLog || downloadingLog}
-              title={
-                canDownloadLog
-                  ? 'Download the current JSONL interaction log'
-                  : 'Interaction log is unavailable for this session'
-              }
-              className="rounded-lg border border-dark-border px-4 py-2 text-sm font-medium text-fg transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {downloadingLog ? 'Downloading...' : 'Download Log'}
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadTrace}
-              disabled={!canDownloadTrace || downloadingTrace}
-              title={
-                canDownloadTrace
-                  ? 'Download the current JSONL LLM trace log'
-                  : 'LLM trace log is unavailable for this session'
-              }
-              className="rounded-lg border border-dark-border px-4 py-2 text-sm font-medium text-fg transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {downloadingTrace ? 'Downloading Trace...' : 'Download Trace'}
-            </button>
+            {demoMode ? null : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleDownloadLog}
+                  disabled={!canDownloadLog || downloadingLog}
+                  title={
+                    canDownloadLog
+                      ? 'Download the current JSONL interaction log'
+                      : 'Interaction log is unavailable for this session'
+                  }
+                  className="rounded-lg border border-dark-border px-4 py-2 text-sm font-medium text-fg transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {downloadingLog ? 'Downloading...' : 'Download Log'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadTrace}
+                  disabled={!canDownloadTrace || downloadingTrace}
+                  title={
+                    canDownloadTrace
+                      ? 'Download the current JSONL LLM trace log'
+                      : 'LLM trace log is unavailable for this session'
+                  }
+                  className="rounded-lg border border-dark-border px-4 py-2 text-sm font-medium text-fg transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {downloadingTrace ? 'Downloading Trace...' : 'Download Trace'}
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={handleBackToSetup}

@@ -4,8 +4,14 @@ import {
   finishSessionByToken,
   getSessionContextByToken,
   listScenarios,
+  StudySessionCapacityError,
 } from '../study/sessionService';
-import { getStudyModeConfig, isStudyModeId, DEFAULT_STUDY_MODE } from '../study/modes';
+import {
+  getStudyModeConfig,
+  isStudyModeId,
+  isDemoStudyMode,
+  DEFAULT_STUDY_MODE,
+} from '../study/modes';
 import {
   appendInteractionLog,
   hasInteractionLogging,
@@ -14,6 +20,58 @@ import {
 } from '../study/interactionLogService';
 import { appendPerTrialSurveySubmission } from '../study/perTrialSurveyService';
 import { appendPostStudySurveySubmission } from '../study/postStudySurveyService';
+
+const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
+const OPENAI_KEY_VALIDATION_TIMEOUT_MS =
+  Number.parseInt(process.env.OPENAI_KEY_VALIDATION_TIMEOUT_MS || '', 10) || 5000;
+
+/**
+ * Cheap liveness check for a visitor-supplied key. Anonymous demo visitors paste
+ * malformed keys constantly, so reject them before a session (and an agent
+ * process) is created. The key is never logged and never leaves this function.
+ */
+async function isOpenAiApiKeyUsable(apiKey: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OPENAI_KEY_VALIDATION_TIMEOUT_MS);
+  try {
+    const response = await fetch(OPENAI_MODELS_URL, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+    });
+    // Drain the body so the socket is released back to the pool.
+    const bodyText = await response.text().catch(() => '');
+    // Only a genuine credential failure is fatal. A restricted project key
+    // without the `api.model.read` scope answers 403 `insufficient_permissions`
+    // to /v1/models while still being able to call /v1/responses and
+    // /v1/audio/speech, which is all this app needs.
+    return response.status !== 401 || !/invalid_api_key/i.test(bodyText);
+  } catch {
+    // Timeout or network failure: fail open so an OpenAI outage cannot block
+    // session creation. Downstream speech/agent calls will surface the problem.
+    return true;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The demo concurrency cap lives in sessionService. Match the typed error, plus
+ * a defensive code/message fallback, so an over-capacity demo never surfaces as
+ * a generic 400 "bad request".
+ */
+function isDemoCapacityError(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof StudySessionCapacityError) return true;
+  const rawCode = (error as { code?: unknown }).code;
+  const code = typeof rawCode === 'string' ? rawCode.toUpperCase() : '';
+  const message = (error instanceof Error ? error.message : '').toUpperCase();
+  const candidate = `${code} ${message}`;
+  if (!candidate.includes('DEMO')) return false;
+  return /LIMIT|CAPACITY|CONCURRENT|FULL|BUSY|MAX/.test(candidate);
+}
 
 function getStudyTokenFromHeader(headers: Record<string, unknown>): string | null {
   const raw = headers['x-study-session-token'];
@@ -66,6 +124,11 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
     if (!studyMode || !isStudyModeId(studyMode)) {
       return reply.code(400).send({ error: 'Valid studyMode is required' });
     }
+    // 'demo' became a valid StudyModeId, but the public demo records nothing:
+    // never let a submission tagged 'demo' reach the survey file on disk.
+    if (isDemoStudyMode(studyMode)) {
+      return reply.code(403).send({ error: 'SURVEYS_DISABLED_IN_DEMO' });
+    }
     if (!conditionLabel) {
       return reply.code(400).send({ error: 'conditionLabel is required' });
     }
@@ -98,6 +161,7 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/study/surveys/post-study', async (request, reply) => {
     const body = (request.body ?? {}) as {
       participantId?: unknown;
+      studyMode?: unknown;
       rankings?: unknown;
       rankingReason?: unknown;
       responses?: unknown;
@@ -106,6 +170,7 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
 
     const participantId =
       typeof body.participantId === 'string' ? body.participantId.trim() : '';
+    const studyMode = typeof body.studyMode === 'string' ? body.studyMode.trim() : '';
     const rankingReason =
       typeof body.rankingReason === 'string' ? body.rankingReason.trim() : '';
     const submittedAt =
@@ -113,6 +178,11 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
 
     if (!participantId) {
       return reply.code(400).send({ error: 'participantId is required' });
+    }
+    // Same guard as the per-trial sibling: a submission tagged 'demo' must never
+    // reach the survey file on disk.
+    if (isDemoStudyMode(studyMode)) {
+      return reply.code(403).send({ error: 'SURVEYS_DISABLED_IN_DEMO' });
     }
     if (!body.rankings || typeof body.rankings !== 'object' || Array.isArray(body.rankings)) {
       return reply.code(400).send({ error: 'rankings must be an object' });
@@ -150,6 +220,7 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
       studyMode?: unknown;
       participantId?: unknown;
       loggingParticipantId?: unknown;
+      apiKey?: unknown;
     };
     const scenarioId = typeof body.scenarioId === 'string' ? body.scenarioId.trim() : '';
     const studyModeInput = typeof body.studyMode === 'string' ? body.studyMode.trim() : undefined;
@@ -159,12 +230,29 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
       typeof body.loggingParticipantId === 'string'
         ? body.loggingParticipantId.trim()
         : undefined;
+    // Visitor-supplied OpenAI key. Held in memory only and never echoed back.
+    const apiKey = typeof body.apiKey === 'string' && body.apiKey.trim() ? body.apiKey.trim() : undefined;
 
     if (!scenarioId) {
       return reply.code(400).send({ error: 'scenarioId is required' });
     }
     if (studyModeInput && !isStudyModeId(studyModeInput)) {
       return reply.code(400).send({ error: 'Invalid studyMode' });
+    }
+    // A demo session must run on the visitor's own key. Without this guard an
+    // anonymous caller could create a demo session and spend the operator key
+    // through the agent and the speech routes.
+    if (isDemoStudyMode(studyModeInput ?? '') && !apiKey) {
+      return reply.code(400).send({
+        error: 'OPENAI_API_KEY_MISSING',
+        message: 'Demo sessions require your own OpenAI API key.',
+      });
+    }
+    if (apiKey && !(await isOpenAiApiKeyUsable(apiKey))) {
+      return reply.code(400).send({
+        error: 'INVALID_OPENAI_API_KEY',
+        message: 'OpenAI rejected this API key. Check the key and try again.',
+      });
     }
 
     try {
@@ -173,6 +261,7 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
         studyMode: studyModeInput,
         participantId,
         loggingParticipantId,
+        apiKey,
       });
       return {
         sessionId: created.record.sessionId,
@@ -197,6 +286,15 @@ export async function studyRoutes(fastify: FastifyInstance): Promise<void> {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create study session';
+      if (isDemoCapacityError(error)) {
+        const rawStatus = (error as { statusCode?: unknown }).statusCode;
+        const rawCode = (error as { code?: unknown }).code;
+        reply.header('retry-after', '60');
+        return reply.code(typeof rawStatus === 'number' ? rawStatus : 429).send({
+          error: typeof rawCode === 'string' ? rawCode : 'DEMO_SESSION_CAPACITY_REACHED',
+          message,
+        });
+      }
       return reply.code(400).send({ error: message });
     }
   });

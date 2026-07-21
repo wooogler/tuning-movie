@@ -1,3 +1,4 @@
+import { resolveOpenAiApiKey } from "./openaiKey";
 import type {
   BacktrackContinuation,
   ConflictMemory,
@@ -836,6 +837,35 @@ const OPENAI_CHAT_COMPLETIONS_API_URL =
 const DEFAULT_OPENAI_TEMPERATURE = 0;
 type OpenAiApiMode = "responses" | "chat";
 
+/**
+ * Raised when OpenAI rejects the credentials (401/403). Callers surface this to
+ * the user instead of silently falling back, so an invalid session-supplied key
+ * does not leave the UI waiting for an agent response forever.
+ */
+export class OpenAiAuthError extends Error {
+  readonly status: number;
+
+  constructor(status: number, detail: string) {
+    super(`OPENAI_AUTH_FAILED (${status}): ${detail}`);
+    this.name = "OpenAiAuthError";
+    this.status = status;
+  }
+}
+
+export function isOpenAiAuthError(error: unknown): error is OpenAiAuthError {
+  return error instanceof OpenAiAuthError;
+}
+
+function isAuthFailureStatus(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
+// OpenAI auth errors echo a partially masked key back in the error body; strip
+// anything key-shaped before it reaches a log or trace.
+function redactApiKeys(text: string): string {
+  return text.replace(/sk-[A-Za-z0-9_*\-]{6,}/g, "sk-[redacted]");
+}
+
 function getOpenAIModel(): string {
   return process.env.AGENT_OPENAI_MODEL || "gpt-5.4";
 }
@@ -937,7 +967,7 @@ export async function planActionWithOpenAI(
   input: PlannerInput,
 ): Promise<PlannerOutput | null> {
   if (process.env.AGENT_ENABLE_OPENAI === "false") return null;
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = resolveOpenAiApiKey();
   if (!apiKey) return null;
   const temperature = resolveOpenAITemperature();
   const apiMode = getOpenAIApiMode();
@@ -1041,6 +1071,7 @@ export async function planActionWithOpenAI(
       typeof temperature === "number" &&
       isUnsupportedTemperatureError(response.status, firstErrorText);
 
+    let retriedWithoutTemperature = false;
     if (shouldRetryWithoutTemperature) {
       if (DEBUG_LLM) {
         console.warn(
@@ -1065,6 +1096,7 @@ export async function planActionWithOpenAI(
           },
           body: JSON.stringify(baseBody),
         });
+        retriedWithoutTemperature = true;
       } catch (error) {
         emitLlmTrace("error", {
           requestId: traceRequestId,
@@ -1076,7 +1108,25 @@ export async function planActionWithOpenAI(
     }
 
     if (!response.ok) {
-      const errorText = await response.text();
+      // The first response body is already consumed; only re-read when a retry
+      // produced a new response.
+      const errorText = redactApiKeys(
+        retriedWithoutTemperature ? await response.text() : firstErrorText,
+      );
+      if (isAuthFailureStatus(response.status)) {
+        console.error(
+          `[tuning-agent][llm] OpenAI rejected the API key (${response.status}). ` +
+            "The planner cannot run until a valid key is provided:",
+          errorText,
+        );
+        emitLlmTrace("error", {
+          requestId: traceRequestId,
+          status: response.status,
+          errorText,
+          code: "OPENAI_AUTH_FAILED",
+        });
+        throw new OpenAiAuthError(response.status, errorText);
+      }
       if (DEBUG_LLM) {
         console.error("[tuning-agent][llm] planner error response:", errorText);
       }

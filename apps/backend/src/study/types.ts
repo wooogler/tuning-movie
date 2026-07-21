@@ -11,7 +11,8 @@ export type StudyModeId =
   | 'adaptive-tuning'
   | 'full-tuning'
   | 'full-tuning-voice-off'
-  | 'full-tuning-voice-on';
+  | 'full-tuning-voice-on'
+  | 'demo';
 
 export interface StudyModeConfig {
   agentEnabled: boolean;
@@ -61,6 +62,14 @@ export interface StudySessionRecord {
   createdAt: string;
   expiresAt: string;
   finishedAt?: string;
+  /**
+   * Marks a session that was created with a user-provided OpenAI key. Only the
+   * flag is persisted -- the key itself is memory-only (see `sessionApiKeys` in
+   * sessionService) and must never reach this record. After a backend restart
+   * the key is gone, so a flagged session is expired instead of being resumed on
+   * the operator's credentials.
+   */
+  usesSessionApiKey?: boolean;
 }
 
 export interface StudySessionTokenPayload {

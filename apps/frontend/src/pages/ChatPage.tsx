@@ -690,7 +690,9 @@ export function ChatPage({
     normalizedStudyModePreset === 'full-tuning' ||
     normalizedStudyModePreset === 'full-tuning-voice-off' ||
     normalizedStudyModePreset === 'full-tuning-voice-on' ||
-    normalizedStudyModePreset === 'new-baseline';
+    normalizedStudyModePreset === 'new-baseline' ||
+    // Demo mirrors the Interface B (full tuning) experience.
+    normalizedStudyModePreset === 'demo';
   const voiceModeAvailable = studyModeConfig?.voiceModeAvailable ?? false;
   const sttLanguage: SupportedSttLanguage = 'en';
   const scenarioTitle = studySession?.scenario.title

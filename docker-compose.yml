@@ -1,6 +1,11 @@
 version: '3.8'
 
 services:
+  # Real study/demo sessions are served by per-session tuning-agent child
+  # processes that this backend spawns itself (one per session, from
+  # apps/tuning-agent/dist). The standalone `agent` service below is pinned to
+  # AGENT_SESSION_ID=default and does NOT serve those sessions — it is only a
+  # manual/legacy single-session runtime.
   backend:
     build:
       context: .
@@ -15,7 +20,20 @@ services:
       - AGENT_ENABLE_OPENAI=${AGENT_ENABLE_OPENAI:-true}
       - AGENT_OPENAI_MODEL=${AGENT_OPENAI_MODEL:-gpt-5.4}
       - AGENT_OPENAI_API_MODE=${AGENT_OPENAI_API_MODE:-responses}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # OPENAI_API_KEY is intentionally NOT passed to the backend. In a public
+      # demo every visitor supplies their own key, and an operator key would be
+      # drainable through the unauthenticated /speech/synthesize-preview route.
+      # Uncomment only for a private lab deployment:
+      # - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Relay session logs stay off; demo mode writes no logs of any kind.
+      - AGENT_RELAY_LOG_ENABLED=${AGENT_RELAY_LOG_ENABLED:-false}
+      # Max simultaneous public demo sessions. Demo sessions never evict each
+      # other; creation over this cap is rejected with a clear error.
+      - DEMO_MAX_CONCURRENT_SESSIONS=${DEMO_MAX_CONCURRENT_SESSIONS:-10}
+      # Demo sessions expire on their own lifetime and are reaped once idle, so a
+      # closed tab gives its demo slot (and agent process) back quickly.
+      - DEMO_SESSION_TTL_MS=${DEMO_SESSION_TTL_MS:-3600000}
+      - DEMO_SESSION_IDLE_TIMEOUT_MS=${DEMO_SESSION_IDLE_TIMEOUT_MS:-900000}
       - AGENT_LLM_DEBUG=${AGENT_LLM_DEBUG:-false}
       - AGENT_MONITOR_ENABLED=${AGENT_MONITOR_ENABLED:-false}
     volumes:
@@ -32,6 +50,10 @@ services:
       retries: 3
       start_period: 40s
 
+  # Standalone single-session agent (AGENT_SESSION_ID=default). It does not
+  # serve study or demo sessions — the backend spawns its own per-session agent
+  # processes for those. Useful for manual relay testing only; a public demo
+  # deployment can leave OPENAI_API_KEY empty here (or drop this service).
   agent:
     build:
       context: .

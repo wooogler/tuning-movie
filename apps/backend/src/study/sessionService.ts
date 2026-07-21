@@ -6,6 +6,7 @@ import {
   createSessionDbFromTemplate,
   destroySessionDb,
   getSessionDbHandle,
+  resolveRuntimeDbDir,
 } from './dbManager';
 import {
   getScenarioById,
@@ -18,6 +19,7 @@ import {
   isStudyModeId,
   normalizeStudyMode,
   DEFAULT_STUDY_MODE,
+  DEMO_STUDY_MODE,
 } from './modes';
 import { startAgentForSession, stopAgentForSession } from './agentSupervisor';
 import {
@@ -40,6 +42,21 @@ interface CreateSessionInput {
   studyMode?: string;
   participantId?: string;
   loggingParticipantId?: string;
+  /**
+   * User-provided OpenAI API key for public demo sessions. Held in memory only
+   * (see `sessionApiKeys`); never persisted, logged, or returned to the client.
+   */
+  apiKey?: string;
+}
+
+export class StudySessionCapacityError extends Error {
+  readonly code = 'DEMO_SESSION_CAPACITY_REACHED';
+  readonly statusCode = 503;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'StudySessionCapacityError';
+  }
 }
 
 interface PersistedSessionFile {
@@ -53,13 +70,41 @@ interface CreateSessionResult {
   studyToken: string;
 }
 
+function parsePositiveIntEnv(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value || '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 const SESSION_TTL_MS = Number.parseInt(process.env.STUDY_SESSION_TTL_MS || '', 10) || 4 * 60 * 60 * 1000;
 // Without STUDY_SESSION_SECRET, tokens are signed with a per-process random
 // secret and do not survive a server restart.
 const TOKEN_SECRET = process.env.STUDY_SESSION_SECRET || randomBytes(32).toString('hex');
 const TUTORIAL_SCENARIO_ID = 'scn_t1_solo_weekend_3d_tutorial';
+// A malformed value must never disable the cap (Number('ten') === NaN, and every
+// `>= NaN` comparison is false), so parse strictly and fall back to 10.
+const DEMO_MAX_CONCURRENT_SESSIONS = parsePositiveIntEnv(
+  process.env.DEMO_MAX_CONCURRENT_SESSIONS,
+  10
+);
+// Public demo visitors mostly just close the tab. Without a short lifetime and an
+// idle reaper their records stay 'active' for the full study TTL and hold demo
+// capacity (plus an agent child process) hostage.
+const DEMO_SESSION_TTL_MS = parsePositiveIntEnv(
+  process.env.DEMO_SESSION_TTL_MS,
+  60 * 60 * 1000
+);
+const DEMO_SESSION_IDLE_TIMEOUT_MS = parsePositiveIntEnv(
+  process.env.DEMO_SESSION_IDLE_TIMEOUT_MS,
+  15 * 60 * 1000
+);
 
 const sessions = new Map<string, StudySessionRecord>();
+// User-provided OpenAI API keys, keyed by sessionId. In-memory only: never
+// persisted to disk, never logged, never placed on a record/token/context.
+const sessionApiKeys = new Map<string, string>();
+// Last time a session resolved a context (any authenticated request or relay
+// join). Memory-only; used to reap abandoned demo sessions.
+const sessionLastSeenAt = new Map<string, number>();
 
 function resolveBackendRootForSeeding(): string {
   const candidates = [
@@ -115,6 +160,63 @@ function ensureScenarioTemplateDb(scenario: ScenarioDefinition): string {
 
 function shouldEnforceSingleActiveAgentSession(): boolean {
   return process.env.NODE_ENV !== 'production';
+}
+
+function forgetSessionApiKey(sessionId: string): void {
+  sessionApiKeys.delete(sessionId);
+}
+
+function forgetSessionActivity(sessionId: string): void {
+  sessionLastSeenAt.delete(sessionId);
+}
+
+function touchSessionActivity(sessionId: string): void {
+  sessionLastSeenAt.set(sessionId, now().getTime());
+}
+
+function isAbandonedDemoSession(record: StudySessionRecord, current: number): boolean {
+  if (record.studyMode !== DEMO_STUDY_MODE) return false;
+  const lastSeen = sessionLastSeenAt.get(record.sessionId) ?? Date.parse(record.createdAt);
+  if (!Number.isFinite(lastSeen)) return false;
+  return current - lastSeen > DEMO_SESSION_IDLE_TIMEOUT_MS;
+}
+
+/**
+ * Removes session DBs left behind by an unclean shutdown. Demo records are never
+ * persisted (no logging of any kind), so after a crash there is no record left to
+ * expire and their `.db` files would otherwise stay on disk forever.
+ */
+function sweepOrphanedSessionDbs(): void {
+  let entries: string[];
+  let dir: string;
+  try {
+    dir = resolveRuntimeDbDir();
+    if (!fs.existsSync(dir)) return;
+    entries = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const match = entry.match(/^(st_[0-9a-f]+)\.db(-wal|-shm|-journal)?$/);
+    if (!match) continue;
+    if (sessions.has(match[1])) continue;
+    try {
+      fs.unlinkSync(path.join(dir, entry));
+    } catch {
+      // Best-effort cleanup.
+    }
+  }
+}
+
+function countActiveDemoSessions(): number {
+  let count = 0;
+  for (const record of sessions.values()) {
+    if (record.status !== 'active') continue;
+    if (record.studyMode !== DEMO_STUDY_MODE) continue;
+    count += 1;
+  }
+  return count;
 }
 
 function sessionsFileCandidates(): string[] {
@@ -253,6 +355,8 @@ function deactivateSession(
     finishedAt,
   });
   stopAgentForSession(record.sessionId);
+  forgetSessionApiKey(record.sessionId);
+  forgetSessionActivity(record.sessionId);
   destroySessionDb(record.sessionId);
 }
 
@@ -263,6 +367,8 @@ function deactivateOtherActiveAgentSessions(keepSessionId?: string): boolean {
   for (const record of sessions.values()) {
     if (record.status !== 'active') continue;
     if (keepSessionId && record.sessionId === keepSessionId) continue;
+    // Public demo visitors run concurrently; they must never evict each other.
+    if (record.studyMode === DEMO_STUDY_MODE) continue;
     const studyModeConfig = getStudyModeConfig(record.studyMode);
     if (!studyModeConfig.agentEnabled) continue;
     deactivateSession(record, 'expired', { purgeInteractionArtifacts: true });
@@ -277,6 +383,8 @@ function keepLatestActiveAgentSession(): boolean {
   const activeAgentSessions = Array.from(sessions.values())
     .filter((record) => {
       if (record.status !== 'active') return false;
+      // Demo sessions are exempt from single-active enforcement.
+      if (record.studyMode === DEMO_STUDY_MODE) return false;
       return getStudyModeConfig(record.studyMode).agentEnabled;
     })
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
@@ -291,11 +399,21 @@ function keepLatestActiveAgentSession(): boolean {
   return changed;
 }
 
-function restartAgentsForActiveSessions(): void {
+function restartAgentsForActiveSessions(): boolean {
+  let changed = false;
   for (const record of sessions.values()) {
     if (record.status !== 'active') continue;
     const scenario = getScenarioById(record.scenarioId);
     if (!scenario) continue;
+    const apiKey = sessionApiKeys.get(record.sessionId);
+    // `sessionApiKeys` is memory-only, so a session created with a visitor key
+    // cannot be resumed after a restart. Expire it rather than respawning an
+    // agent that would silently run on the operator's credentials.
+    if (record.usesSessionApiKey && !apiKey) {
+      deactivateSession(record, 'expired');
+      changed = true;
+      continue;
+    }
     const studyModeConfig = getStudyModeConfig(record.studyMode);
     if (!studyModeConfig.agentEnabled) continue;
     startAgentForSession({
@@ -307,14 +425,19 @@ function restartAgentsForActiveSessions(): void {
       interactionLogFile: record.interactionLogFile,
       studyMode: record.studyMode,
       modeConfig: studyModeConfig,
+      apiKey,
     });
   }
+  return changed;
 }
 
 function persistSessions(): void {
   const filePath = resolveSessionsFilePath();
   ensureSessionsFileDir(filePath);
-  const all = Array.from(sessions.values());
+  // Demo sessions are never written to disk (no logging of any kind).
+  const all = Array.from(sessions.values()).filter(
+    (record) => record.studyMode !== DEMO_STUDY_MODE
+  );
   const payload: PersistedSessionFile = { sessions: all };
   fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
 }
@@ -324,7 +447,9 @@ function markExpiredSessions(): boolean {
   const current = now().getTime();
   for (const [sessionId, record] of sessions.entries()) {
     if (record.status !== 'active') continue;
-    if (Date.parse(record.expiresAt) > current) continue;
+    if (Date.parse(record.expiresAt) > current && !isAbandonedDemoSession(record, current)) {
+      continue;
+    }
     const expired: StudySessionRecord = {
       ...record,
       status: 'expired',
@@ -339,6 +464,8 @@ function markExpiredSessions(): boolean {
     });
     sessions.set(sessionId, expired);
     stopAgentForSession(sessionId);
+    forgetSessionApiKey(sessionId);
+    forgetSessionActivity(sessionId);
     destroySessionDb(sessionId);
     changed = true;
   }
@@ -351,6 +478,7 @@ function buildSessionContext(record: StudySessionRecord): StudySessionContext | 
   if (!scenario) return null;
   const dbHandle = getSessionDbHandle(record.sessionId);
   if (!dbHandle) return null;
+  touchSessionActivity(record.sessionId);
   return {
     record,
     scenario,
@@ -360,6 +488,7 @@ function buildSessionContext(record: StudySessionRecord): StudySessionContext | 
 }
 
 loadPersistedSessions();
+sweepOrphanedSessionDbs();
 let normalizedActiveSessions = false;
 if (keepLatestActiveAgentSession()) {
   normalizedActiveSessions = true;
@@ -367,10 +496,12 @@ if (keepLatestActiveAgentSession()) {
 if (markExpiredSessions()) {
   normalizedActiveSessions = true;
 }
+if (restartAgentsForActiveSessions()) {
+  normalizedActiveSessions = true;
+}
 if (normalizedActiveSessions) {
   persistSessions();
 }
-restartAgentsForActiveSessions();
 
 export function listScenarios(): ScenarioDefinition[] {
   return getScenarioCatalog();
@@ -389,7 +520,11 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
 
   const requestedStudyMode = parseStudyMode(input.studyMode);
   const requestedStudyModeConfig = getStudyModeConfig(requestedStudyMode);
-  if (requestedStudyModeConfig.agentEnabled && deactivateOtherActiveAgentSessions()) {
+  if (
+    requestedStudyModeConfig.agentEnabled &&
+    requestedStudyMode !== DEMO_STUDY_MODE &&
+    deactivateOtherActiveAgentSessions()
+  ) {
     changed = true;
   }
 
@@ -397,15 +532,32 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
     persistSessions();
   }
 
+  if (
+    requestedStudyMode === DEMO_STUDY_MODE &&
+    countActiveDemoSessions() >= DEMO_MAX_CONCURRENT_SESSIONS
+  ) {
+    throw new StudySessionCapacityError(
+      `Demo is at capacity (${DEMO_MAX_CONCURRENT_SESSIONS} concurrent sessions). Please try again in a few minutes.`
+    );
+  }
+
   const studyMode = requestedStudyMode;
   const studyModeConfig = requestedStudyModeConfig;
   const conditionLabel = getStudyConditionCode(studyMode);
+  const trimmedApiKey = typeof input.apiKey === 'string' ? input.apiKey.trim() : '';
+
+  // A demo session must run entirely on the visitor's own key: without one the
+  // agent and the speech routes would fall back to the operator's credentials.
+  if (studyMode === DEMO_STUDY_MODE && !trimmedApiKey) {
+    throw new Error('OPENAI_API_KEY_MISSING');
+  }
 
   const templateDbPath = ensureScenarioTemplateDb(scenario);
   const sessionId = `st_${randomUUID().replace(/-/g, '')}`;
   const relaySessionId = `relay_${sessionId}`;
   const createdAt = now().toISOString();
-  const expiresAt = new Date(Date.parse(createdAt) + SESSION_TTL_MS).toISOString();
+  const ttlMs = studyMode === DEMO_STUDY_MODE ? DEMO_SESSION_TTL_MS : SESSION_TTL_MS;
+  const expiresAt = new Date(Date.parse(createdAt) + ttlMs).toISOString();
   const participantId =
     typeof input.participantId === 'string' && input.participantId.trim()
       ? input.participantId.trim()
@@ -414,8 +566,11 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
     typeof input.loggingParticipantId === 'string' && input.loggingParticipantId.trim()
       ? input.loggingParticipantId.trim()
       : undefined;
+  const apiKey = trimmedApiKey;
+  // Demo mode records nothing: an undefined log file disables backend
+  // interaction logs, the agent LLM trace writer, and the frontend logger.
   const interactionLogFile =
-    scenario.id === TUTORIAL_SCENARIO_ID
+    scenario.id === TUTORIAL_SCENARIO_ID || studyMode === DEMO_STUDY_MODE
       ? undefined
       : createInteractionLogFilePath(
           loggingParticipantId,
@@ -439,6 +594,8 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
       status: 'active',
       createdAt,
       expiresAt,
+      // Flag only -- the key itself stays in `sessionApiKeys`.
+      ...(apiKey ? { usesSessionApiKey: true } : {}),
     };
 
     appendInteractionLog(record, {
@@ -457,6 +614,10 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
     });
 
     sessions.set(sessionId, record);
+    touchSessionActivity(sessionId);
+    if (apiKey) {
+      sessionApiKeys.set(sessionId, apiKey);
+    }
 
     if (studyModeConfig.agentEnabled) {
       startAgentForSession({
@@ -468,6 +629,7 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
         interactionLogFile,
         studyMode,
         modeConfig: studyModeConfig,
+        apiKey,
       });
     }
 
@@ -481,6 +643,8 @@ export function createStudySession(input: CreateSessionInput): CreateSessionResu
     };
   } catch (error) {
     sessions.delete(sessionId);
+    sessionApiKeys.delete(sessionId);
+    forgetSessionActivity(sessionId);
     stopAgentForSession(sessionId);
     destroySessionDb(sessionId);
     throw error;
@@ -533,7 +697,41 @@ export function finishSessionByToken(token: string): StudySessionRecord | null {
   };
   sessions.set(context.record.sessionId, finished);
   stopAgentForSession(context.record.sessionId);
+  forgetSessionApiKey(context.record.sessionId);
+  forgetSessionActivity(context.record.sessionId);
   destroySessionDb(context.record.sessionId);
   persistSessions();
   return finished;
+}
+
+/**
+ * Returns the in-memory, user-provided OpenAI API key for a valid study token.
+ * Deliberately kept off StudySessionContext so it is never spread into
+ * `request.study` or serialized into any response.
+ */
+export function getSessionApiKeyByToken(token: string): string | null {
+  if (!token.trim()) return null;
+  if (markExpiredSessions()) {
+    persistSessions();
+  }
+  const payload = parseToken(token.trim());
+  if (!payload) return null;
+
+  const record = sessions.get(payload.sessionId);
+  if (!record) return null;
+  if (record.relaySessionId !== payload.relaySessionId) return null;
+  if (record.status !== 'active') return null;
+  if (Date.parse(record.expiresAt) <= now().getTime()) return null;
+
+  return sessionApiKeys.get(record.sessionId) || null;
+}
+
+export function getStudyModeByRelaySessionId(relaySessionId: string): StudyModeId | null {
+  if (!relaySessionId.trim()) return null;
+  for (const record of sessions.values()) {
+    if (record.relaySessionId === relaySessionId) {
+      return record.studyMode;
+    }
+  }
+  return null;
 }

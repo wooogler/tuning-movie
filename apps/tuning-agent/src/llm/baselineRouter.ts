@@ -1,3 +1,5 @@
+import { resolveOpenAiApiKey } from './openaiKey';
+
 interface BaselineVisibleItem {
   id: string;
   value: string;
@@ -123,6 +125,12 @@ function resolveOpenAITemperature(): number | undefined {
   return DEFAULT_OPENAI_TEMPERATURE;
 }
 
+// OpenAI auth errors echo a partially masked key back in the error body; strip
+// anything key-shaped before it reaches a log or trace.
+function redactApiKeys(text: string): string {
+  return text.replace(/sk-[A-Za-z0-9_*\-]{6,}/g, 'sk-[redacted]');
+}
+
 function isUnsupportedTemperatureError(status: number, errorText: string): boolean {
   if (status !== 400) return false;
   const lowered = errorText.toLowerCase();
@@ -204,7 +212,7 @@ function toBaselineRouterOutput(value: Record<string, unknown>): BaselineRouterO
 export async function routeBaselineActionWithOpenAI(
   input: BaselineRouterInput
 ): Promise<BaselineRouterOutput | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = resolveOpenAiApiKey();
   if (!apiKey) {
     throw new Error('BASELINE_OPENAI_API_KEY_MISSING');
   }
@@ -291,6 +299,7 @@ export async function routeBaselineActionWithOpenAI(
       typeof temperature === 'number' &&
       isUnsupportedTemperatureError(response.status, firstErrorText);
 
+    let retriedWithoutTemperature = false;
     if (shouldRetryWithoutTemperature) {
       emitLlmTrace('request', {
         method: 'POST',
@@ -308,11 +317,21 @@ export async function routeBaselineActionWithOpenAI(
         },
         body: JSON.stringify(baseBody),
       });
+      retriedWithoutTemperature = true;
     }
 
     if (!response.ok) {
-      const errorText = await response.text();
-      if (DEBUG_LLM) {
+      // The first response body is already consumed; only re-read when a retry
+      // produced a new response.
+      const errorText = redactApiKeys(
+        retriedWithoutTemperature ? await response.text() : firstErrorText
+      );
+      if (response.status === 401 || response.status === 403) {
+        console.error(
+          `[tuning-agent][baseline-router] OpenAI rejected the API key (${response.status}):`,
+          errorText
+        );
+      } else if (DEBUG_LLM) {
         console.error('[tuning-agent][baseline-router] error:', errorText);
       }
       emitLlmTrace('error', { status: response.status, errorText });

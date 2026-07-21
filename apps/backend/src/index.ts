@@ -17,7 +17,21 @@ import { studyContextPlugin } from './plugins/studyContext';
 import { stopAllSessionAgents } from './study/agentSupervisor';
 
 const fastify = Fastify({
-  logger: true,
+  logger: {
+    // User-supplied OpenAI keys and study tokens must never reach a log line,
+    // whatever a future serializer decides to include.
+    redact: {
+      paths: [
+        'req.headers["x-openai-api-key"]',
+        'req.headers["x-study-session-token"]',
+        'req.headers.authorization',
+        'req.body.apiKey',
+        'apiKey',
+        '*.apiKey',
+      ],
+      censor: '[REDACTED]',
+    },
+  },
 });
 
 const start = async () => {

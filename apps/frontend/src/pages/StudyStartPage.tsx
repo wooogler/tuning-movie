@@ -1,6 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api/client';
+import {
+  api,
+  describeApiErrorCode,
+  getApiErrorCode,
+  OPENAI_API_KEY_MISSING,
+} from '../api/client';
 import {
   CONDITION_SELECTION_OPTIONS,
   getInterfaceCondition,
@@ -29,6 +34,12 @@ interface StudyStartPageProps {
   onScenarioChange: (scenarioId: string) => void;
   loggingParticipantId: string;
   onLoggingParticipantIdChange: (participantId: string) => void;
+  apiKey: string;
+  onApiKeyChange: (apiKey: string) => void;
+  demoMode: boolean;
+  onDemoModeChange: (demoMode: boolean) => void;
+  sessionNotice?: string | null;
+  onDismissSessionNotice?: () => void;
 }
 
 function deriveSetLabel(scenarioId: string | null): string | null {
@@ -64,6 +75,12 @@ export function StudyStartPage({
   onScenarioChange,
   loggingParticipantId,
   onLoggingParticipantIdChange,
+  apiKey,
+  onApiKeyChange,
+  demoMode,
+  onDemoModeChange,
+  sessionNotice = null,
+  onDismissSessionNotice,
 }: StudyStartPageProps) {
   const navigate = useNavigate();
   const [loadingScenarios, setLoadingScenarios] = useState(true);
@@ -75,14 +92,16 @@ export function StudyStartPage({
   const [micCheckStatus, setMicCheckStatus] = useState<'idle' | 'checking' | 'granted' | 'denied'>('idle');
   const [speakerCheckStatus, setSpeakerCheckStatus] = useState<'idle' | 'playing' | 'played' | 'confirmed' | 'error'>('idle');
   const [voiceCheckLoading, setVoiceCheckLoading] = useState<'none' | 'mic' | 'speaker'>('none');
-  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewAudioUrlRef = useRef<string | null>(null);
   const selectedConditionMode = CONDITION_SELECTION_OPTIONS.some((option) => option.id === selectedMode)
     ? selectedMode
     : getStudyModeFromConditionSelection(
         getInterfaceCondition(selectedMode),
         getInteractionMode(selectedMode)
       );
-  const pidMissing = !loggingParticipantId.trim();
+  const pidMissing = !demoMode && !loggingParticipantId.trim();
+  const apiKeyMissing = !apiKey.trim();
   const tutorialSelected = selectedScenarioId === TUTORIAL_SCENARIO_ID;
   const perTrialSurveyEnabled = isHardTaskScenario({ scenarioId: selectedScenarioId });
   const conditionCode = CONDITION_SELECTION_OPTIONS.find((o) => o.id === selectedConditionMode)?.code ?? selectedConditionMode;
@@ -139,9 +158,13 @@ export function StudyStartPage({
 
   useEffect(() => {
     return () => {
-      speechUtteranceRef.current = null;
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+      if (previewAudioUrlRef.current) {
+        URL.revokeObjectURL(previewAudioUrlRef.current);
+        previewAudioUrlRef.current = null;
       }
     };
   }, []);
@@ -187,18 +210,36 @@ export function StudyStartPage({
   };
 
   const resetVoiceSample = () => {
-    speechUtteranceRef.current = null;
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+    if (previewAudioUrlRef.current) {
+      URL.revokeObjectURL(previewAudioUrlRef.current);
+      previewAudioUrlRef.current = null;
     }
   };
 
   const handleStartTask = () => {
     if (!selectedScenarioId) return;
+    if (demoMode && apiKeyMissing) {
+      setError('Enter your OpenAI API key to start the demo.');
+      return;
+    }
+    onDismissSessionNotice?.();
     navigateToTaskReview();
   };
 
+  const handleDemoModeToggle = (nextDemoMode: boolean) => {
+    setError(null);
+    onDismissSessionNotice?.();
+    onDemoModeChange(nextDemoMode);
+  };
+
+  // Never carries the API key: setup events are study log payloads.
   const queueSetupGuiAction = (action: string, extraPayload?: Record<string, unknown>) => {
+    // Demo mode logs nothing at all.
+    if (demoMode) return;
     queuePendingStudyLogEvent({
       type: 'user.gui_action',
       clientTimestamp: new Date().toISOString(),
@@ -282,11 +323,15 @@ export function StudyStartPage({
     }
   };
 
+  // The speaker sample runs through /speech/synthesize-preview so it doubles as an
+  // end-to-end check that the entered OpenAI key actually works.
   const handlePlaySpeakerSample = async () => {
     if (voiceCheckLoading !== 'none') return;
-    if (typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+    // In the lab flow the key lives on the server, so let the request go out and
+    // let the backend answer; only a demo visitor must supply a key here.
+    if (demoMode && apiKeyMissing) {
       setSpeakerCheckStatus('error');
-      setVoiceCheckError('Built-in speech playback is not supported in this browser.');
+      setVoiceCheckError(describeApiErrorCode(OPENAI_API_KEY_MISSING));
       return;
     }
 
@@ -296,32 +341,34 @@ export function StudyStartPage({
     resetVoiceSample();
 
     try {
-      const utterance = new SpeechSynthesisUtterance('This is a speaker test.');
-      utterance.lang = 'en-US';
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      speechUtteranceRef.current = utterance;
+      const sample = await api.synthesizeSpeechPreview('This is a speaker test.');
+      const objectUrl = URL.createObjectURL(sample);
+      previewAudioUrlRef.current = objectUrl;
 
-      utterance.onend = () => {
-        if (speechUtteranceRef.current !== utterance) return;
-        speechUtteranceRef.current = null;
+      const audio = new Audio(objectUrl);
+      previewAudioRef.current = audio;
+
+      audio.onended = () => {
+        if (previewAudioRef.current !== audio) return;
+        resetVoiceSample();
         setSpeakerCheckStatus('confirmed');
       };
-      utterance.onerror = () => {
-        if (speechUtteranceRef.current !== utterance) return;
-        speechUtteranceRef.current = null;
+      audio.onerror = () => {
+        if (previewAudioRef.current !== audio) return;
+        resetVoiceSample();
         setSpeakerCheckStatus('error');
-        setVoiceCheckError('Built-in speech playback failed during the voice check.');
+        setVoiceCheckError('Speaker playback failed. Check your system audio output.');
       };
 
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
+      await audio.play();
     } catch (playbackError) {
+      resetVoiceSample();
       setSpeakerCheckStatus('error');
       setVoiceCheckError(
-        playbackError instanceof Error && playbackError.message
-          ? playbackError.message
-          : 'Failed to play the built-in voice sample.'
+        describeApiErrorCode(getApiErrorCode(playbackError)) ??
+          (playbackError instanceof Error && playbackError.message
+            ? playbackError.message
+            : 'Failed to play the voice sample.')
       );
     } finally {
       setVoiceCheckLoading('none');
@@ -334,36 +381,86 @@ export function StudyStartPage({
         <div className="w-full rounded-2xl border border-dark-border bg-dark-light p-5 sm:p-6">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-semibold text-fg-strong">User Study Setup</h1>
+              <h1 className="text-2xl font-semibold text-fg-strong">
+                {demoMode ? 'Demo Setup' : 'User Study Setup'}
+              </h1>
               <p className="mt-1 text-sm text-fg-muted">
-                Select your assigned condition and one scenario before starting.
+                {demoMode
+                  ? 'Paste your own OpenAI API key and pick a scenario. Nothing is recorded.'
+                  : 'Select your assigned condition and one scenario before starting.'}
               </p>
             </div>
             <div className="flex flex-wrap items-start justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => handleDemoModeToggle(!demoMode)}
+                aria-pressed={demoMode}
+                className={`inline-flex h-11 items-center gap-2 rounded-lg border px-4 text-sm font-semibold transition-colors ${
+                  demoMode
+                    ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20'
+                    : 'border-dark-border bg-dark text-fg hover:border-primary hover:text-fg-strong'
+                }`}
+              >
+                {demoMode ? 'Demo Mode: On' : 'Demo Mode'}
+              </button>
+              {demoMode ? null : (
+                <label
+                  className={`flex h-11 items-center gap-2 rounded-lg border px-3 transition-colors ${
+                    pidMissing
+                      ? 'border-rose-400/70 bg-rose-500/10'
+                      : 'border-dark-border bg-dark'
+                  }`}
+                >
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                      pidMissing
+                        ? 'bg-rose-500/15 text-rose-300'
+                        : 'bg-primary/15 text-primary'
+                    }`}
+                  >
+                    1
+                  </span>
+                  <span className="text-sm font-medium text-fg-strong">PID</span>
+                  <input
+                    type="text"
+                    value={loggingParticipantId}
+                    onChange={(event) => onLoggingParticipantIdChange(event.target.value)}
+                    placeholder="P12"
+                    className={`h-8 w-20 rounded-md border px-2.5 text-sm text-fg-strong outline-none transition-colors placeholder:text-fg-faint ${
+                      pidMissing
+                        ? 'border-rose-400/70 bg-dark focus:border-rose-300'
+                        : 'border-dark-border bg-dark-light focus:border-primary'
+                    }`}
+                  />
+                </label>
+              )}
               <label
                 className={`flex h-11 items-center gap-2 rounded-lg border px-3 transition-colors ${
-                  pidMissing
+                  demoMode && apiKeyMissing
                     ? 'border-rose-400/70 bg-rose-500/10'
                     : 'border-dark-border bg-dark'
                 }`}
               >
                 <span
                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                    pidMissing
+                    demoMode && apiKeyMissing
                       ? 'bg-rose-500/15 text-rose-300'
                       : 'bg-primary/15 text-primary'
                   }`}
                 >
-                  1
+                  {demoMode ? '1' : '2'}
                 </span>
-                <span className="text-sm font-medium text-fg-strong">PID</span>
+                <span className="text-sm font-medium text-fg-strong">API Key</span>
                 <input
-                  type="text"
-                  value={loggingParticipantId}
-                  onChange={(event) => onLoggingParticipantIdChange(event.target.value)}
-                  placeholder="P12"
-                  className={`h-8 w-20 rounded-md border px-2.5 text-sm text-fg-strong outline-none transition-colors placeholder:text-fg-faint ${
-                    pidMissing
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={apiKey}
+                  onChange={(event) => onApiKeyChange(event.target.value)}
+                  placeholder="sk-..."
+                  aria-label="OpenAI API key"
+                  className={`h-8 w-40 rounded-md border px-2.5 text-sm text-fg-strong outline-none transition-colors placeholder:text-fg-faint ${
+                    demoMode && apiKeyMissing
                       ? 'border-rose-400/70 bg-dark focus:border-rose-300'
                       : 'border-dark-border bg-dark-light focus:border-primary'
                   }`}
@@ -376,10 +473,16 @@ export function StudyStartPage({
                   setVoiceCheckError(null);
                   setVoiceCheckOpen(true);
                 }}
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-sky-500/35 bg-sky-500/10 px-4 text-sm font-semibold text-sky-700 transition-colors hover:border-sky-500/60 hover:bg-sky-500/15"
+                disabled={demoMode && apiKeyMissing}
+                title={
+                  demoMode && apiKeyMissing
+                    ? 'Enter your OpenAI API key to run the speaker preview.'
+                    : undefined
+                }
+                className="inline-flex h-11 items-center gap-2 rounded-lg border border-sky-500/35 bg-sky-500/10 px-4 text-sm font-semibold text-sky-700 transition-colors hover:border-sky-500/60 hover:bg-sky-500/15 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-sky-500/35 disabled:hover:bg-sky-500/10"
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-xs font-semibold text-sky-700">
-                  2
+                  {demoMode ? '2' : '3'}
                 </span>
                 Mic Check
               </button>
@@ -392,7 +495,7 @@ export function StudyStartPage({
                 className="inline-flex h-11 items-center gap-2 rounded-lg border border-sky-500/35 bg-sky-500/10 px-4 text-sm font-semibold text-sky-700 transition-colors hover:border-sky-500/60 hover:bg-sky-500/15"
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-xs font-semibold text-sky-700">
-                  3
+                  {demoMode ? '3' : '4'}
                 </span>
                 Watch Tutorial Video
               </button>
@@ -413,7 +516,34 @@ export function StudyStartPage({
             </div>
           </div>
 
+          {sessionNotice ? (
+            <div className="mb-5 flex items-start justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
+              <span>{sessionNotice}</span>
+              {onDismissSessionNotice ? (
+                <button
+                  type="button"
+                  onClick={onDismissSessionNotice}
+                  className="shrink-0 text-xs font-semibold uppercase tracking-wide text-amber-800/80 transition-colors hover:text-amber-900"
+                >
+                  Dismiss
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="space-y-4">
+            {demoMode ? (
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">
+                  Demo
+                </h2>
+                <div className="rounded-xl border border-dark-border bg-dark px-4 py-3 text-sm text-fg-muted">
+                  Your key stays in this browser tab and is used only for this session. No
+                  participant ID, no surveys, and nothing about this session is logged. Voice mode
+                  is available from the mic button once the booking task starts.
+                </div>
+              </section>
+            ) : (
             <section className="space-y-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">
                 Condition
@@ -480,6 +610,7 @@ export function StudyStartPage({
                 </button>
               </div>
             </section>
+            )}
 
             <section className="space-y-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">
@@ -535,10 +666,15 @@ export function StudyStartPage({
             <button
               type="button"
               onClick={handleStartTask}
-              disabled={loadingScenarios || !selectedScenarioId || pidMissing}
+              disabled={
+                loadingScenarios ||
+                !selectedScenarioId ||
+                // Demo has no participant ID; the visitor's own key gates it instead.
+                (demoMode ? apiKeyMissing : pidMissing)
+              }
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Start Task
+              {demoMode ? 'Start Demo' : 'Start Task'}
             </button>
           </div>
         </div>
@@ -583,13 +719,14 @@ export function StudyStartPage({
                   <div>
                     <div className="text-sm font-medium text-fg-strong">2. Speaker playback</div>
                     <div className="mt-1 text-xs text-fg-muted">
-                      Play a short sample to confirm speaker output.
+                      Play a short sample to confirm speaker output and that your OpenAI API key
+                      works.
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => void handlePlaySpeakerSample()}
-                    disabled={voiceCheckLoading !== 'none'}
+                    disabled={voiceCheckLoading !== 'none' || (demoMode && apiKeyMissing)}
                     className="rounded-lg border border-dark-border px-3 py-2 text-sm font-medium text-fg transition-colors hover:border-primary hover:text-fg-strong disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {voiceCheckLoading === 'speaker'

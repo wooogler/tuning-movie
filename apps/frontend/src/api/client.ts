@@ -1,6 +1,7 @@
 import type { Movie, Theater, Showing, Seat, Booking, BookingRequest } from '../types';
 import type { StudyModeId } from '../pages/studyOptions';
 import {
+  getStoredApiKey,
   getStoredStudySession,
   type StudySessionState,
   type StudyScenarioDetail,
@@ -24,26 +25,88 @@ interface StudySessionInfo extends Omit<StudySessionState, 'studyToken'> {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
-async function getErrorMessage(response: Response): Promise<string> {
+export const OPENAI_API_KEY_MISSING = 'OPENAI_API_KEY_MISSING';
+export const OPENAI_AUTH_FAILED = 'OPENAI_AUTH_FAILED';
+export const INVALID_OPENAI_API_KEY = 'INVALID_OPENAI_API_KEY';
+export const DEMO_SESSION_CAPACITY_REACHED = 'DEMO_SESSION_CAPACITY_REACHED';
+export const STUDY_SESSION_UNAUTHORIZED = 'STUDY_SESSION_UNAUTHORIZED';
+
+/** Fired when the backend rejects the stored study session token. */
+export const STUDY_SESSION_INVALID_EVENT = 'tuning-movie:study-session-invalid';
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+
+  constructor(message: string, status: number, code: string | null) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function getApiErrorCode(error: unknown): string | null {
+  return error instanceof ApiError ? error.code : null;
+}
+
+/** Human-readable copy for the error codes the UI needs to explain. */
+export function describeApiErrorCode(code: string | null): string | null {
+  switch (code) {
+    case OPENAI_API_KEY_MISSING:
+      return 'No OpenAI API key was provided. Paste your key on the start page to use speech features.';
+    case OPENAI_AUTH_FAILED:
+    case INVALID_OPENAI_API_KEY:
+      return 'OpenAI rejected this API key. Check that the key is active and has credit, then re-enter it.';
+    case DEMO_SESSION_CAPACITY_REACHED:
+      return 'The demo is at capacity right now. Please wait a minute and try again.';
+    case STUDY_SESSION_UNAUTHORIZED:
+      return 'This session has ended. Please start again from the beginning.';
+    default:
+      return null;
+  }
+}
+
+interface ParsedApiError {
+  message: string;
+  code: string | null;
+}
+
+async function parseErrorResponse(response: Response): Promise<ParsedApiError> {
   const defaultMessage = `HTTP ${response.status}`;
   const contentType = response.headers.get('content-type') ?? '';
 
   if (contentType.includes('application/json')) {
     const error = await response.json().catch(() => null);
     if (error && typeof error === 'object') {
-      if (typeof (error as { error?: unknown }).error === 'string') {
-        return (error as { error: string }).error;
+      const rawCode = (error as { error?: unknown }).error;
+      const code = typeof rawCode === 'string' ? rawCode : null;
+      const friendly = describeApiErrorCode(code);
+      if (friendly) {
+        return { message: friendly, code };
+      }
+      if (code) {
+        return { message: code, code };
       }
       if (typeof (error as { message?: unknown }).message === 'string') {
-        return (error as { message: string }).message;
+        return { message: (error as { message: string }).message, code: null };
       }
     }
-    return defaultMessage;
+    return { message: defaultMessage, code: null };
   }
 
   const text = await response.text().catch(() => '');
-  if (!text) return defaultMessage;
-  return `${defaultMessage}: ${text.slice(0, 120)}`;
+  if (!text) return { message: defaultMessage, code: null };
+  return { message: `${defaultMessage}: ${text.slice(0, 120)}`, code: null };
+}
+
+function toApiError(response: Response, parsed: ParsedApiError): ApiError {
+  if (parsed.code === STUDY_SESSION_UNAUTHORIZED && typeof window !== 'undefined') {
+    // Let the app shell reset to the start page instead of leaving the user
+    // stuck on a screen backed by a session the backend no longer knows about.
+    window.dispatchEvent(new CustomEvent(STUDY_SESSION_INVALID_EVENT));
+  }
+  return new ApiError(parsed.message, response.status, parsed.code);
 }
 
 interface FetchApiOptions extends RequestInit {
@@ -129,8 +192,7 @@ async function fetchApiResponse(endpoint: string, options?: FetchApiOptions): Pr
   }
 
   if (!response.ok) {
-    const message = await getErrorMessage(response);
-    throw new Error(message);
+    throw toApiError(response, await parseErrorResponse(response));
   }
 
   return response;
@@ -176,6 +238,11 @@ export const api = {
     studyMode: StudyModeId;
     participantId?: string;
     loggingParticipantId?: string;
+    /**
+     * Visitor-supplied OpenAI key. Sent once at session creation so the backend
+     * can hold it in memory for this session; it is never echoed back.
+     */
+    apiKey?: string;
   }) =>
     fetchApi<StudySessionState>('/study/sessions', {
       method: 'POST',
@@ -239,8 +306,7 @@ export const api = {
     }
 
     if (!response.ok) {
-      const message = await getErrorMessage(response);
-      throw new Error(message);
+      throw toApiError(response, await parseErrorResponse(response));
     }
 
     return {
@@ -263,8 +329,7 @@ export const api = {
     }
 
     if (!response.ok) {
-      const message = await getErrorMessage(response);
-      throw new Error(message);
+      throw toApiError(response, await parseErrorResponse(response));
     }
 
     return {
@@ -339,10 +404,17 @@ export const api = {
     });
     return response.blob();
   },
+  /**
+   * Unauthenticated key check / speaker sample. This is the only call that carries
+   * the inline key header: it runs before any study session exists, so there is no
+   * session token the backend could resolve a key from.
+   */
   synthesizeSpeechPreview: async (text: string, signal?: AbortSignal) => {
+    const inlineApiKey = getStoredApiKey().trim();
     const response = await fetchApiResponse('/speech/synthesize-preview', {
       method: 'POST',
       includeStudyToken: false,
+      headers: inlineApiKey ? { 'x-openai-api-key': inlineApiKey } : {},
       body: JSON.stringify({ text }),
       signal,
     });

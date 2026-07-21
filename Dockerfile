@@ -14,6 +14,10 @@ COPY apps ./apps
 RUN npm install
 RUN npm run build --workspace=apps/frontend
 RUN npm run build --workspace=apps/backend
+# The backend spawns one tuning-agent child process per study session. The
+# production image has no dev dependencies (no tsx), so the agent must ship
+# compiled.
+RUN npm run build --workspace=apps/tuning-agent
 
 # Production stage
 FROM node:20-alpine AS production
@@ -31,6 +35,8 @@ RUN npm install --omit=dev
 # Copy built files from builder
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 COPY --from=builder /app/apps/frontend/dist ./apps/frontend/dist
+# Per-session agent runtime, launched by the backend as `node dist/index.js`
+COPY --from=builder /app/apps/tuning-agent/dist ./apps/tuning-agent/dist
 
 # Startup script and data dir
 COPY apps/backend/start.sh ./apps/backend/start.sh

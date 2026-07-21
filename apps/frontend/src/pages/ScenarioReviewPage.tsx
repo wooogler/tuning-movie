@@ -11,6 +11,8 @@ interface ScenarioReviewPageProps {
   studyMode: StudyModeId;
   selectedScenarioId: string;
   loggingParticipantId: string;
+  apiKey: string;
+  demoMode: boolean;
   onSessionCreated: (session: StudySessionState) => void;
 }
 
@@ -18,6 +20,8 @@ export function ScenarioReviewPage({
   studyMode,
   selectedScenarioId,
   loggingParticipantId,
+  apiKey,
+  demoMode,
   onSessionCreated,
 }: ScenarioReviewPageProps) {
   const navigate = useNavigate();
@@ -51,6 +55,8 @@ export function ScenarioReviewPage({
   }, []);
 
   useEffect(() => {
+    // Demo mode logs nothing at all.
+    if (demoMode) return;
     queuePendingStudyLogEvent({
       type: 'user.gui_action',
       clientTimestamp: new Date().toISOString(),
@@ -62,7 +68,7 @@ export function ScenarioReviewPage({
         studyMode,
       },
     });
-  }, [selectedScenarioId, studyMode]);
+  }, [demoMode, selectedScenarioId, studyMode]);
 
   const selectedScenario =
     scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? null;
@@ -70,13 +76,21 @@ export function ScenarioReviewPage({
   const handleStartBooking = async () => {
     if (!selectedScenario || startingSession) return;
 
+    const trimmedApiKey = apiKey.trim();
+    if (demoMode && !trimmedApiKey) {
+      setError('Enter your OpenAI API key on the start page before beginning the demo.');
+      return;
+    }
+
     setStartingSession(true);
     setError(null);
     try {
       const session = await api.createStudySession({
         scenarioId: selectedScenario.id,
         studyMode,
-        loggingParticipantId: loggingParticipantId.trim() || undefined,
+        // No participant ID is sent in demo mode: there is nothing to log it against.
+        loggingParticipantId: demoMode ? undefined : loggingParticipantId.trim() || undefined,
+        ...(trimmedApiKey ? { apiKey: trimmedApiKey } : {}),
       });
       onSessionCreated(session);
       navigate('/booking');
@@ -118,16 +132,25 @@ export function ScenarioReviewPage({
           </div>
         )}
 
-        <div className="mt-4 rounded-xl border border-dark-border bg-dark px-4 py-3 text-sm">
-          <span className="font-medium text-fg-strong">PID logging:</span>{' '}
-          {loggingParticipantId.trim() ? (
+        {demoMode ? (
+          <div className="mt-4 rounded-xl border border-dark-border bg-dark px-4 py-3 text-sm">
+            <span className="font-medium text-fg-strong">Demo mode:</span>{' '}
             <span className="text-fg-muted">
-              enabled for <span className="text-fg-strong">{loggingParticipantId.trim()}</span>
+              no participant ID, and nothing from this session is recorded.
             </span>
-          ) : (
-            <span className="text-fg-muted">enabled with timestamp-only filename</span>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-dark-border bg-dark px-4 py-3 text-sm">
+            <span className="font-medium text-fg-strong">PID logging:</span>{' '}
+            {loggingParticipantId.trim() ? (
+              <span className="text-fg-muted">
+                enabled for <span className="text-fg-strong">{loggingParticipantId.trim()}</span>
+              </span>
+            ) : (
+              <span className="text-fg-muted">enabled with timestamp-only filename</span>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="mt-4 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">

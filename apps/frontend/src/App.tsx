@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ChatPage } from './pages/ChatPage';
 import { StudyStartPage } from './pages/StudyStartPage';
@@ -6,11 +6,21 @@ import { ScenarioReviewPage } from './pages/ScenarioReviewPage';
 import { StudyEndPage } from './pages/StudyEndPage';
 import { PerTrialSurveyPage } from './pages/PerTrialSurveyPage';
 import { PostStudySurveyPage } from './pages/PostStudySurveyPage';
-import { DEFAULT_STUDY_MODE, sanitizeSetupStudyMode, type StudyModeId } from './pages/studyOptions';
-import { api } from './api/client';
+import {
+  DEFAULT_STUDY_MODE,
+  DEMO_STUDY_MODE,
+  isDemoStudyMode,
+  sanitizeSetupStudyMode,
+  type StudyModeId,
+} from './pages/studyOptions';
+import { api, describeApiErrorCode, STUDY_SESSION_INVALID_EVENT } from './api/client';
 import {
   clearStoredStudySession,
+  getStoredApiKey,
+  getStoredDemoMode,
   getStoredStudySession,
+  setStoredApiKey,
+  setStoredDemoMode,
   setStoredStudySession,
   type StudySessionState,
 } from './study/sessionStorage';
@@ -59,15 +69,35 @@ function getStoredScenarioSelection(): string | null {
   }
 }
 
+const SESSION_ENDED_MESSAGE =
+  describeApiErrorCode('STUDY_SESSION_UNAUTHORIZED') ??
+  'This session has ended. Please start again from the beginning.';
+
+function DemoModeEntry({ onEnter }: { onEnter: () => void }) {
+  useEffect(() => {
+    onEnter();
+  }, [onEnter]);
+  return <Navigate to="/" replace />;
+}
+
 function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  const [studyMode, setStudyMode] = useState<StudyModeId>(() =>
-    sanitizeSetupStudyMode(
-      getStoredStudySession()?.studyMode ??
-        getStoredStudyModeSelection() ??
-        DEFAULT_STUDY_MODE
-    )
+  const [demoMode, setDemoMode] = useState<boolean>(
+    () => getStoredDemoMode() || isDemoStudyMode(getStoredStudySession()?.studyMode)
   );
+  const [apiKey, setApiKey] = useState<string>(() => getStoredApiKey());
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  // `studyMode` only ever holds a real study condition. Demo is tracked separately
+  // through `demoMode` so entering/leaving the demo never rewrites the persisted
+  // study condition selection.
+  const [studyMode, setStudyMode] = useState<StudyModeId>(() => {
+    const storedSessionMode = getStoredStudySession()?.studyMode;
+    const candidate =
+      (storedSessionMode && !isDemoStudyMode(storedSessionMode) ? storedSessionMode : null) ??
+      getStoredStudyModeSelection() ??
+      DEFAULT_STUDY_MODE;
+    return sanitizeSetupStudyMode(isDemoStudyMode(candidate) ? DEFAULT_STUDY_MODE : candidate);
+  });
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(() =>
     getStoredStudySession()?.scenario.id ?? getStoredScenarioSelection()
   );
@@ -89,12 +119,23 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
+    // Demo visitors have no participant ID, and nothing about them is persisted.
+    if (demoMode) return;
     try {
       window.localStorage.setItem(PID_LOGGING_STORAGE_KEY, loggingParticipantId);
     } catch {
       // Ignore storage write failures.
     }
-  }, [loggingParticipantId]);
+  }, [demoMode, loggingParticipantId]);
+
+  // sessionStorage only, and never localStorage: the key must die with the tab.
+  useEffect(() => {
+    setStoredApiKey(apiKey);
+  }, [apiKey]);
+
+  useEffect(() => {
+    setStoredDemoMode(demoMode);
+  }, [demoMode]);
 
   useEffect(() => {
     if (studyMode !== sanitizeSetupStudyMode(studyMode)) {
@@ -122,16 +163,56 @@ function App() {
     setTheme('light');
   };
 
+  // Ending a task drops the visitor back on setup, but the key they pasted is
+  // theirs for the whole browser session: clearing it here would force a
+  // re-entry on the most common post-task path.
   const handleStudyReset = () => {
-    clearStoredStudySession();
+    clearStoredStudySession({ keepApiKey: true });
     setSelectedScenarioTitle(null);
     setStudySession(null);
+    setSessionNotice(null);
+  };
+
+  // A stale study token (typically a backend restart: demo sessions live in memory
+  // by design) should drop the user back on the start page with an explanation --
+  // but keep the key they already typed.
+  const handleStaleStudySession = useCallback(() => {
+    clearStoredStudySession({ keepApiKey: true });
+    setSelectedScenarioTitle(null);
+    setStudySession(null);
+    setSessionNotice(SESSION_ENDED_MESSAGE);
+  }, []);
+
+  useEffect(() => {
+    const handleSessionInvalid = () => {
+      handleStaleStudySession();
+    };
+    window.addEventListener(STUDY_SESSION_INVALID_EVENT, handleSessionInvalid);
+    return () => {
+      window.removeEventListener(STUDY_SESSION_INVALID_EVENT, handleSessionInvalid);
+    };
+  }, [handleStaleStudySession]);
+
+  const handleEnterDemoMode = useCallback(() => {
+    setDemoMode(true);
+    setSessionNotice(null);
+  }, []);
+
+  const handleDemoModeChange = (enabled: boolean) => {
+    setDemoMode(enabled);
+    setSessionNotice(null);
   };
 
   const handleStudySessionCreated = (session: StudySessionState) => {
     setStoredStudySession(session);
     setStudySession(session);
-    setStudyMode(session.studyMode);
+    setSessionNotice(null);
+    if (isDemoStudyMode(session.studyMode)) {
+      setDemoMode(true);
+    } else {
+      setDemoMode(false);
+      setStudyMode(session.studyMode);
+    }
     setSelectedScenarioId(session.scenario.id);
     setSelectedScenarioTitle(session.scenario.title);
     setLoggingParticipantId(session.loggingParticipantId ?? '');
@@ -183,9 +264,11 @@ function App() {
         });
       })
       .catch(() => {
-        handleStudyReset();
+        handleStaleStudySession();
       });
-  }, [studySession]);
+  }, [handleStaleStudySession, studySession]);
+
+  const effectiveStudyMode: StudyModeId = demoMode ? DEMO_STUDY_MODE : studyMode;
 
   return (
     <BrowserRouter>
@@ -199,22 +282,31 @@ function App() {
                   <StudyStartPage
                     theme={theme}
                     onThemeToggle={handleThemeToggle}
-                  selectedMode={studyMode}
-                  onModeChange={setStudyMode}
-                  selectedScenarioId={selectedScenarioId}
-                  onScenarioChange={setSelectedScenarioId}
-                  loggingParticipantId={loggingParticipantId}
-                  onLoggingParticipantIdChange={setLoggingParticipantId}
-                />
-              }
-            />
+                    selectedMode={studyMode}
+                    onModeChange={setStudyMode}
+                    selectedScenarioId={selectedScenarioId}
+                    onScenarioChange={setSelectedScenarioId}
+                    loggingParticipantId={loggingParticipantId}
+                    onLoggingParticipantIdChange={setLoggingParticipantId}
+                    apiKey={apiKey}
+                    onApiKeyChange={setApiKey}
+                    demoMode={demoMode}
+                    onDemoModeChange={handleDemoModeChange}
+                    sessionNotice={sessionNotice}
+                    onDismissSessionNotice={() => setSessionNotice(null)}
+                  />
+                }
+              />
+              <Route path="/demo" element={<DemoModeEntry onEnter={handleEnterDemoMode} />} />
               <Route
                 path="/task-review"
                 element={selectedScenarioId ? (
                   <ScenarioReviewPage
-                    studyMode={studyMode}
+                    studyMode={effectiveStudyMode}
                     selectedScenarioId={selectedScenarioId}
                     loggingParticipantId={loggingParticipantId}
+                    apiKey={apiKey}
+                    demoMode={demoMode}
                     onSessionCreated={handleStudySessionCreated}
                   />
                 ) : (
@@ -225,7 +317,7 @@ function App() {
                 path="/booking"
                 element={studySession ? (
                   <ChatPage
-                    studyModePreset={studyMode}
+                    studyModePreset={effectiveStudyMode}
                     studySession={studySession}
                   />
                 ) : (
@@ -244,19 +336,23 @@ function App() {
               />
               <Route
                 path="/survey/per-trial"
-                element={
+                element={demoMode ? (
+                  <Navigate to="/" replace />
+                ) : (
                   <PerTrialSurveyPage
                     loggingParticipantId={loggingParticipantId}
                   />
-                }
+                )}
               />
               <Route
                 path="/survey/post-study"
-                element={
+                element={demoMode ? (
+                  <Navigate to="/" replace />
+                ) : (
                   <PostStudySurveyPage
                     loggingParticipantId={loggingParticipantId}
                   />
-                }
+                )}
               />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

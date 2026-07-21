@@ -55,6 +55,12 @@ const MODE_CONFIG: Record<StudyModeId, StudyModeConfig> = {
     cpMemoryWindow: 10,
     voiceModeAvailable: true,
   },
+  demo: {
+    agentEnabled: true,
+    guiAdaptationEnabled: true,
+    cpMemoryWindow: 10,
+    voiceModeAvailable: true,
+  },
 };
 
 const MODE_CONDITION_CODE: Partial<Record<StudyModeId, string>> = {
@@ -62,9 +68,17 @@ const MODE_CONDITION_CODE: Partial<Record<StudyModeId, string>> = {
   'full-tuning-voice-off': 'C2',
   'basic-tuning-voice-on': 'C3',
   'full-tuning-voice-on': 'C4',
+  demo: 'DEMO',
 };
 
 export const DEFAULT_STUDY_MODE: StudyModeId = 'basic-tuning-voice-off';
+
+/** Public demo condition: no participant ID and nothing persisted anywhere. */
+export const DEMO_STUDY_MODE: StudyModeId = 'demo';
+
+export function isDemoStudyMode(value: string | null | undefined): boolean {
+  return value === DEMO_STUDY_MODE;
+}
 
 export function normalizeStudyMode(value: string | null | undefined): StudyModeId {
   if (value === 'gui-only') return 'baseline';

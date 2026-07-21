@@ -267,6 +267,53 @@ AGENT_RELAY_URL=ws://localhost:3000/agent/ws
 AGENT_SESSION_ID=default
 ```
 
+## 🌍 Public Demo Mode
+
+Demo mode runs the full TUNING experience as an open, anonymous demo — the same
+agent, GUI adaptation, and voice features as the study conditions, without any
+study bookkeeping.
+
+- **No participant ID.** Visitors are not assigned or asked for one.
+- **No logging of any kind.** Demo sessions write no interaction logs, no LLM
+  traces, no survey files, and no relay session logs.
+- **Bring your own OpenAI key.** Each visitor pastes their own key in the
+  browser. It is kept in `sessionStorage` for that browser session only (so it
+  is not re-entered on every page), sent to the backend when the session is
+  created, and held **in server memory only** for the lifetime of that session —
+  it is used for speech (STT/TTS) and passed to that session's agent process.
+  It is never written to disk, never logged, never returned in an API response,
+  and never sent over the relay. It is dropped when the session ends.
+
+### Running it
+
+Locally, start the usual dev stack:
+
+```bash
+npm run dev
+```
+
+Then enter demo mode either by visiting the `/demo` route (which turns demo mode
+on and redirects to the start screen) or by using the **Demo Mode** toggle on the
+start screen. In demo mode the participant-ID field is replaced by an OpenAI API
+key field, and the condition picker and survey steps are hidden.
+
+For a deployment, build and run the compose stack as usual (see
+`DEPLOYMENT.md`); the production image now ships the compiled tuning-agent, so
+the backend can spawn a per-session agent process for each visitor.
+
+### Required environment for a public deployment
+
+| Variable | Value | Why |
+|----------|-------|-----|
+| `OPENAI_API_KEY` | **unset / empty** | Visitors supply their own key. An operator key would be spendable by anyone through the unauthenticated speech-preview route. |
+| `AGENT_RELAY_LOG_ENABLED` | unset or `false` | Keeps relay session logs off. |
+| `DEMO_MAX_CONCURRENT_SESSIONS` | `10` (default, overridable) | Caps simultaneous demo sessions. Demo sessions never evict each other; creation beyond the cap is rejected with a clear error. |
+
+> **Note:** Real study and demo sessions are served by per-session agent
+> processes that the backend spawns itself. The standalone `agent` service in
+> `docker-compose.yml` is pinned to `AGENT_SESSION_ID=default` and does not
+> serve them.
+
 ## 🚢 Server Deployment (Podman)
 
 This repository now includes production deployment files matching your existing server pattern (`npm run dev` equivalent runtime):

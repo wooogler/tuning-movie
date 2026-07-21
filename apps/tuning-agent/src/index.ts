@@ -116,7 +116,13 @@ function parseBooleanEnv(value: string | undefined): boolean | null {
   return null;
 }
 
-const monitorEnabled = parseBooleanEnv(process.env.AGENT_MONITOR_ENABLED) ?? !isProduction;
+// The monitor keeps the full conversation and every LLM request/response in
+// memory and serves it unauthenticated, so it is an event log in all but name:
+// demo sessions ("no logging of any kind") never get one.
+const isDemoMode = studyMode === 'demo';
+const monitorEnabled = isDemoMode
+  ? false
+  : parseBooleanEnv(process.env.AGENT_MONITOR_ENABLED) ?? !isProduction;
 const memory = new AgentMemory();
 const relay = new RelayClient({ relayUrl, sessionId, agentName, requestTimeoutMs: 12000 });
 const studyLlmTraceLog = createStudyLlmTraceLogWriterFromEnv();
