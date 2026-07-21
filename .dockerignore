@@ -1,0 +1,42 @@
+# flyctl launch added from .gitignore
+**/node_modules
+**/dist
+**/.env
+**/*.log
+**/.DS_Store
+**/*.db
+
+# flyctl launch added from apps/backend/.gitignore
+apps/backend/**/node_modules
+apps/backend/**/dist
+apps/backend/**/.env
+apps/backend/**/*.log
+apps/backend/**/.DS_Store
+apps/backend/**/*.db
+
+# flyctl launch added from apps/frontend/.gitignore
+# Logs
+apps/frontend/**/logs
+apps/frontend/**/*.log
+apps/frontend/**/npm-debug.log*
+apps/frontend/**/yarn-debug.log*
+apps/frontend/**/yarn-error.log*
+apps/frontend/**/pnpm-debug.log*
+apps/frontend/**/lerna-debug.log*
+
+apps/frontend/**/node_modules
+apps/frontend/**/dist
+apps/frontend/**/dist-ssr
+apps/frontend/**/*.local
+
+# Editor directories and files
+apps/frontend/**/.vscode/*
+!apps/frontend/**/.vscode/extensions.json
+apps/frontend/**/.idea
+apps/frontend/**/.DS_Store
+apps/frontend/**/*.suo
+apps/frontend/**/*.ntvs*
+apps/frontend/**/*.njsproj
+apps/frontend/**/*.sln
+apps/frontend/**/*.sw?
+fly.toml

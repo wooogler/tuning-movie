@@ -1,0 +1,231 @@
+{
+  "scenarios": [
+    {
+      "id": "scn_t1_solo_weekend_3d_tutorial",
+      "title": "Tutorial: Solo Weekend 3D",
+      "background": "I am planning a simple solo movie outing for the weekend, but it only works if I can find a 3D showing of Cosmic Laughs with a centered seat at a theater that is still close enough.",
+      "story": "Today is Wednesday, March 11, 2026. I would like to see Cosmic Laughs alone this weekend, on Saturday, March 14 or Sunday, March 15 (Monday and Tuesday do not work). I prefer the closest theater, but anything within 10 miles is fine. It must be a 3D showing, and I need it to end before 7:00 PM. For 3D, the seat should be reasonably centered — not a side seat.",
+      "stepBriefs": {
+        "movie": "I need Cosmic Laughs specifically.",
+        "theater": "I prefer the closest theater, but any within 10 miles works.",
+        "date": "I can only go on Saturday, March 14 or Sunday, March 15.",
+        "time": "I need a 3D showing that ends before 7:00 PM.",
+        "seat": "I need a reasonably centered seat, not a side one."
+      },
+      "narratorPreferenceTypes": [
+        "cosmic-laughs-hard",
+        "weekend-only-hard",
+        "before-7pm-hard",
+        "closest-theater-soft",
+        "within-10-miles-hard",
+        "3d-required-hard",
+        "center-seat-hard"
+      ],
+      "templateDbFile": "scn_t1_solo_weekend_3d_tutorial.db",
+      "seedDataFile": "data/scn_t1_solo_weekend_3d_tutorial.json"
+    },
+    {
+      "id": "scn_s1_t1_child_playdate_easy",
+      "title": "S1-T1: Child Playdate Family Movie (Easy)",
+      "background": "I am trying to turn the end of my child's Sunday playdate into an easy movie outing for the kids, without a long wait before the movie starts.",
+      "story": "Today is Wednesday, March 11, 2026. My child has a playdate this Sunday, March 15, wrapping up around 11:00 AM, and I promised the kids a movie right after. The movie must be rated G or PG for elementary-school kids, and shorter is better so they can sit through it. I would start with the closer theater. I prefer the earliest showtime after 11:00 AM. We need three seats together, not in the very front rows.",
+      "stepBriefs": {
+        "movie": "I need a G or PG rated kid-friendly movie, preferably the shorter one.",
+        "theater": "I would start with the closer theater.",
+        "date": "I need it on Sunday, March 15.",
+        "time": "I need the earliest showtime after 11:00 AM.",
+        "seat": "I need three adjacent seats, not in the front rows."
+      },
+      "narratorPreferenceTypes": [
+        "kid-friendly-soft",
+        "under-2-hours-soft",
+        "age-rating-g-or-pg-hard",
+        "date-2026-03-15-hard",
+        "closest-theater-soft",
+        "earlier-showtime-soft",
+        "three-adjacent-seats-hard",
+        "avoid-front-rows-hard"
+      ],
+      "templateDbFile": "scn_s1_t1_child_playdate_easy.db",
+      "seedDataFile": "data/scn_s1_t1_child_playdate_easy.json"
+    },
+    {
+      "id": "scn_s1_t2_action_friend_hard",
+      "title": "S1-T2: Friends Action Night (Hard)",
+      "background": "I am planning a Saturday-night action movie with my friend, and I want it to feel like a real night out instead of something rushed into a bad slot with bad seats.",
+      "story": "Today is Wednesday, March 11, 2026. A friend and I want an action movie this Saturday night, March 14. The showing has to be IMAX — a standard screening would not feel like a real night out. I would start with the closest theater, but could switch for noticeably better amenities. I cannot arrive before 5:30 PM, and I need the movie to end by 10:30 PM. If a few action movies fit, I would go with the highest-rated one. We need two seats together, not in the front rows.",
+      "stepBriefs": {
+        "movie": "I need an action movie, preferably the highest-rated one.",
+        "theater": "I would start with the closer theater, but could switch for better timing.",
+        "date": "I can only do Saturday, March 14.",
+        "time": "I need an IMAX showing (not standard) that starts after 5:30 PM and ends by 10:30 PM.",
+        "seat": "I need two adjacent seats, not in the front rows."
+      },
+      "narratorPreferenceTypes": [
+        "action-hard",
+        "high-rating-soft",
+        "date-2026-03-14-hard",
+        "closest-theater-soft",
+        "arrive-after-530pm-hard",
+        "end-before-1030pm-hard",
+        "imax-required-hard",
+        "two-adjacent-seats-hard",
+        "avoid-front-rows-hard",
+        "amenity-better-theater-soft"
+      ],
+      "templateDbFile": "scn_s1_t2_action_friend_hard.db",
+      "seedDataFile": "data/scn_s1_t2_action_friend_hard.json"
+    },
+    {
+      "id": "scn_s2_t1_solo_sf_easy",
+      "title": "S2-T1: Solo Weekend SF Outing (Easy)",
+      "background": "I am planning a simple solo movie outing for the weekend, but it only works if the closest theater is actually showing the one sci-fi movie I want.",
+      "story": "Today is Wednesday, March 11, 2026. I need to see Starfall Circuit by myself this weekend — Saturday, March 14 or Sunday, March 15. I would start with the closest theater, but it needs free parking since I am driving. If more than one theater works, I prefer something moderately sized over a giant multiplex. The movie needs to end by 7:00 PM so it does not collide with my evening plans.",
+      "stepBriefs": {
+        "movie": "I need Starfall Circuit specifically.",
+        "theater": "I prefer the closest theater with free parking, and would rather avoid a huge multiplex.",
+        "date": "I need it this weekend, Saturday, March 14 or Sunday, March 15, and I would prefer Saturday.",
+        "time": "I need the showtime to end by 7:00 PM.",
+        "seat": "I am fine with any normal available seat."
+      },
+      "narratorPreferenceTypes": [
+        "starfall-circuit-hard",
+        "weekend-only-hard",
+        "closest-theater-soft",
+        "free-parking-theater-hard",
+        "moderate-screen-count-theater-soft",
+        "before-7pm-hard"
+      ],
+      "templateDbFile": "scn_s2_t1_solo_sf_easy.db",
+      "seedDataFile": "data/scn_s2_t1_solo_sf_easy.json"
+    },
+    {
+      "id": "scn_s2_t2_anniversary_hard",
+      "title": "S2-T2: Parents Anniversary Gift (Hard)",
+      "background": "I am trying to set up a movie outing for my parents anniversary weekend, and I want it to feel warm, comfortable, and a little special.",
+      "story": "Today is Wednesday, March 11, 2026. I am booking a movie for my parents' anniversary weekend. Saturday, March 14 is closer to the actual anniversary, but Sunday, March 15 is also available. It must be a romance movie, PG-13 or below, with a warm and familiar tone. On Saturday it needs to start after 4:00 PM and end by 9:00 PM. On Sunday it must be a true morning showing — my parents like to head home early, so a matinee or evening would not work. The seats must be premium — standard would feel too ordinary for an anniversary gift. I will start at the closest theater but can switch for better timing or seating.",
+      "stepBriefs": {
+        "movie": "I need a PG-13 or below romance movie, preferably warm and familiar in tone.",
+        "theater": "I would start with the closer theater, but can switch for better timing or seating.",
+        "date": "I prefer Saturday, March 14, but Sunday, March 15 also works.",
+        "time": "I need it to start after 4:00 PM and end by 9:00 PM on Saturday, and on Sunday I need a true morning show.",
+        "seat": "I need two adjacent premium seats — standard would feel too ordinary."
+      },
+      "narratorPreferenceTypes": [
+        "anniversary-romance-hard",
+        "classic-romantic-tone-soft",
+        "pg13-or-lower-hard",
+        "saturday-preferred-soft",
+        "weekend-only-hard",
+        "sunday-early-time-hard",
+        "closest-theater-soft",
+        "premium-seat-hard",
+        "two-adjacent-seats-hard",
+        "arrive-after-4pm-hard",
+        "before-9pm-hard"
+      ],
+      "templateDbFile": "scn_s2_t2_anniversary_hard.db",
+      "seedDataFile": "data/scn_s2_t2_anniversary_hard.json"
+    },
+    {
+      "id": "scn_s3_t1_couple_date_easy",
+      "title": "S3-T1: Couple Date Small Theater (Easy)",
+      "background": "I am planning a weekend mystery-movie date with my partner, and I want it to feel comfortable from the start, so the theater choice matters right away.",
+      "story": "Today is Wednesday, March 11, 2026. My partner and I want a weekend movie date — Saturday, March 14 or Sunday, March 15, preferring Saturday. It has to be a mystery, and I would pick the better-reviewed one. The theater must have reclining seats for comfort. On Saturday the movie needs to start after 7:00 PM and end by 10:00 PM. On Sunday it needs to end by 6:00 PM. A comfortable pair of seats together would be nice.",
+      "stepBriefs": {
+        "movie": "I need a mystery movie, preferably the higher-rated one.",
+        "theater": "I need a theater with reclining seats.",
+        "date": "I need it on Saturday, March 14 or Sunday, March 15, and I would prefer Saturday.",
+        "time": "I need it to start after 7:00 PM and end by 10:00 PM on Saturday, and on Sunday it needs to end by 6:00 PM.",
+        "seat": "I would like a comfortable pair of seats together."
+      },
+      "narratorPreferenceTypes": [
+        "mystery-hard",
+        "high-rating-soft",
+        "reclining-seat-theater-hard",
+        "weekend-only-hard",
+        "end-before-10pm-hard",
+        "couple-seat-soft"
+      ],
+      "templateDbFile": "scn_s3_t1_couple_date_easy.db",
+      "seedDataFile": "data/scn_s3_t1_couple_date_easy.json"
+    },
+    {
+      "id": "scn_s3_t2_sibling_bmovie_hard",
+      "title": "S3-T2: Sibling B-Movie Comedy Night (Hard)",
+      "background": "I am planning a movie night with my sibling, and I want it to feel weird and fun in exactly the right low-budget way, even if I have to try a couple of paths first.",
+      "story": "Today is Wednesday, March 11, 2026. My sibling and I can go on Friday, March 13 or Saturday, March 14 — Friday preferred. We want something weird and fun: a rough B-movie or cult comedy, the scrappier lower-rated pick over anything polished. It has to be at the single-screen theater — a giant multiplex would kill the vibe. The movie needs to start after 6:00 PM and end by 10:00 PM, and I prefer the earlier showtime. We need two seats together, not in the back rows.",
+      "stepBriefs": {
+        "movie": "I want a cult comedy, and I prefer the lower-rated one over the higher-rated one.",
+        "theater": "I need it at the single-screen theater.",
+        "date": "I can go on Friday, March 13 or Saturday, March 14, and I prefer Friday.",
+        "time": "I need it starting after 6:00 PM and ending by 10:00 PM, preferring the earlier showtime.",
+        "seat": "I need two adjacent seats, not in the back rows."
+      },
+      "narratorPreferenceTypes": [
+        "b-movie-comedy-soft",
+        "low-rating-soft",
+        "under-2-hours-soft",
+        "friday-preferred-soft",
+        "weekend-friday-saturday-hard",
+        "single-screen-theater-hard",
+        "earlier-showtime-soft",
+        "end-before-10pm-hard",
+        "two-adjacent-seats-hard",
+        "avoid-back-rows-hard"
+      ],
+      "templateDbFile": "scn_s3_t2_sibling_bmovie_hard.db",
+      "seedDataFile": "data/scn_s3_t2_sibling_bmovie_hard.json"
+    },
+    {
+      "id": "scn_s4_t1_family_amenity_easy",
+      "title": "S4-T1: Family Amenity Showtime Choice (Easy)",
+      "background": "I am planning a family movie outing for Sunday, and I want it to stay simple from the moment we arrive, so the theater setup matters right away.",
+      "story": "Today is Wednesday, March 11, 2026. I want to take the family to a movie on Sunday, March 15. The theater needs both free parking and a family lounge. I want a light family movie — the shorter one if there are options. The movie needs to end before 2:00 PM. We need four seats together. If the first showtime does not have a good block, I can try another at the same theater.",
+      "stepBriefs": {
+        "movie": "I need a light family movie, preferably the shorter one.",
+        "theater": "I need a theater with both free parking and a family lounge.",
+        "date": "I need it on Sunday, March 15.",
+        "time": "I need the earliest showtime that ends before 2:00 PM.",
+        "seat": "I need four adjacent seats."
+      },
+      "narratorPreferenceTypes": [
+        "family-lounge-theater-soft",
+        "under-2-hours-soft",
+        "date-2026-03-15-hard",
+        "end-before-2pm-hard",
+        "four-adjacent-seats-hard"
+      ],
+      "templateDbFile": "scn_s4_t1_family_amenity_easy.db",
+      "seedDataFile": "data/scn_s4_t1_family_amenity_easy.json"
+    },
+    {
+      "id": "scn_s4_t2_last_trip_hard",
+      "title": "S4-T2: Last Movie Before Trip (Hard)",
+      "background": "I am trying to fit in one last movie night with a friend before the trip, and I want it to feel easy and worth doing even if my first movie choice falls through.",
+      "story": "Today is Wednesday, March 11, 2026. I want one last movie night with a friend before a trip — it has to be Friday, March 13. The theater needs reserved seating and free parking. It has to be a comedy, preferably the more mature R-rated one. The showing must be standard format — no IMAX or 3D. It needs to start after 4:00 PM and end by 10:00 PM. If my first movie falls through, I can try another. We need two adjacent center seats.",
+      "stepBriefs": {
+        "movie": "I need a comedy, preferably the more mature R-rated one.",
+        "theater": "I need a theater with reserved seating and free parking.",
+        "date": "I need it on Friday, March 13.",
+        "time": "I need a standard-format showing (no IMAX/3D) starting after 4:00 PM and ending by 10:00 PM, preferring earlier.",
+        "seat": "I need two adjacent seats, and both must be center seats in the 3–6 range."
+      },
+      "narratorPreferenceTypes": [
+        "comedy-hard",
+        "r-rated-soft",
+        "standard-format-time-hard",
+        "avoid-expensive-format-time-hard",
+        "earlier-showtime-soft",
+        "date-2026-03-13-hard",
+        "reserved-seating-theater-hard",
+        "free-parking-theater-hard",
+        "two-adjacent-seats-hard",
+        "center-seat-hard",
+        "end-before-10pm-hard"
+      ],
+      "templateDbFile": "scn_s4_t2_last_trip_hard.db",
+      "seedDataFile": "data/scn_s4_t2_last_trip_hard.json"
+    }
+  ]
+}

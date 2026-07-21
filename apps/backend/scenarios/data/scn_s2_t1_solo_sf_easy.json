@@ -1,0 +1,2206 @@
+{
+  "movies": [
+    {
+      "id": "m1",
+      "title": "Starfall Circuit",
+      "genre": [
+        "Sci-Fi",
+        "Adventure"
+      ],
+      "duration": 104,
+      "rating": "4.1",
+      "ageRating": "PG-13",
+      "synopsis": "A rookie mechanic races through a neon orbital tournament to save her family repair shop.",
+      "releaseDate": "2025-10-03"
+    },
+    {
+      "id": "m2",
+      "title": "Quiet Current",
+      "genre": [
+        "Drama",
+        "Sci-Fi"
+      ],
+      "duration": 116,
+      "rating": "3.9",
+      "ageRating": "PG-13",
+      "synopsis": "A scientist drifts through an ocean colony after a communications blackout.",
+      "releaseDate": "2024-11-01"
+    },
+    {
+      "id": "m3",
+      "title": "Pebble Planet",
+      "genre": [
+        "Animation",
+        "Family"
+      ],
+      "duration": 95,
+      "rating": "4.0",
+      "ageRating": "PG",
+      "synopsis": "Tiny astronauts try to restart a sleepy moon carousel.",
+      "releaseDate": "2025-04-11"
+    },
+    {
+      "id": "m4",
+      "title": "Night Archive",
+      "genre": [
+        "Mystery"
+      ],
+      "duration": 102,
+      "rating": "3.8",
+      "ageRating": "PG-13",
+      "synopsis": "A museum intern discovers that every midnight exhibit tells a different lie.",
+      "releaseDate": "2023-08-18"
+    }
+  ],
+  "theaters": [
+    {
+      "id": "t1",
+      "name": "CloseUp 12",
+      "location": "Town Center",
+      "screenCount": 12,
+      "distanceMiles": 1.9,
+      "amenities": [
+        "Reserved Seating"
+      ]
+    },
+    {
+      "id": "t2",
+      "name": "Cedar Commons 6",
+      "location": "Cedar Commons",
+      "screenCount": 6,
+      "distanceMiles": 4.6,
+      "amenities": [
+        "Reserved Seating",
+        "Free Parking"
+      ]
+    },
+    {
+      "id": "t3",
+      "name": "Riverview 8",
+      "location": "Riverview Plaza",
+      "screenCount": 8,
+      "distanceMiles": 6.3,
+      "amenities": [
+        "Reserved Seating",
+        "Free Parking",
+        "Cafe"
+      ]
+    }
+  ],
+  "showings": [
+    {
+      "id": "s_m1_t3_20260418_1500",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-14",
+      "time": "15:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260418_1540",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 5,
+      "date": "2026-03-14",
+      "time": "15:40",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t2_20260418_1210",
+      "movieId": "m3",
+      "theaterId": "t2",
+      "screenNumber": 1,
+      "date": "2026-03-14",
+      "time": "12:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260420_1610_20260311_1610",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 4,
+      "date": "2026-03-11",
+      "time": "16:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260420_1610_20260313_1610",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 4,
+      "date": "2026-03-13",
+      "time": "16:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260418_1405_20260311_1405",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 3,
+      "date": "2026-03-11",
+      "time": "14:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260418_1405_20260312_1405",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 3,
+      "date": "2026-03-12",
+      "time": "14:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t2_20260418_1405_20260313_1405",
+      "movieId": "m1",
+      "theaterId": "t2",
+      "screenNumber": 3,
+      "date": "2026-03-13",
+      "time": "14:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t3_20260418_1500_20260311_1500",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-11",
+      "time": "15:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t3_20260418_1500_20260312_1500",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-12",
+      "time": "15:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t3_20260418_1500_20260313_1500",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-13",
+      "time": "15:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t3_20260418_1500_20260315_1500",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-15",
+      "time": "15:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260418_1540_20260311_1540",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 5,
+      "date": "2026-03-11",
+      "time": "15:40",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260418_1540_20260312_1540",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 5,
+      "date": "2026-03-12",
+      "time": "15:40",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260418_1540_20260313_1540",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 5,
+      "date": "2026-03-13",
+      "time": "15:40",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m2_t1_20260418_1540_20260315_1540",
+      "movieId": "m2",
+      "theaterId": "t1",
+      "screenNumber": 5,
+      "date": "2026-03-15",
+      "time": "15:40",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t2_20260418_1210_20260311_1210",
+      "movieId": "m3",
+      "theaterId": "t2",
+      "screenNumber": 1,
+      "date": "2026-03-11",
+      "time": "12:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t2_20260418_1210_20260312_1210",
+      "movieId": "m3",
+      "theaterId": "t2",
+      "screenNumber": 1,
+      "date": "2026-03-12",
+      "time": "12:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t2_20260418_1210_20260313_1210",
+      "movieId": "m3",
+      "theaterId": "t2",
+      "screenNumber": 1,
+      "date": "2026-03-13",
+      "time": "12:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m3_t2_20260418_1210_20260315_1210",
+      "movieId": "m3",
+      "theaterId": "t2",
+      "screenNumber": 1,
+      "date": "2026-03-15",
+      "time": "12:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260312_1410_standard",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 4,
+      "date": "2026-03-12",
+      "time": "14:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260420_1610",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 4,
+      "date": "2026-03-12",
+      "time": "16:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t1_20260312_1800_standard",
+      "movieId": "m1",
+      "theaterId": "t1",
+      "screenNumber": 4,
+      "date": "2026-03-12",
+      "time": "18:00",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t3_20260314_1220_standard",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-14",
+      "time": "17:20",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t3_20260314_1710_standard",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-14",
+      "time": "18:10",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t3_20260315_1220_standard",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-15",
+      "time": "17:20",
+      "format": "Standard",
+      "totalSeats": 48
+    },
+    {
+      "id": "s_m1_t3_20260315_1710_standard",
+      "movieId": "m1",
+      "theaterId": "t3",
+      "screenNumber": 2,
+      "date": "2026-03-15",
+      "time": "18:10",
+      "format": "Standard",
+      "totalSeats": 48
+    }
+  ],
+  "seatTemplate": {
+    "rows": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F"
+    ],
+    "seatsPerRow": 8,
+    "defaultType": "standard",
+    "defaultPrice": 14,
+    "defaultStatus": "available",
+    "rowRules": [
+      {
+        "row": "A",
+        "type": "standard",
+        "price": 14
+      },
+      {
+        "row": "B",
+        "type": "standard",
+        "price": 14
+      },
+      {
+        "row": "C",
+        "type": "standard",
+        "price": 14
+      },
+      {
+        "row": "D",
+        "type": "standard",
+        "price": 14
+      },
+      {
+        "row": "E",
+        "type": "premium",
+        "price": 19
+      },
+      {
+        "row": "F",
+        "type": "premium",
+        "price": 19
+      }
+    ]
+  },
+  "seatOverrides": [
+    {
+      "showingId": "s_m1_t3_20260418_1500",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500",
+      "row": "E",
+      "occupiedNumbers": [
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        3,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540",
+      "row": "E",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540",
+      "row": "F",
+      "occupiedNumbers": [
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        3,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260311_1610",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260311_1610",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260311_1610",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260311_1610",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260311_1610",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260311_1610",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        3,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260313_1610",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260313_1610",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260313_1610",
+      "row": "C",
+      "occupiedNumbers": [
+        2,
+        3,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260313_1610",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260313_1610",
+      "row": "E",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610_20260313_1610",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260311_1405",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260311_1405",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260311_1405",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260311_1405",
+      "row": "D",
+      "occupiedNumbers": [
+        2,
+        3,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260311_1405",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        4,
+        5,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260311_1405",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260312_1405",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260312_1405",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260312_1405",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260312_1405",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260312_1405",
+      "row": "E",
+      "occupiedNumbers": [
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260312_1405",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260313_1405",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260313_1405",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260313_1405",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260313_1405",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260313_1405",
+      "row": "E",
+      "occupiedNumbers": [
+        2,
+        4,
+        5,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t2_20260418_1405_20260313_1405",
+      "row": "F",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260311_1500",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260311_1500",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260311_1500",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260311_1500",
+      "row": "D",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260311_1500",
+      "row": "E",
+      "occupiedNumbers": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260311_1500",
+      "row": "F",
+      "occupiedNumbers": [
+        2,
+        4,
+        5,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260312_1500",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260312_1500",
+      "row": "B",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260312_1500",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260312_1500",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260312_1500",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260312_1500",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260313_1500",
+      "row": "A",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260313_1500",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260313_1500",
+      "row": "C",
+      "occupiedNumbers": [
+        2,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260313_1500",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        6
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260313_1500",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260313_1500",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260315_1500",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260315_1500",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260315_1500",
+      "row": "C",
+      "occupiedNumbers": [
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260315_1500",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260315_1500",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t3_20260418_1500_20260315_1500",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260311_1540",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260311_1540",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260311_1540",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260311_1540",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260311_1540",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260311_1540",
+      "row": "F",
+      "occupiedNumbers": [
+        3,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260312_1540",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260312_1540",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260312_1540",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260312_1540",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260312_1540",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260312_1540",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260313_1540",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260313_1540",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260313_1540",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260313_1540",
+      "row": "D",
+      "occupiedNumbers": [
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260313_1540",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260313_1540",
+      "row": "F",
+      "occupiedNumbers": [
+        2,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260315_1540",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260315_1540",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260315_1540",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260315_1540",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260315_1540",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m2_t1_20260418_1540_20260315_1540",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260311_1210",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260311_1210",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260311_1210",
+      "row": "C",
+      "occupiedNumbers": [
+        2,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260311_1210",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260311_1210",
+      "row": "E",
+      "occupiedNumbers": [
+        2,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260311_1210",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260312_1210",
+      "row": "A",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260312_1210",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260312_1210",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260312_1210",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260312_1210",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260312_1210",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260313_1210",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260313_1210",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260313_1210",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260313_1210",
+      "row": "D",
+      "occupiedNumbers": [
+        2,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260313_1210",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260313_1210",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260315_1210",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260315_1210",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260315_1210",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260315_1210",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260315_1210",
+      "row": "E",
+      "occupiedNumbers": [
+        2,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m3_t2_20260418_1210_20260315_1210",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        4,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1410_standard",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1410_standard",
+      "row": "B",
+      "occupiedNumbers": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1410_standard",
+      "row": "C",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        5,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1410_standard",
+      "row": "D",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1410_standard",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1410_standard",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610",
+      "row": "B",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610",
+      "row": "C",
+      "occupiedNumbers": [
+        2,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610",
+      "row": "D",
+      "occupiedNumbers": [
+        2,
+        3,
+        4,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260420_1610",
+      "row": "F",
+      "occupiedNumbers": [
+        3,
+        4,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1800_standard",
+      "row": "A",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1800_standard",
+      "row": "B",
+      "occupiedNumbers": [
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1800_standard",
+      "row": "C",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1800_standard",
+      "row": "D",
+      "occupiedNumbers": [
+        2,
+        3,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1800_standard",
+      "row": "E",
+      "occupiedNumbers": [
+        1,
+        3,
+        6,
+        7
+      ]
+    },
+    {
+      "showingId": "s_m1_t1_20260312_1800_standard",
+      "row": "F",
+      "occupiedNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    }
+  ],
+  "assertions": {
+    "expectedMovieIds": [
+      "m1",
+      "m2",
+      "m3",
+      "m4"
+    ],
+    "expectedTheaterIds": [
+      "t1",
+      "t2",
+      "t3"
+    ],
+    "theaterDistanceChecks": [
+      {
+        "theaterId": "t1",
+        "distanceMiles": 1.9
+      },
+      {
+        "theaterId": "t2",
+        "distanceMiles": 4.6
+      },
+      {
+        "theaterId": "t3",
+        "distanceMiles": 6.3
+      }
+    ],
+    "dateRules": [
+      {
+        "movieId": "m1",
+        "theaterId": "t1",
+        "expectedDates": [
+          "2026-03-11",
+          "2026-03-12",
+          "2026-03-13"
+        ]
+      },
+      {
+        "movieId": "m1",
+        "theaterId": "t2",
+        "expectedDates": [
+          "2026-03-11",
+          "2026-03-12",
+          "2026-03-13"
+        ]
+      },
+      {
+        "movieId": "m1",
+        "theaterId": "t3",
+        "expectedDates": [
+          "2026-03-11",
+          "2026-03-12",
+          "2026-03-13",
+          "2026-03-14",
+          "2026-03-15"
+        ]
+      },
+      {
+        "movieId": "m2",
+        "theaterId": "t1",
+        "expectedDates": [
+          "2026-03-11",
+          "2026-03-12",
+          "2026-03-13",
+          "2026-03-14",
+          "2026-03-15"
+        ]
+      },
+      {
+        "movieId": "m3",
+        "theaterId": "t2",
+        "expectedDates": [
+          "2026-03-11",
+          "2026-03-12",
+          "2026-03-13",
+          "2026-03-14",
+          "2026-03-15"
+        ]
+      }
+    ],
+    "timeRules": [
+      {
+        "movieId": "m1",
+        "theaterId": "t1",
+        "date": "2026-03-12",
+        "expectedShowings": [
+          {
+            "time": "14:10",
+            "format": "Standard"
+          },
+          {
+            "time": "16:00",
+            "format": "Standard"
+          },
+          {
+            "time": "18:00",
+            "format": "Standard"
+          }
+        ]
+      },
+      {
+        "movieId": "m1",
+        "theaterId": "t3",
+        "date": "2026-03-14",
+        "expectedShowings": [
+          {
+            "time": "15:00",
+            "format": "Standard"
+          },
+          {
+            "time": "17:20",
+            "format": "Standard"
+          },
+          {
+            "time": "18:10",
+            "format": "Standard"
+          }
+        ]
+      },
+      {
+        "movieId": "m1",
+        "theaterId": "t3",
+        "date": "2026-03-15",
+        "expectedShowings": [
+          {
+            "time": "15:00",
+            "format": "Standard"
+          },
+          {
+            "time": "17:20",
+            "format": "Standard"
+          },
+          {
+            "time": "18:10",
+            "format": "Standard"
+          }
+        ]
+      }
+    ],
+    "adjacencyRules": [],
+    "seatAvailabilityRules": []
+  }
+}

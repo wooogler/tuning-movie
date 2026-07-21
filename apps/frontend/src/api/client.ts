@@ -1,0 +1,351 @@
+import type { Movie, Theater, Showing, Seat, Booking, BookingRequest } from '../types';
+import type { StudyModeId } from '../pages/studyOptions';
+import {
+  getStoredStudySession,
+  type StudySessionState,
+  type StudyScenarioDetail,
+  type StudyScenarioSummary,
+} from '../study/sessionStorage';
+
+interface StudySessionInfo extends Omit<StudySessionState, 'studyToken'> {
+  scenario: StudyScenarioSummary & {
+    background: string;
+    story: string;
+    stepBriefs: NonNullable<StudyScenarioSummary['stepBriefs']>;
+    narratorPreferenceTypes: string[];
+    seatRows: string[];
+  };
+  background: string;
+  story: string;
+  stepBriefs: NonNullable<StudyScenarioSummary['stepBriefs']>;
+  narratorPreferenceTypes: string[];
+  status: 'active' | 'finished' | 'expired';
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+async function getErrorMessage(response: Response): Promise<string> {
+  const defaultMessage = `HTTP ${response.status}`;
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (contentType.includes('application/json')) {
+    const error = await response.json().catch(() => null);
+    if (error && typeof error === 'object') {
+      if (typeof (error as { error?: unknown }).error === 'string') {
+        return (error as { error: string }).error;
+      }
+      if (typeof (error as { message?: unknown }).message === 'string') {
+        return (error as { message: string }).message;
+      }
+    }
+    return defaultMessage;
+  }
+
+  const text = await response.text().catch(() => '');
+  if (!text) return defaultMessage;
+  return `${defaultMessage}: ${text.slice(0, 120)}`;
+}
+
+interface FetchApiOptions extends RequestInit {
+  includeStudyToken?: boolean;
+  studyToken?: string;
+}
+
+function getStudyRequestHeaders(studyToken?: string): Record<string, string> {
+  const session = getStoredStudySession();
+  const resolvedStudyToken = studyToken ?? session?.studyToken;
+  const headers: Record<string, string> = {};
+  if (resolvedStudyToken) {
+    headers['x-study-session-token'] = resolvedStudyToken;
+  }
+  return headers;
+}
+
+function parseContentDispositionFileName(value: string | null): string | null {
+  if (!value) return null;
+
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const basicMatch = value.match(/filename="?([^"]+)"?/i);
+  return basicMatch?.[1] ?? null;
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Failed to encode audio payload'));
+        return;
+      }
+
+      const separatorIndex = reader.result.indexOf(',');
+      resolve(separatorIndex >= 0 ? reader.result.slice(separatorIndex + 1) : reader.result);
+    };
+
+    reader.onerror = () => {
+      reject(new Error('Failed to read audio payload'));
+    };
+
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchApiResponse(endpoint: string, options?: FetchApiOptions): Promise<Response> {
+  const {
+    includeStudyToken = true,
+    studyToken: explicitStudyToken,
+    headers: optionHeaders,
+    ...requestInit
+  } = options ?? {};
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...getStudyRequestHeaders(includeStudyToken ? explicitStudyToken : undefined),
+    ...(optionHeaders as Record<string, string> | undefined),
+  };
+  if (!includeStudyToken) {
+    delete headers['x-study-session-token'];
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...requestInit,
+      headers,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network request failed';
+    throw new Error(
+      `Cannot reach backend API (${API_BASE_URL || 'same-origin'}). ${message}`
+    );
+  }
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response);
+    throw new Error(message);
+  }
+
+  return response;
+}
+
+async function fetchApi<T>(endpoint: string, options?: FetchApiOptions): Promise<T> {
+  const response = await fetchApiResponse(endpoint, options);
+  return response.json();
+}
+
+export interface StudyLogEventInput {
+  type: string;
+  payload: unknown;
+  clientTimestamp?: string;
+}
+
+export interface PerTrialSurveySubmissionInput {
+  participantId: string;
+  studyMode: StudyModeId;
+  conditionLabel: string;
+  scenarioId?: string;
+  setLabel?: string;
+  responses: Record<string, number>;
+}
+
+export interface PostStudySurveySubmissionInput {
+  participantId: string;
+  rankings: Record<string, number>;
+  rankingReason: string;
+  responses: Record<string, number>;
+}
+
+export const api = {
+  // Study scenarios/sessions
+  getStudyScenarios: () =>
+    fetchApi<{
+      scenarios: StudyScenarioDetail[];
+    }>('/study/scenarios', {
+      includeStudyToken: false,
+    }),
+  createStudySession: (data: {
+    scenarioId: string;
+    studyMode: StudyModeId;
+    participantId?: string;
+    loggingParticipantId?: string;
+  }) =>
+    fetchApi<StudySessionState>('/study/sessions', {
+      method: 'POST',
+      includeStudyToken: false,
+      body: JSON.stringify(data),
+    }),
+  getCurrentStudySession: () => fetchApi<StudySessionInfo>('/study/sessions/me'),
+  finishStudySession: () =>
+    fetchApi<{ sessionId: string; status: 'finished' | 'expired'; finishedAt: string | null }>(
+      '/study/sessions/finish',
+      {
+        method: 'POST',
+      }
+    ),
+  logStudyEvents: (events: StudyLogEventInput[], studyToken?: string) =>
+    fetchApi<{ enabled: boolean; logged: number; interactionLogFile: string | null }>(
+      '/study/logs/events',
+      {
+        method: 'POST',
+        studyToken,
+        keepalive: true,
+        body: JSON.stringify({ events }),
+      }
+    ),
+  submitPerTrialSurvey: (data: PerTrialSurveySubmissionInput) =>
+    fetchApi<{ ok: true; submissionId: string; submittedAt: string }>(
+      '/study/surveys/per-trial',
+      {
+        method: 'POST',
+        includeStudyToken: false,
+        body: JSON.stringify({
+          ...data,
+          submittedAt: new Date().toISOString(),
+        }),
+      }
+    ),
+  submitPostStudySurvey: (data: PostStudySurveySubmissionInput) =>
+    fetchApi<{ ok: true; submissionId: string; submittedAt: string }>(
+      '/study/surveys/post-study',
+      {
+        method: 'POST',
+        includeStudyToken: false,
+        body: JSON.stringify({
+          ...data,
+          submittedAt: new Date().toISOString(),
+        }),
+      }
+    ),
+  downloadStudyLog: async (studyToken?: string) => {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/study/logs/export`, {
+        method: 'GET',
+        headers: getStudyRequestHeaders(studyToken),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Network request failed';
+      throw new Error(
+        `Cannot reach backend API (${API_BASE_URL || 'same-origin'}). ${message}`
+      );
+    }
+
+    if (!response.ok) {
+      const message = await getErrorMessage(response);
+      throw new Error(message);
+    }
+
+    return {
+      blob: await response.blob(),
+      fileName: parseContentDispositionFileName(response.headers.get('content-disposition')),
+    };
+  },
+  downloadStudyLlmTrace: async (studyToken?: string) => {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/study/logs/llm-trace/export`, {
+        method: 'GET',
+        headers: getStudyRequestHeaders(studyToken),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Network request failed';
+      throw new Error(
+        `Cannot reach backend API (${API_BASE_URL || 'same-origin'}). ${message}`
+      );
+    }
+
+    if (!response.ok) {
+      const message = await getErrorMessage(response);
+      throw new Error(message);
+    }
+
+    return {
+      blob: await response.blob(),
+      fileName: parseContentDispositionFileName(response.headers.get('content-disposition')),
+    };
+  },
+
+  // Movies
+  getMovies: () => fetchApi<{ movies: Movie[] }>('/movies'),
+  getMovie: (id: string) => fetchApi<{ movie: Movie }>(`/movies/${id}`),
+
+  // Theaters
+  getTheaters: () => fetchApi<{ theaters: Theater[] }>('/theaters'),
+  getTheatersByMovie: (movieId: string) =>
+    fetchApi<{ theaters: Theater[] }>(`/theaters/movie/${movieId}`),
+  getTheater: (id: string) => fetchApi<{ theater: Theater }>(`/theaters/${id}`),
+
+  // Showings
+  getShowings: (params: { movieId?: string; theaterId?: string; date?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params.movieId) searchParams.set('movieId', params.movieId);
+    if (params.theaterId) searchParams.set('theaterId', params.theaterId);
+    if (params.date) searchParams.set('date', params.date);
+    return fetchApi<{ showings: Showing[] }>(`/showings?${searchParams}`);
+  },
+  getDates: (movieId: string, theaterId: string) =>
+    fetchApi<{ dates: string[] }>(`/showings/dates?movieId=${movieId}&theaterId=${theaterId}`),
+  getTimes: (movieId: string, theaterId: string, date: string) =>
+    fetchApi<{ showings: Showing[] }>(
+      `/showings/times?movieId=${movieId}&theaterId=${theaterId}&date=${date}`
+    ),
+  getShowing: (id: string) => fetchApi<{ showing: Showing }>(`/showings/${id}`),
+
+  // Seats
+  getSeats: (showingId: string) => fetchApi<{ seats: Seat[] }>(`/seats/${showingId}`),
+
+  // Bookings
+  createBooking: (data: BookingRequest) =>
+    fetchApi<{ booking: Booking }>('/bookings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getBooking: (id: string) => fetchApi<{ booking: Booking }>(`/bookings/${id}`),
+  cancelBooking: (id: string) =>
+    fetchApi<{ booking: Booking }>(`/bookings/${id}`, { method: 'DELETE' }),
+
+  // Agent config
+  getGuiAdaptationConfig: () => fetchApi<{ enabled: boolean }>('/agent/config/gui-adaptation'),
+  setGuiAdaptationConfig: (enabled: boolean) =>
+    fetchApi<{ enabled: boolean }>('/agent/config/gui-adaptation', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
+  transcribeSpeech: async (audio: Blob, language: 'en', prompt?: string) => {
+    const audioBase64 = await blobToBase64(audio);
+    return fetchApi<{ text: string; language: 'en' }>('/speech/transcribe', {
+      method: 'POST',
+      body: JSON.stringify({
+        audioBase64,
+        mimeType: audio.type || 'audio/webm',
+        language,
+        ...(prompt?.trim() ? { prompt: prompt.trim() } : {}),
+      }),
+    });
+  },
+  synthesizeSpeech: async (text: string, signal?: AbortSignal) => {
+    const response = await fetchApiResponse('/speech/synthesize', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+      signal,
+    });
+    return response.blob();
+  },
+  synthesizeSpeechPreview: async (text: string, signal?: AbortSignal) => {
+    const response = await fetchApiResponse('/speech/synthesize-preview', {
+      method: 'POST',
+      includeStudyToken: false,
+      body: JSON.stringify({ text }),
+      signal,
+    });
+    return response.blob();
+  },
+};

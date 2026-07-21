@@ -1,0 +1,27 @@
+node_modules/
+dist/
+__pycache__/
+.DS_Store
+
+# Secrets & env — only .env.example is ever committed
+.env*
+!.env.example
+
+# Logs & user-study data (participant data lives here) — never commit
+*.log
+logs/
+apps/backend/logs/
+
+# Backend runtime state (study DBs, survey responses, session stores)
+apps/backend/.runtime/
+*.db
+
+# Local backups & archives
+backups/
+*.tar.gz
+*.bundle
+
+# TLS certificates & ACME state — private keys live here
+deploy/ssl/*
+!deploy/ssl/README.md
+deploy/certbot/

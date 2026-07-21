@@ -1,0 +1,158 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../api/client';
+import type { StudyModeId } from './studyOptions';
+import { ScenarioBriefing } from '../components/scenario/ScenarioBriefing';
+import type { StudyScenarioDetail, StudySessionState } from '../study/sessionStorage';
+import { formatScenarioTitle } from '../utils/displayFormats';
+import { queuePendingStudyLogEvent } from '../study/pendingInteractionEvents';
+
+interface ScenarioReviewPageProps {
+  studyMode: StudyModeId;
+  selectedScenarioId: string;
+  loggingParticipantId: string;
+  onSessionCreated: (session: StudySessionState) => void;
+}
+
+export function ScenarioReviewPage({
+  studyMode,
+  selectedScenarioId,
+  loggingParticipantId,
+  onSessionCreated,
+}: ScenarioReviewPageProps) {
+  const navigate = useNavigate();
+  const [loadingScenarios, setLoadingScenarios] = useState(true);
+  const [startingSession, setStartingSession] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scenarios, setScenarios] = useState<StudyScenarioDetail[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoadingScenarios(true);
+    setError(null);
+
+    api.getStudyScenarios()
+      .then((result) => {
+        if (!mounted) return;
+        setScenarios(result.scenarios);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : 'Failed to load scenario details');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoadingScenarios(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    queuePendingStudyLogEvent({
+      type: 'user.gui_action',
+      clientTimestamp: new Date().toISOString(),
+      payload: {
+        action: 'openScenario',
+        source: 'participant',
+        location: 'scenario-review',
+        scenarioId: selectedScenarioId,
+        studyMode,
+      },
+    });
+  }, [selectedScenarioId, studyMode]);
+
+  const selectedScenario =
+    scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? null;
+
+  const handleStartBooking = async () => {
+    if (!selectedScenario || startingSession) return;
+
+    setStartingSession(true);
+    setError(null);
+    try {
+      const session = await api.createStudySession({
+        scenarioId: selectedScenario.id,
+        studyMode,
+        loggingParticipantId: loggingParticipantId.trim() || undefined,
+      });
+      onSessionCreated(session);
+      navigate('/booking');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start task session');
+    } finally {
+      setStartingSession(false);
+    }
+  };
+
+  return (
+    <main className="h-full overflow-y-auto bg-dark px-4 py-8">
+      <div className="mx-auto w-full max-w-5xl rounded-2xl border border-dark-border bg-dark-light p-6 sm:p-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-fg-strong">Scenario Review</h1>
+            <p className="mt-1 text-sm text-fg-muted">
+              Review the story and preferences before entering the booking task.
+            </p>
+          </div>
+        </div>
+
+        {loadingScenarios ? (
+          <div className="rounded-xl border border-dark-border bg-dark p-4 text-sm text-fg-muted">
+            Loading scenario details...
+          </div>
+        ) : selectedScenario ? (
+          <ScenarioBriefing
+            title={formatScenarioTitle(selectedScenario.title)}
+            background={selectedScenario.background}
+            story={selectedScenario.story}
+            stepBriefs={selectedScenario.stepBriefs}
+            narratorPreferenceTypes={selectedScenario.narratorPreferenceTypes}
+            seatRows={selectedScenario.seatRows}
+          />
+        ) : (
+          <div className="rounded-xl border border-primary/40 bg-primary/10 p-4 text-sm text-primary">
+            Selected scenario was not found.
+          </div>
+        )}
+
+        <div className="mt-4 rounded-xl border border-dark-border bg-dark px-4 py-3 text-sm">
+          <span className="font-medium text-fg-strong">PID logging:</span>{' '}
+          {loggingParticipantId.trim() ? (
+            <span className="text-fg-muted">
+              enabled for <span className="text-fg-strong">{loggingParticipantId.trim()}</span>
+            </span>
+          ) : (
+            <span className="text-fg-muted">enabled with timestamp-only filename</span>
+          )}
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-8 flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="rounded-lg border border-dark-border px-4 py-2 text-sm font-medium text-fg transition-colors hover:border-primary hover:text-fg-strong"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={handleStartBooking}
+            disabled={loadingScenarios || startingSession || !selectedScenario}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {startingSession ? 'Starting...' : 'Start Booking'}
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}

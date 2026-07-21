@@ -1,0 +1,448 @@
+/**
+ * Modifier Functions
+ *
+ * Deterministic 함수들 - 같은 입력 → 같은 출력
+ * UISpec의 state와 modification을 업데이트하는 pure functions
+ */
+
+import type {
+  UISpec,
+  DataItem,
+  DisplayItem,
+  FilterState,
+  SortState,
+  HighlightState,
+  AugmentState,
+} from './types';
+import { parseDurationToMinutes, parseTimeToMinutes } from '../utils/displayFormats';
+
+function normalizeFilters(filters: FilterState | FilterState[] | undefined): FilterState[] {
+  if (!filters) return [];
+  return Array.isArray(filters) ? filters : [filters];
+}
+
+function getItemFieldValue<T extends DataItem>(
+  item: T,
+  field: string,
+  valueField: string
+): unknown {
+  if (field === 'value') {
+    return item[valueField];
+  }
+  return item[field];
+}
+
+function getComparableValue(field: string, rawValue: unknown, valueField: string): unknown {
+  const effectiveField = field === 'value' ? valueField : field;
+
+  if (effectiveField === 'rating') {
+    const parsed = typeof rawValue === 'number' ? rawValue : Number.parseFloat(String(rawValue));
+    return Number.isFinite(parsed) ? parsed : rawValue;
+  }
+
+  if (effectiveField === 'duration') {
+    return parseDurationToMinutes(rawValue) ?? rawValue;
+  }
+
+  if (effectiveField === 'time') {
+    return parseTimeToMinutes(rawValue) ?? rawValue;
+  }
+
+  return rawValue;
+}
+
+function areFilterValuesEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function hasSameFilter(existing: FilterState[], next: FilterState): boolean {
+  return existing.some(
+    (filter) =>
+      filter.field === next.field &&
+      filter.operator === next.operator &&
+      areFilterValuesEqual(filter.value, next.value)
+  );
+}
+
+// =============================================================================
+// Visible Items Computation
+// =============================================================================
+
+/**
+ * items + modification → visibleItems 계산
+ */
+export function computeDisplayItems<T extends DataItem>(
+  spec: UISpec<T>,
+  options?: { ignoreFilter?: boolean }
+): DisplayItem[] {
+  const { items, modification, display } = spec;
+  const valueField = display.valueField;
+  const ignoreFilter = options?.ignoreFilter ?? false;
+
+  // 1. Filter 적용
+  let filteredItems = [...items];
+  if (!ignoreFilter) {
+    const filters = normalizeFilters(modification.filter);
+    for (const filter of filters) {
+      filteredItems = applyFilterLogic(filteredItems, filter, valueField);
+    }
+  }
+
+  // 2. Sort 적용
+  if (modification.sort) {
+    filteredItems = applySortLogic(filteredItems, modification.sort, valueField);
+  }
+
+  // 3. Augment 맵 생성
+  const augmentMap = new Map<string, AugmentState>();
+  if (modification.augment) {
+    modification.augment.forEach((a) => augmentMap.set(a.itemId, a));
+  }
+
+  // 4. DisplayItem 생성
+  return filteredItems.map((item) => {
+    let value = String(item[valueField] ?? item.id);
+
+    // Augment 적용 - value 직접 교체
+    const augment = augmentMap.get(item.id);
+    if (augment) {
+      value = augment.value;
+    }
+
+    const displayItem: DisplayItem = { id: item.id, value };
+
+    // Disabled 상태
+    if ('status' in item && typeof item.status === 'string' && item.status !== 'available') {
+      displayItem.isDisabled = true;
+    }
+    if ('available' in item && item.available === false) {
+      displayItem.isDisabled = true;
+    }
+
+    return displayItem;
+  });
+}
+
+export function computeVisibleItems<T extends DataItem>(
+  spec: UISpec<T>
+): DisplayItem[] {
+  return computeDisplayItems(spec);
+}
+
+/**
+ * ID → DisplayItem 맵 생성 헬퍼
+ */
+function createDisplayItemMap<T extends DataItem>(
+  spec: UISpec<T>,
+  visibleItems: DisplayItem[]
+): Map<string, DisplayItem> {
+  const map = new Map<string, DisplayItem>();
+  const valueField = spec.display.valueField;
+
+  visibleItems.forEach((item) => map.set(item.id, item));
+
+  // visibleItems에 없는 아이템은 원본에서 생성
+  spec.items.forEach((item) => {
+    if (!map.has(item.id)) {
+      map.set(item.id, {
+        id: item.id,
+        value: String(item[valueField] ?? item.id),
+      });
+    }
+  });
+
+  return map;
+}
+
+function findSelectableDisplayItem<T extends DataItem>(
+  spec: UISpec<T>,
+  itemId: string
+): DisplayItem | undefined {
+  const item = spec.visibleItems.find((visible) => visible.id === itemId);
+  if (!item || item.isDisabled) return undefined;
+  return item;
+}
+
+/**
+ * modification.highlight → state.highlighted 동기화
+ */
+function syncHighlighted<T extends DataItem>(
+  spec: UISpec<T>,
+  visibleItems: DisplayItem[]
+): DisplayItem[] | undefined {
+  const highlightIds = spec.modification.highlight?.itemIds;
+  if (!highlightIds || highlightIds.length === 0) return undefined;
+
+  const map = createDisplayItemMap(spec, visibleItems);
+  return highlightIds
+    .map((id) => map.get(id))
+    .filter((item): item is DisplayItem => item !== undefined);
+}
+
+/**
+ * Spec 업데이트 후 visibleItems 재계산 및 highlighted 동기화
+ */
+export function refreshSpec<T extends DataItem>(spec: UISpec<T>): UISpec<T> {
+  const visibleItems = computeVisibleItems(spec);
+  const highlighted = syncHighlighted(spec, visibleItems);
+
+  return {
+    ...spec,
+    visibleItems,
+    state: {
+      ...spec.state,
+      highlighted,
+    },
+  };
+}
+
+/**
+ * @deprecated Use refreshSpec instead
+ */
+export function refreshVisibleItems<T extends DataItem>(
+  spec: UISpec<T>
+): UISpec<T> {
+  return refreshSpec(spec);
+}
+
+// =============================================================================
+// Selection Functions
+// =============================================================================
+
+/**
+ * 단일 아이템 선택
+ */
+export function selectItem<T extends DataItem>(
+  spec: UISpec<T>,
+  itemId: string
+): UISpec<T> {
+  const displayItem = findSelectableDisplayItem(spec, itemId);
+  if (!displayItem) return spec;
+
+  return {
+    ...spec,
+    state: {
+      ...spec.state,
+      selected: displayItem,
+    },
+  };
+}
+
+/**
+ * 다중 아이템 선택
+ */
+export function selectItems<T extends DataItem>(
+  spec: UISpec<T>,
+  itemIds: string[]
+): UISpec<T> {
+  const selectedList = itemIds
+    .map((id) => findSelectableDisplayItem(spec, id))
+    .filter((item): item is DisplayItem => item !== undefined);
+
+  return {
+    ...spec,
+    state: {
+      ...spec.state,
+      selectedList,
+    },
+  };
+}
+
+/**
+ * 아이템 선택 토글 (다중 선택용)
+ */
+export function toggleItem<T extends DataItem>(
+  spec: UISpec<T>,
+  itemId: string
+): UISpec<T> {
+  const currentList = spec.state.selectedList ?? [];
+  const currentIds = currentList.map((item) => item.id);
+
+  const newIds = currentIds.includes(itemId)
+    ? currentIds.filter((id) => id !== itemId)
+    : [...currentIds, itemId];
+
+  return selectItems(spec, newIds);
+}
+
+// =============================================================================
+// Modification Functions
+// =============================================================================
+
+/**
+ * Filter 적용
+ */
+export function applyFilter<T extends DataItem>(
+  spec: UISpec<T>,
+  params: FilterState
+): UISpec<T> {
+  const existingFilters = normalizeFilters(spec.modification.filter);
+  const nextFilters = hasSameFilter(existingFilters, params)
+    ? existingFilters
+    : [...existingFilters, params];
+  const newSpec = {
+    ...spec,
+    modification: { ...spec.modification, filter: nextFilters },
+  };
+  return refreshSpec(newSpec);
+}
+
+/**
+ * Sort 적용
+ */
+export function applySort<T extends DataItem>(
+  spec: UISpec<T>,
+  params: SortState
+): UISpec<T> {
+  const newSpec = {
+    ...spec,
+    modification: { ...spec.modification, sort: params },
+  };
+  return refreshSpec(newSpec);
+}
+
+/**
+ * Highlight 적용
+ */
+export function applyHighlight<T extends DataItem>(
+  spec: UISpec<T>,
+  params: HighlightState
+): UISpec<T> {
+  const highlight: HighlightState = { itemIds: params.itemIds };
+  const newSpec = {
+    ...spec,
+    modification: { ...spec.modification, highlight },
+  };
+  return refreshSpec(newSpec);
+}
+
+/**
+ * Augment 적용
+ */
+export function applyAugment<T extends DataItem>(
+  spec: UISpec<T>,
+  params: AugmentState[],
+  replace = false
+): UISpec<T> {
+  const existingAugment = spec.modification.augment ?? [];
+  const newAugment = replace ? params : [...existingAugment, ...params];
+
+  const newSpec = {
+    ...spec,
+    modification: { ...spec.modification, augment: newAugment },
+  };
+  return refreshSpec(newSpec);
+}
+
+/**
+ * Modification 초기화
+ */
+export function clearModification<T extends DataItem>(
+  spec: UISpec<T>,
+  type?: 'filter' | 'sort' | 'highlight' | 'augment' | 'all'
+): UISpec<T> {
+  let newSpec: UISpec<T>;
+
+  if (type === 'all' || !type) {
+    newSpec = { ...spec, modification: {} };
+  } else {
+    const newModification = { ...spec.modification };
+    delete newModification[type];
+    newSpec = { ...spec, modification: newModification };
+  }
+
+  return refreshSpec(newSpec);
+}
+
+// =============================================================================
+// Internal Logic Functions
+// =============================================================================
+
+function applyFilterLogic<T extends DataItem>(
+  items: T[],
+  filter: FilterState,
+  valueField: string
+): T[] {
+  const { field, operator, value } = filter;
+
+  return items.filter((item) => {
+    const itemValue = getItemFieldValue(item, field, valueField);
+    const comparableItemValue = getComparableValue(field, itemValue, valueField);
+    const comparableFilterValue = getComparableValue(field, value, valueField);
+
+    switch (operator) {
+      case 'eq':
+        return itemValue === value;
+      case 'neq':
+        return itemValue !== value;
+      case 'contains':
+        if (Array.isArray(itemValue)) {
+          return itemValue.includes(value);
+        }
+        return String(itemValue).includes(String(value));
+      case 'gt':
+        if (typeof comparableItemValue === 'number' && typeof comparableFilterValue === 'number') {
+          return comparableItemValue > comparableFilterValue;
+        }
+        return String(comparableItemValue).localeCompare(String(comparableFilterValue)) > 0;
+      case 'lt':
+        if (typeof comparableItemValue === 'number' && typeof comparableFilterValue === 'number') {
+          return comparableItemValue < comparableFilterValue;
+        }
+        return String(comparableItemValue).localeCompare(String(comparableFilterValue)) < 0;
+      case 'gte':
+        if (typeof comparableItemValue === 'number' && typeof comparableFilterValue === 'number') {
+          return comparableItemValue >= comparableFilterValue;
+        }
+        return String(comparableItemValue).localeCompare(String(comparableFilterValue)) >= 0;
+      case 'lte':
+        if (typeof comparableItemValue === 'number' && typeof comparableFilterValue === 'number') {
+          return comparableItemValue <= comparableFilterValue;
+        }
+        return String(comparableItemValue).localeCompare(String(comparableFilterValue)) <= 0;
+      case 'in':
+        return Array.isArray(value) && value.includes(itemValue);
+      default:
+        return true;
+    }
+  });
+}
+
+function applySortLogic<T extends DataItem>(
+  items: T[],
+  sort: SortState,
+  valueField: string
+): T[] {
+  const { field, order } = sort;
+
+  return [...items].sort((a, b) => {
+    const aVal = getItemFieldValue(a, field, valueField);
+    const bVal = getItemFieldValue(b, field, valueField);
+    const comparableAVal = getComparableValue(field, aVal, valueField);
+    const comparableBVal = getComparableValue(field, bVal, valueField);
+
+    let comparison: number;
+    if (typeof comparableAVal === 'number' && typeof comparableBVal === 'number') {
+      comparison = comparableAVal - comparableBVal;
+    } else if (typeof comparableAVal === 'string' && typeof comparableBVal === 'string') {
+      comparison = comparableAVal.localeCompare(comparableBVal);
+    } else {
+      comparison = String(comparableAVal).localeCompare(String(comparableBVal));
+    }
+
+    return order === 'asc' ? comparison : -comparison;
+  });
+}
+
+// =============================================================================
+// Legacy Support
+// =============================================================================
+
+/**
+ * @deprecated Use computeVisibleItems instead
+ */
+export function getVisibleItems<T extends DataItem>(
+  spec: UISpec<T>
+): DisplayItem[] {
+  return computeVisibleItems(spec);
+}

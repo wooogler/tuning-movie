@@ -1,0 +1,1026 @@
+{
+  "version": 1,
+  "generated_from": "pilot gold logs",
+  "workflows": [
+    {
+      "scenario_id": "scn_s1_t1_child_playdate_easy",
+      "scenario_title": "S1-T1: Child Playdate Family Movie (Easy)",
+      "condition_label": "C1",
+      "set_label": "Set A",
+      "difficulty": "easy",
+      "source_log_file": "logs/interaction/T01-C1-S1-easy-20260321-161704.jsonl",
+      "stage_sequence": [
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "seat",
+        "confirm"
+      ],
+      "final_workflow_ids": {
+        "dateId": "2026-03-15",
+        "movieId": "m1",
+        "seatIds": [
+          "s_m1_t1_20260412_1310-D4",
+          "s_m1_t1_20260412_1310-D5",
+          "s_m1_t1_20260412_1310-D6"
+        ],
+        "showingId": "s_m1_t1_20260412_1310",
+        "theaterId": "t1"
+      },
+      "expected_stage_visits": 8,
+      "expected_backtrack_count": 1,
+      "step_choices": [
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m1"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-15"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260412_1310_20260315_1140_standard"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260412_1310"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "confirm",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260412_1310-D4",
+            "s_m1_t1_20260412_1310-D5",
+            "s_m1_t1_20260412_1310-D6"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "scn_s1_t2_action_friend_hard",
+      "scenario_title": "S1-T2: Friends Action Night (Hard)",
+      "condition_label": "C1",
+      "set_label": "Set A",
+      "difficulty": "hard",
+      "source_log_file": "logs/interaction/T01-C1-S1-hard-20260321-161204.jsonl",
+      "stage_sequence": [
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "date",
+        "theater",
+        "date",
+        "time",
+        "date",
+        "theater",
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "confirm"
+      ],
+      "final_workflow_ids": {
+        "dateId": "2026-03-14",
+        "movieId": "m2",
+        "seatIds": [
+          "s_m2_t1_20260314_1840_standard-D4",
+          "s_m2_t1_20260314_1840_standard-D5"
+        ],
+        "showingId": "s_m2_t1_20260314_1840_standard",
+        "theaterId": "t1"
+      },
+      "expected_stage_visits": 18,
+      "expected_backtrack_count": 2,
+      "step_choices": [
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m1"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-14"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260418_1810"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "theater",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t2"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-14"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "theater",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "movie",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m2"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-14"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260314_1840_standard"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "confirm",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260314_1840_standard-D4",
+            "s_m2_t1_20260314_1840_standard-D5"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "scn_s2_t1_solo_sf_easy",
+      "scenario_title": "S2-T1: Solo Weekend SF Outing (Easy)",
+      "condition_label": "C2",
+      "set_label": "Set B",
+      "difficulty": "easy",
+      "source_log_file": "logs/interaction/T01-C2-S2-easy-20260321-162918.jsonl",
+      "stage_sequence": [
+        "movie",
+        "theater",
+        "date",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "confirm"
+      ],
+      "final_workflow_ids": {
+        "dateId": "2026-03-14",
+        "movieId": "m1",
+        "seatIds": [
+          "s_m1_t3_20260418_1500-D3"
+        ],
+        "showingId": "s_m1_t3_20260418_1500",
+        "theaterId": "t3"
+      },
+      "expected_stage_visits": 8,
+      "expected_backtrack_count": 1,
+      "step_choices": [
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m1"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t2"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "theater",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t3"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-14"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t3_20260418_1500"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "confirm",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t3_20260418_1500-D3"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "scn_s2_t2_anniversary_hard",
+      "scenario_title": "S2-T2: Parents Anniversary Gift (Hard)",
+      "condition_label": "C2",
+      "set_label": "Set B",
+      "difficulty": "hard",
+      "source_log_file": "logs/interaction/T01-C2-S2-hard-20260321-192541.jsonl",
+      "stage_sequence": [
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "date",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "date",
+        "time",
+        "seat",
+        "confirm"
+      ],
+      "final_workflow_ids": {
+        "dateId": "2026-03-15",
+        "movieId": "m1",
+        "seatIds": [
+          "s_m1_t2_20260315_1000_standard-E4",
+          "s_m1_t2_20260315_1000_standard-E5"
+        ],
+        "showingId": "s_m1_t2_20260315_1000_standard",
+        "theaterId": "t2"
+      },
+      "expected_stage_visits": 18,
+      "expected_backtrack_count": 3,
+      "step_choices": [
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m1"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-14"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-15"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260315_1000_standard"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "theater",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t2"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-14"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t2_20260314_1700_standard"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-15"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t2_20260315_1000_standard"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "confirm",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t2_20260315_1000_standard-E4",
+            "s_m1_t2_20260315_1000_standard-E5"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "scn_s3_t1_couple_date_easy",
+      "scenario_title": "S3-T1: Couple Date Small Theater (Easy)",
+      "condition_label": "C4",
+      "set_label": "Set C",
+      "difficulty": "easy",
+      "source_log_file": "logs/interaction/T01-C4-S3-easy-20260321-163659.jsonl",
+      "stage_sequence": [
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "date",
+        "time",
+        "seat",
+        "confirm"
+      ],
+      "final_workflow_ids": {
+        "dateId": "2026-03-15",
+        "movieId": "m1",
+        "seatIds": [
+          "s_m1_t1_20260510_1540-E4",
+          "s_m1_t1_20260510_1540-E5"
+        ],
+        "showingId": "s_m1_t1_20260510_1540",
+        "theaterId": "t1"
+      },
+      "expected_stage_visits": 8,
+      "expected_backtrack_count": 1,
+      "step_choices": [
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m1"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-14"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-15"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260510_1540"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "confirm",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260510_1540-E4",
+            "s_m1_t1_20260510_1540-E5"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "scn_s3_t2_sibling_bmovie_hard",
+      "scenario_title": "S3-T2: Sibling B-Movie Comedy Night (Hard)",
+      "condition_label": "C4",
+      "set_label": "Set C",
+      "difficulty": "hard",
+      "source_log_file": "logs/interaction/T01-C4-S3-hard-20260321-164311.jsonl",
+      "stage_sequence": [
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "date",
+        "time",
+        "date",
+        "theater",
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "seat",
+        "confirm"
+      ],
+      "final_workflow_ids": {
+        "dateId": "2026-03-13",
+        "movieId": "m2",
+        "seatIds": [
+          "s_m2_t1_20260313_2010_standard-D4",
+          "s_m2_t1_20260313_2010_standard-D5"
+        ],
+        "showingId": "s_m2_t1_20260313_2010_standard",
+        "theaterId": "t1"
+      },
+      "expected_stage_visits": 18,
+      "expected_backtrack_count": 3,
+      "step_choices": [
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m1"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-13"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260515_1840"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-14"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "theater",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "movie",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m2"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-13"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260313_1820_standard"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260313_2010_standard"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "confirm",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260313_2010_standard-D4",
+            "s_m2_t1_20260313_2010_standard-D5"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "scn_s4_t1_family_amenity_easy",
+      "scenario_title": "S4-T1: Family Amenity Showtime Choice (Easy)",
+      "condition_label": "C3",
+      "set_label": "Set D",
+      "difficulty": "easy",
+      "source_log_file": "logs/interaction/T01-C3-S4-easy-20260321-165344.jsonl",
+      "stage_sequence": [
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "seat",
+        "confirm"
+      ],
+      "final_workflow_ids": {
+        "dateId": "2026-03-15",
+        "movieId": "m1",
+        "seatIds": [
+          "s_m1_t1_20260517_1310-D1",
+          "s_m1_t1_20260517_1310-D2",
+          "s_m1_t1_20260517_1310-D3",
+          "s_m1_t1_20260517_1310-D4"
+        ],
+        "showingId": "s_m1_t1_20260517_1310",
+        "theaterId": "t1"
+      },
+      "expected_stage_visits": 8,
+      "expected_backtrack_count": 1,
+      "step_choices": [
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m1"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-15"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260517_1100"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260517_1310"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "confirm",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260517_1310-D1",
+            "s_m1_t1_20260517_1310-D2",
+            "s_m1_t1_20260517_1310-D3",
+            "s_m1_t1_20260517_1310-D4"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "scn_s4_t2_last_trip_hard",
+      "scenario_title": "S4-T2: Last Movie Before Trip (Hard)",
+      "condition_label": "C3",
+      "set_label": "Set D",
+      "difficulty": "hard",
+      "source_log_file": "logs/interaction/T01-C3-S4-hard-20260321-165917.jsonl",
+      "stage_sequence": [
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "date",
+        "theater",
+        "movie",
+        "theater",
+        "date",
+        "time",
+        "seat",
+        "time",
+        "seat",
+        "time",
+        "seat",
+        "confirm"
+      ],
+      "final_workflow_ids": {
+        "dateId": "2026-03-13",
+        "movieId": "m2",
+        "seatIds": [
+          "s_m2_t1_20260522_1805-E4",
+          "s_m2_t1_20260522_1805-E5"
+        ],
+        "showingId": "s_m2_t1_20260522_1805",
+        "theaterId": "t1"
+      },
+      "expected_stage_visits": 18,
+      "expected_backtrack_count": 3,
+      "step_choices": [
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m1"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-13"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m1_t1_20260522_1810"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "date",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "theater",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "movie",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "movie",
+          "to_stage": "theater",
+          "action": "next",
+          "selected_item_ids": [
+            "m2"
+          ]
+        },
+        {
+          "from_stage": "theater",
+          "to_stage": "date",
+          "action": "next",
+          "selected_item_ids": [
+            "t1"
+          ]
+        },
+        {
+          "from_stage": "date",
+          "to_stage": "time",
+          "action": "next",
+          "selected_item_ids": [
+            "2026-03-13"
+          ]
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260522_1620"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260522_1715"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "time",
+          "action": "back",
+          "selected_item_ids": []
+        },
+        {
+          "from_stage": "time",
+          "to_stage": "seat",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260522_1805"
+          ]
+        },
+        {
+          "from_stage": "seat",
+          "to_stage": "confirm",
+          "action": "next",
+          "selected_item_ids": [
+            "s_m2_t1_20260522_1805-E4",
+            "s_m2_t1_20260522_1805-E5"
+          ]
+        }
+      ]
+    }
+  ]
+}

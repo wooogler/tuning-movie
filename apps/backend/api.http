@@ -1,0 +1,58 @@
+@baseUrl = http://localhost:3000
+
+### ===== MOVIES =====
+
+### Get all movies
+GET {{baseUrl}}/movies
+
+### Get movie by ID
+GET {{baseUrl}}/movies/m1
+
+### ===== THEATERS =====
+
+### Get all theaters
+GET {{baseUrl}}/theaters
+
+### Get theaters by movie ID
+GET {{baseUrl}}/theaters/movie/m1
+
+### Get theater by ID
+GET {{baseUrl}}/theaters/ta
+
+### ===== SHOWINGS =====
+
+### Get available dates for a movie at a theater
+GET {{baseUrl}}/showings/dates?movieId=m1&theaterId=ta
+
+### Get available times for a specific date (use date from /showings/dates response)
+GET {{baseUrl}}/showings/times?movieId=m1&theaterId=ta&date=2026-03-14
+
+### Get all showings with filters
+GET {{baseUrl}}/showings?movieId=m1&theaterId=ta&date=2026-03-14
+
+### Get showing by ID
+GET {{baseUrl}}/showings/s_m1_ta_20260314_1930
+
+### ===== SEATS =====
+
+### Get seats for a showing
+GET {{baseUrl}}/seats/s_m1_ta_20260314_1930
+
+### ===== BOOKINGS =====
+
+### Create a booking
+POST {{baseUrl}}/bookings
+Content-Type: application/json
+
+{
+  "showingId": "s_m1_ta_20260314_1930",
+  "seats": ["s_m1_ta_20260314_1930-A1", "s_m1_ta_20260314_1930-A2"],
+  "customerName": "John Doe",
+  "customerEmail": "john@example.com"
+}
+
+### Get booking by ID (replace with actual booking ID)
+GET {{baseUrl}}/bookings/b-1234567890
+
+### Cancel booking (replace with actual booking ID)
+DELETE {{baseUrl}}/bookings/b-1234567890
