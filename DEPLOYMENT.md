@@ -27,7 +27,7 @@ sudo bash deploy/scripts/setup-podman.sh
 
 ```bash
 cd /opt
-git clone https://github.com/wooogler/tuning-movie.git
+git clone https://github.com/wooogler/maestro-movie.git tuning-movie
 cd tuning-movie
 ```
 

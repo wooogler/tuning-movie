@@ -1,10 +1,10 @@
-# 🎬 Tuning Movie
+# 🎬 MAESTRO (Movie)
 
-A Movie Ticket Booking System
+**MAESTRO: Adapting GUIs and Guiding Navigation with User Preferences in Conversational Agents with GUIs** — the research system from the UIST 2026 paper, instantiated here as a movie-ticketing Conversational Agent with GUI (CAG). (`maestro-movie` is the movie-booking instantiation of MAESTRO.)
 
 ## 📋 Overview
 
-Tuning Movie is a full-stack web application for booking movie tickets.
+MAESTRO extends a GUI-based conversational agent from execution to decision support. It maintains a shared **preference memory** and adds two mechanisms grounded in it: **Preference-Grounded GUI Adaptation** (augment, sort, filter, highlight applied in place) and **Preference-Guided Workflow Navigation** (conflict detection, backtracking suggestions, and dead-end tracking). This repository is the full-stack movie-ticketing system used in the user study.
 
 ### Key Features
 
