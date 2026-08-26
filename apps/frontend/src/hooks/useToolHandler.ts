@@ -38,7 +38,6 @@ interface UseToolHandlerOptions<T extends DataItem> {
   setSpec: (spec: UISpec<T>, options?: SetSpecOptions) => void;
   onNext?: (context?: ToolApplyContext) => void;
   onBack?: (context?: ToolApplyContext) => void;
-  onRepeatStep?: (context?: ToolApplyContext) => void;
   onPostMessage?: (text: string) => void;
   multiSelect?: boolean;
 }
@@ -48,7 +47,6 @@ export function useToolHandler<T extends DataItem>({
   setSpec,
   onNext,
   onBack,
-  onRepeatStep,
   onPostMessage,
   multiSelect = false,
 }: UseToolHandlerOptions<T>) {
@@ -167,9 +165,6 @@ export function useToolHandler<T extends DataItem>({
           case 'prev':
             onBack?.(context);
             return null;
-          case 'repeatStep':
-            onRepeatStep?.(context);
-            return null;
           case 'postMessage': {
             const text = params.text as string;
             if (typeof text !== 'string' || !text.trim()) {
@@ -226,7 +221,7 @@ export function useToolHandler<T extends DataItem>({
         throw error; // Re-throw to let DevTools display the error
       }
     },
-    [spec, setSpec, setUiSpec, onNext, onBack, onRepeatStep, onPostMessage, multiSelect]
+    [spec, setSpec, setUiSpec, onNext, onBack, onPostMessage, multiSelect]
   );
 
   // Register tool handler

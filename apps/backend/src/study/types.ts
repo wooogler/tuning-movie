@@ -3,13 +3,8 @@ import type { db as defaultDb } from '../db';
 export type StudyDb = typeof defaultDb;
 
 export type StudyModeId =
-  | 'baseline'
-  | 'basic-tuning'
   | 'basic-tuning-voice-off'
   | 'basic-tuning-voice-on'
-  | 'new-baseline'
-  | 'adaptive-tuning'
-  | 'full-tuning'
   | 'full-tuning-voice-off'
   | 'full-tuning-voice-on'
   | 'demo';

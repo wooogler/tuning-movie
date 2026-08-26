@@ -1,18 +1,6 @@
 import type { StudyModeConfig, StudyModeId } from './types';
 
 const MODE_CONFIG: Record<StudyModeId, StudyModeConfig> = {
-  baseline: {
-    agentEnabled: false,
-    guiAdaptationEnabled: false,
-    cpMemoryWindow: 0,
-    voiceModeAvailable: false,
-  },
-  'basic-tuning': {
-    agentEnabled: true,
-    guiAdaptationEnabled: false,
-    cpMemoryWindow: 0,
-    voiceModeAvailable: false,
-  },
   'basic-tuning-voice-off': {
     agentEnabled: true,
     guiAdaptationEnabled: false,
@@ -24,24 +12,6 @@ const MODE_CONFIG: Record<StudyModeId, StudyModeConfig> = {
     guiAdaptationEnabled: false,
     cpMemoryWindow: 0,
     voiceModeAvailable: true,
-  },
-  'new-baseline': {
-    agentEnabled: true,
-    guiAdaptationEnabled: false,
-    cpMemoryWindow: 0,
-    voiceModeAvailable: false,
-  },
-  'adaptive-tuning': {
-    agentEnabled: true,
-    guiAdaptationEnabled: true,
-    cpMemoryWindow: 0,
-    voiceModeAvailable: false,
-  },
-  'full-tuning': {
-    agentEnabled: true,
-    guiAdaptationEnabled: true,
-    cpMemoryWindow: 10,
-    voiceModeAvailable: false,
   },
   'full-tuning-voice-off': {
     agentEnabled: true,
@@ -81,7 +51,6 @@ export function isDemoStudyMode(value: string | null | undefined): boolean {
 }
 
 export function normalizeStudyMode(value: string | null | undefined): StudyModeId {
-  if (value === 'gui-only') return 'baseline';
   if (value && value in MODE_CONFIG) {
     return value as StudyModeId;
   }

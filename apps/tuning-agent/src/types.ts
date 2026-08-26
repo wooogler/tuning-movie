@@ -144,7 +144,7 @@ export interface PlanDecision {
   backtrackContinuation?: BacktrackContinuation | null;
   actionPreferenceIds?: string[] | null;
   actionHighlightCoverage?: HighlightCoverage | null;
-  source: 'llm' | 'rule' | 'baseline';
+  source: 'llm' | 'rule';
   fallbackReason?: string;
 }
 

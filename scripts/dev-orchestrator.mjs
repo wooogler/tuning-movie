@@ -23,7 +23,8 @@ const COMMANDS_BY_MODE = {
   all: [
     { label: 'backend', script: 'dev:backend' },
     { label: 'frontend', script: 'dev:frontend' },
-    { label: 'agent-test', script: 'dev:agent-test' },
+    { label: 'agent', script: 'dev:agent' },
+    { label: 'monitor', script: 'dev:monitor' },
   ],
 };
 

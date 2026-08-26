@@ -2,9 +2,10 @@
 
 Dedicated workspace for implementing the external agent runtime.
 
-This package is separated from `apps/agent-test`:
-- `apps/agent-test`: manual relay/control panel tool
-- `apps/tuning-agent`: actual agent runtime implementation
+This package holds the agent runtime that drives the host UI over the
+WebSocket relay (`/agent/ws`). See
+[`docs/external-agent-protocol.md`](../../docs/external-agent-protocol.md)
+for the wire protocol.
 
 ## Structure
 

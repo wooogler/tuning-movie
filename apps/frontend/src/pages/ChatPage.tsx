@@ -96,7 +96,6 @@ const guiAdaptationToolsByStage: Record<Stage, readonly string[]> = {
   seat: ['highlight', 'clearModification'],
   confirm: [],
 };
-const baselineAutoAdvanceStages = new Set<Stage>(['movie', 'theater', 'date', 'time']);
 const AGENT_BRIDGE_ENABLED_STORAGE_KEY = 'tuning-movie-agent-bridge-enabled';
 const PLANNER_CP_MEMORY_LIMIT_STORAGE_KEY = 'tuning-movie-planner-cp-memory-limit';
 const GUI_ADAPTATION_ENABLED_STORAGE_KEY = 'tuning-movie-gui-adaptation-enabled';
@@ -341,12 +340,10 @@ function canUseNextTool(spec: UISpec): boolean {
 function buildToolSchemaForStage(
   spec: UISpec | null,
   fallbackStage: Stage,
-  guiAdaptationEnabled: boolean,
-  studyModePreset?: StudyModeId
+  guiAdaptationEnabled: boolean
 ): ToolDefinition[] {
-  const isBaselineMode = studyModePreset === 'baseline';
   if (!spec) {
-    return agentTools.filter((tool) => (isBaselineMode ? tool.name === 'repeatStep' : tool.name === 'postMessage'));
+    return agentTools.filter((tool) => tool.name === 'postMessage');
   }
 
   const stage = spec.stage ?? fallbackStage;
@@ -354,11 +351,7 @@ function buildToolSchemaForStage(
   if (stage === 'seat') {
     allowed.add('selectMultiple');
   }
-  if (isBaselineMode) {
-    allowed.add('repeatStep');
-  } else {
-    allowed.add('postMessage');
-  }
+  allowed.add('postMessage');
 
   if (guiAdaptationEnabled) {
     for (const toolName of guiAdaptationToolsByStage[stage] ?? []) {
@@ -372,9 +365,7 @@ function buildToolSchemaForStage(
   }
 
   if (canUseNextTool(spec)) {
-    if (!(isBaselineMode && baselineAutoAdvanceStages.has(stage))) {
-      allowed.add('next');
-    }
+    allowed.add('next');
   } else {
     allowed.delete('next');
   }
@@ -679,18 +670,13 @@ export function ChatPage({
     [studyModePreset]
   );
   const normalizedStudyModePreset = studyModePreset ? normalizeStudyMode(studyModePreset) : null;
-  const isGuiOnlyMode = normalizedStudyModePreset === 'baseline';
-  const isBaselineMode = isGuiOnlyMode;
   const isAgentInteractionEnabled = studyModeConfig?.agentEnabled ?? agentBridgeEnabled;
   const showBasicTuningTurnSnapshots =
-    normalizedStudyModePreset === 'basic-tuning' ||
     normalizedStudyModePreset === 'basic-tuning-voice-off' ||
     normalizedStudyModePreset === 'basic-tuning-voice-on';
   const usesSplitInterface =
-    normalizedStudyModePreset === 'full-tuning' ||
     normalizedStudyModePreset === 'full-tuning-voice-off' ||
     normalizedStudyModePreset === 'full-tuning-voice-on' ||
-    normalizedStudyModePreset === 'new-baseline' ||
     // Demo mirrors the Interface B (full tuning) experience.
     normalizedStudyModePreset === 'demo';
   const voiceModeAvailable = studyModeConfig?.voiceModeAvailable ?? false;
@@ -1557,12 +1543,6 @@ export function ChatPage({
     [addSystemMessage, logDerivedEvents, logGuiAction, updateActiveSpec, setUiSpec]
   );
 
-  const handleRepeatStep = useCallback(() => {
-    if (!activeSpec) return;
-    addSystemMessage(activeSpec.stage, activeSpec);
-    setUiSpec(activeSpec);
-  }, [activeSpec, addSystemMessage, setUiSpec]);
-
   const handleSessionReset = useCallback(() => {
     resetChat();
     setBooking(null);
@@ -1579,8 +1559,8 @@ export function ChatPage({
   }, [resetChat, movies, addSystemMessage, setUiSpec, loadStageData]);
 
   const agentToolSchema = useMemo(
-    () => buildToolSchemaForStage(activeSpec, currentStage, guiAdaptationEnabled, studyModePreset),
-    [activeSpec, currentStage, guiAdaptationEnabled, studyModePreset]
+    () => buildToolSchemaForStage(activeSpec, currentStage, guiAdaptationEnabled),
+    [activeSpec, currentStage, guiAdaptationEnabled]
   );
 
   const handleAgentToolCall = useCallback((
@@ -1591,17 +1571,8 @@ export function ChatPage({
     if (!agentStatusSupportedRef.current) {
       setAwaitingAgentResponse(false);
     }
-    const result = onToolApply(toolName, params, context);
-    if (
-      isBaselineMode &&
-      toolName === 'select' &&
-      result &&
-      baselineAutoAdvanceStages.has(result.stage)
-    ) {
-      void handleNext(context, result);
-    }
-    return result;
-  }, [onToolApply, isBaselineMode, handleNext]);
+    return onToolApply(toolName, params, context);
+  }, [onToolApply]);
 
   const {
     status: voiceOutputStatus,
@@ -1723,7 +1694,6 @@ export function ChatPage({
     setSpec: handleSetSpec,
     onNext: handleNext,
     onBack: handleBack,
-    onRepeatStep: handleRepeatStep,
     onPostMessage: handlePostedAgentMessage,
     multiSelect: currentStage === 'seat',
   });
@@ -1852,7 +1822,6 @@ export function ChatPage({
   }, [interactionLocked]);
 
   const inputDisabled =
-    isGuiOnlyMode ||
     interactionLocked ||
     !isAgentInteractionEnabled ||
     !isAgentBridgeConnected ||
@@ -1862,9 +1831,7 @@ export function ChatPage({
     ? 'Loading the next stage...'
     : 'Waiting for the next agent message...';
   const chatInputPlaceholder =
-    isGuiOnlyMode
-      ? 'GUI-only mode: use the on-screen controls.'
-      : interactionLocked
+    interactionLocked
       ? interactionLockLabel
       : !isAgentBridgeConnected
       ? 'Waiting for agent relay connection...'

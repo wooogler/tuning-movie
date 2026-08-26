@@ -189,7 +189,7 @@ Planner constraints:
 ## 8. Recommended Module Layout
 
 ```text
-apps/agent-test/src/
+apps/tuning-agent/src/
   runtime/
     relayClient.ts        # ws, request/reply correlation, timeout
     eventBus.ts           # inbound event routing

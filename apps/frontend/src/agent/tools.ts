@@ -143,12 +143,6 @@ export const interactionTools: ToolDefinition[] = [
     parameters: {},
   },
   {
-    name: "repeatStep",
-    description:
-      "Repeat the current stage card without changing the current UI state",
-    parameters: {},
-  },
-  {
     name: "postMessage",
     description:
       "Post a very short agent message to the chat timeline. Assume it may be spoken aloud.",
@@ -182,7 +176,6 @@ export const toolCategories: Record<string, "modification" | "interaction"> = {
   selectMultiple: "interaction",
   next: "interaction",
   prev: "interaction",
-  repeatStep: "interaction",
   postMessage: "interaction",
 };
 

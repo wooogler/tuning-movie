@@ -1,12 +1,7 @@
 import { executePlannedAction } from './core/executor';
 import { AgentMemory } from './core/memory';
 import { applyStateUpdated, applyUserMessage, fromSnapshot } from './core/perception';
-import { planBaselineAction } from './core/baselinePlanner';
 import { planNextAction } from './core/planner';
-import {
-  getBaselineRouterSystemPrompt,
-  subscribeLlmTrace as subscribeBaselineRouterLlmTrace,
-} from './llm/baselineRouter';
 import {
   getPlannerSystemPrompt,
   subscribeLlmTrace as subscribePlannerLlmTrace,
@@ -106,7 +101,6 @@ const studyMode = process.env.AGENT_STUDY_MODE || 'basic-tuning-voice-off';
 const monitorPort = Number(process.env.AGENT_MONITOR_PORT || 3500);
 const monitorWebPort = Number(process.env.AGENT_MONITOR_WEB_PORT || 3501);
 const isProduction = process.env.NODE_ENV === 'production';
-const isBaselineMode = studyMode === 'baseline';
 
 function parseBooleanEnv(value: string | undefined): boolean | null {
   if (typeof value !== 'string') return null;
@@ -132,10 +126,10 @@ const monitor = new AgentMonitorServer({
   relayUrl,
   sessionId,
   agentName,
-  routingMode: isBaselineMode ? 'baseline' : 'planner',
+  routingMode: 'planner',
   llmSystemPrompts: {
-    planner: isBaselineMode ? getBaselineRouterSystemPrompt() : getPlannerSystemPrompt(),
-    extractor: isBaselineMode ? 'Disabled in baseline mode.' : getExtractorSystemPrompt(),
+    planner: getPlannerSystemPrompt(),
+    extractor: getExtractorSystemPrompt(),
   },
 });
 
@@ -179,12 +173,8 @@ const llmTraceHandler = (event: { component?: string; type: string; payload: unk
     payload: event.payload,
   });
 };
-const unsubscribePlannerLlmTrace = isBaselineMode
-  ? subscribeBaselineRouterLlmTrace(llmTraceHandler)
-  : subscribePlannerLlmTrace(llmTraceHandler);
-const unsubscribeExtractorLlmTrace = isBaselineMode
-  ? () => {}
-  : subscribeExtractorLlmTrace(llmTraceHandler);
+const unsubscribePlannerLlmTrace = subscribePlannerLlmTrace(llmTraceHandler);
+const unsubscribeExtractorLlmTrace = subscribeExtractorLlmTrace(llmTraceHandler);
 
 function unsubscribeAllLlmTraces(): void {
   unsubscribePlannerLlmTrace();
@@ -969,7 +959,6 @@ function computeReadingDelay(text: string): number {
 }
 
 async function maybeSendAssistantMessage(context: PerceivedContext, text: string): Promise<void> {
-  if (isBaselineMode) return;
   const trimmed = text.trim();
   if (!trimmed) return;
   const action = buildAgentMessageAction(trimmed);
@@ -1102,15 +1091,6 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
 
   const context = memory.getContext();
   if (!context) return;
-  const isBaselineUserTrigger =
-    trigger === 'state.updated:user-message' || trigger === 'deferred:state.updated:user-message';
-  if (isBaselineMode && !isBaselineUserTrigger) {
-    monitor.pushEvent('planner.ignored_trigger_baseline', {
-      trigger,
-      stage: context.stage,
-    });
-    return;
-  }
   // NOTE: userConversationStarted gate removed to allow llmPlanner
   // to act proactively from the first stage (e.g. greeting on snapshot).
 
@@ -1149,15 +1129,13 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         stage: planningContext.stage,
       });
     }
-    const decision: PlanDecision = isBaselineMode
-      ? await planBaselineAction(planningContext)
-      : await planNextAction(
-          planningContext,
-          memory,
-          lastAgentToolName,
-          activeBacktrackContinuation,
-          suppressNavigationTools
-        );
+    const decision: PlanDecision = await planNextAction(
+      planningContext,
+      memory,
+      lastAgentToolName,
+      activeBacktrackContinuation,
+      suppressNavigationTools
+    );
     const action = decision.action;
     const decisionExplainText = decision.explainText ?? '';
     const plannedToolName =
@@ -1230,7 +1208,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
 
     const actionFingerprint = buildActionFingerprint(action, planningContext.stage);
     const now = Date.now();
-    if (!isBaselineMode && actionFingerprint === lastActionFingerprint && now - lastActionAt < 700) {
+    if (actionFingerprint === lastActionFingerprint && now - lastActionAt < 700) {
       return;
     }
 
@@ -1265,7 +1243,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
     const previousLastAgentToolName = lastAgentToolName;
     lastAgentToolName = toolName || null;
 
-    if (!isBaselineMode && action.type !== 'agent.message') {
+    if (action.type !== 'agent.message') {
       await maybeSendAssistantMessage(
         planningContext,
         decisionExplainText || `I will run ${getToolName(action)} next. Reason: ${action.reason}`
@@ -1293,10 +1271,6 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
         'The host connection is not ready yet. I will retry once the host is available.'
       );
       await ensureSessionReady('runtime-action');
-      if (isBaselineMode) {
-        await maybePlanAndExecute('state.updated:user-message');
-        return;
-      }
       requestDeferredReplan('runtime-action');
       return;
     }
@@ -1469,7 +1443,7 @@ async function maybePlanAndExecute(trigger: string): Promise<void> {
       await relay.request('snapshot.get', {});
     }
 
-    if (!isBaselineMode && decisionExplainText.trim()) {
+    if (decisionExplainText.trim()) {
       pendingReadingDelayUntil = Date.now() + computeReadingDelay(decisionExplainText);
     }
 
@@ -1604,13 +1578,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       syncUserConversationStarted(next);
       markPerceptionUpdated();
       monitor.updateContext(memory.getContext());
-      if (!isBaselineMode) {
-        await maybePlanAndExecute('snapshot.state');
-      } else {
-        monitor.pushEvent('planner.ignored_snapshot_baseline', {
-          stage: next.stage,
-        });
-      }
+      await maybePlanAndExecute('snapshot.state');
       return;
     }
     case 'state.updated': {
@@ -1663,21 +1631,13 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
 
       if (userTurnAwaitingStateUpdate) {
         userTurnAwaitingStateUpdate = false;
-        if (!isBaselineMode && cpMemoryEnabled && userPreferenceExtractionInFlight) {
+        if (cpMemoryEnabled && userPreferenceExtractionInFlight) {
           monitor.pushEvent('planner.waiting_preference_extraction', {
             trigger: 'state.updated:user-message',
           });
           await userPreferenceExtractionInFlight;
         }
         await maybePlanAndExecute('state.updated:user-message');
-        return;
-      }
-
-      if (isBaselineMode) {
-        monitor.pushEvent('planner.ignored_state_updated_baseline', {
-          stage: next.stage,
-          reason: 'non-user state update',
-        });
         return;
       }
 
@@ -1751,7 +1711,7 @@ async function handleInbound(envelope: RelayEnvelope): Promise<void> {
       monitor.pushEvent('planner.waiting_state_updated_after_user_message', {
         stage: userMessage.stage ?? null,
       });
-      if (isBaselineMode || !cpMemoryEnabled) {
+      if (!cpMemoryEnabled) {
         return;
       }
       const extractionPromise = runPreferenceExtractionFromUserMessage(next, userMessage.text);
@@ -1811,7 +1771,7 @@ async function main(): Promise<void> {
     relayUrl,
     sessionId,
     studyMode,
-    routingMode: isBaselineMode ? 'baseline' : 'planner',
+    routingMode: 'planner',
     monitorEnabled: monitor.isEnabled(),
     monitorPort: activeMonitorPort,
   });

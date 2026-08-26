@@ -55,7 +55,7 @@ cd tuning-movie
 npm install
 ```
 
-This command will automatically install all dependencies for the root and app workspaces (frontend, backend, agent-test).
+This command will automatically install all dependencies for the root and app workspaces (frontend, backend, tuning-agent, agent-monitor).
 
 #### 3. Initialize the Database
 
@@ -100,7 +100,7 @@ The project uses an orchestrator that starts services in the right order (backen
 | `npm run dev:stack:agent` | backend + frontend + agent | Standalone agent runtime (no monitor) |
 | `npm run dev:stack:agent-monitor` | backend + frontend + monitor | Host sessions + monitor dashboard |
 | `npm run dev:stack:system` | backend + frontend | Alias of default host UI/API mode |
-| `npm run dev:stack:all` | backend + frontend + agent-test | Manual testing with test console |
+| `npm run dev:stack:all` | backend + frontend + agent + monitor | Everything at once |
 
 You can also run any service individually:
 
@@ -109,7 +109,6 @@ npm run dev:backend      # Backend only
 npm run dev:frontend     # Frontend only
 npm run dev:agent        # Agent only
 npm run dev:monitor      # Monitor dashboard only
-npm run dev:agent-test   # Agent test console only
 ```
 
 #### 6. Open in Browser
@@ -117,7 +116,6 @@ npm run dev:agent-test   # Agent test console only
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:3000
 - Agent Monitor: http://localhost:5174 (when running with monitor)
-- Agent Test Console: http://localhost:3400 (when running `dev:stack:all` or `dev:agent-test`)
 
 ## 📁 Project Structure
 
@@ -127,8 +125,7 @@ tuning-movie/
 │   ├── frontend/                  # React chat-style booking UI
 │   ├── backend/                   # Fastify REST API + SQLite + WebSocket relay
 │   ├── tuning-agent/              # AI agent runtime (LLM planner + prompts)
-│   ├── agent-monitor/             # Real-time agent monitoring dashboard
-│   └── agent-test/                # Manual agent test console
+│   └── agent-monitor/             # Real-time agent monitoring dashboard
 ├── scripts/
 │   ├── dev-orchestrator.mjs       # Multi-service dev runner
 │   └── run-tuning-agent.sh
@@ -149,14 +146,13 @@ npm run dev                      # Default: backend + frontend
 npm run dev:stack:system         # backend + frontend only (same as `dev`)
 npm run dev:stack:agent          # backend + frontend + standalone agent
 npm run dev:stack:agent-monitor  # backend + frontend + monitor
-npm run dev:stack:all            # backend + frontend + agent-test
+npm run dev:stack:all            # backend + frontend + agent + monitor
 
 # Individual services
 npm run dev:backend              # Backend only
 npm run dev:frontend             # Frontend only
 npm run dev:agent                # Agent only
 npm run dev:monitor              # Monitor dashboard only
-npm run dev:agent-test           # Agent test console only
 
 # Build
 npm run build                    # Build all workspaces
@@ -164,7 +160,6 @@ npm run build:backend
 npm run build:frontend
 npm run build:agent              # Build agent
 npm run build:monitor
-npm run build:agent-test
 ```
 
 **Backend (apps/backend)**
@@ -238,7 +233,7 @@ VITE_AGENT_WS_URL=ws://localhost:3000/agent/ws
 VITE_AGENT_SESSION_ID=default
 ```
 
-Use the same session id as `apps/agent-test/.env` (`AGENT_SESSION_ID`).
+Use the same session id as the agent runtime (`AGENT_SESSION_ID` in the root `.env`).
 For isolated runs, use a unique value (example: `sync-dev-1`) instead of `default`.
 
 ### Backend
@@ -258,14 +253,18 @@ The backend loads `apps/backend/.env` automatically at startup and maps keys int
 PORT=3000 DATABASE_URL=tuning-movie.db npm run dev:backend
 ```
 
-### Agent Test Server
+### Agent Runtime
+
+The agent runtime reads its settings from the root `.env`:
 
 ```bash
-# apps/agent-test/.env (optional)
-AGENT_TEST_PORT=3400
+# .env (repo root)
 AGENT_RELAY_URL=ws://localhost:3000/agent/ws
 AGENT_SESSION_ID=default
+AGENT_OPENAI_MODEL=gpt-5.4
 ```
+
+See [`.env.example`](./.env.example) for the full list.
 
 ## 🌍 Public Demo Mode
 
@@ -349,28 +348,16 @@ The prototype supports an external agent server through a WebSocket protocol.
 
 See the canonical spec: [`docs/external-agent-protocol.md`](./docs/external-agent-protocol.md)
 
-For manual relay testing without frontend DevTool, run:
+### Running the Agent (Recommended Flow)
 
+1. Start backend, frontend, agent, and monitor:
 ```bash
-npm run dev:agent-test
+npm run dev:stack:agent-monitor
 ```
-
-Then open `http://localhost:3400`.
-
-### Agent Test Console Usage (Recommended Flow)
-
-1. Start all services:
-```bash
-npm run dev:stack:all
-```
-2. Open frontend (`http://localhost:5173`) and agent test console (`http://localhost:3400`).
-3. In frontend, wait until a stage UI is visible (movie list).
-4. In agent test console, verify:
-   - `Relay Connected = yes`
-   - `Relay Joined = yes`
-   - `UISpec = detected`
-5. Run `select` from Interaction tab (for movie stage, use `itemId: "m1"` etc.).
-6. Confirm `UI Spec.state.selected` appears in agent test console.
+2. Open the frontend (`http://localhost:5173`) and the monitor (`http://localhost:5174`).
+3. In the frontend, wait until a stage UI is visible (movie list).
+4. In the monitor, verify the session is connected and a `uiSpec` snapshot has arrived.
+5. Send a chat message; the agent plans and issues `tool.call` against the current stage.
 
 Sync behavior:
 - `state.updated` is the authoritative push update for external sync.
@@ -411,14 +398,14 @@ taskkill /PID <PID> /F
 
 ### External Agent Timeout / Desync
 
-If agent-test shows `Request timeout (tool.call, id=...)`:
+If the agent reports `Request timeout (tool.call, id=...)`:
 
-1. Ensure only one backend/frontend/agent-test set is running.
+1. Ensure only one backend/frontend/agent set is running.
 2. Ensure only one active frontend tab is connected to `/agent/ws`.
 3. Verify session ids match:
    - `apps/frontend/.env` -> `VITE_AGENT_SESSION_ID`
-   - `apps/agent-test/.env` -> `AGENT_SESSION_ID`
-4. Check relay status in agent-test (`connected`, `joined`, `hasSnapshot`).
+   - root `.env` -> `AGENT_SESSION_ID`
+4. Check relay status in the agent monitor (`connected`, `joined`, `hasSnapshot`).
 5. Enable relay logs for diagnosis:
 ```bash
 # apps/backend/.env
