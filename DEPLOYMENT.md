@@ -102,12 +102,20 @@ podman restart tuning-movie-nginx
 
 ## 8.1) Automatic TLS renewal
 
-The repository includes a no-downtime renewal flow for your domain (set `CERTBOT_DOMAIN`):
+Copy `deploy/renew.env.example` to `deploy/renew.env` and list every hostname the
+certificate must cover in `CERTBOT_DOMAINS` — including any CNAME alias people
+still reach the site by, since a cert only answers for names in its SAN list.
+`deploy/renew.env` is read by the renewal script, so the domain list can change
+without reinstalling cron.
+
+The renewal flow:
 
 1. `nginx` serves `/.well-known/acme-challenge/` from `deploy/certbot/www`
 2. `deploy/scripts/renew-tls-cert.sh` asks Let's Encrypt for a renewed cert with `certbot --webroot`
-3. If the cert changed, the script replaces `deploy/ssl/fullchain.pem` and `deploy/ssl/privkey.pem`
-4. The script restarts `tuning-movie-nginx`
+3. The script refuses to deploy a cert that misses a configured name or expires within 24h
+4. If the cert changed, the script replaces `deploy/ssl/fullchain.pem` and `deploy/ssl/privkey.pem`
+5. The script restarts `tuning-movie-nginx`
+6. Each name is verified over real TLS (no `-k`), so a bad chain fails the run
 
 To install the renewal cron job for the current user:
 

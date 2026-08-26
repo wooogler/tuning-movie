@@ -26,3 +26,6 @@ backups/
 deploy/ssl/*
 !deploy/ssl/README.md
 deploy/certbot/
+
+# Site-specific renewal settings (domains); the .example stays tracked
+deploy/renew.env
